@@ -19,7 +19,7 @@ const fontMono = Source_Code_Pro({
 });
 
 export const metadata: Metadata = {
-  title: 'Sistem Katering',
+  title: 'SIMKAT',
   description: 'Sistem Katering untuk memantau Snapshot dan juga Production',
 };
 

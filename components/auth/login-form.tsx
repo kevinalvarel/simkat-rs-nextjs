@@ -15,7 +15,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { LoginFormSchema } from '@/validations/LoginFormSchema';
 import Image from 'next/image';
-import { signIn } from '@/servers/login-action';
+import { signIn } from '@/servers/login.service';
 import { toast } from 'sonner';
 
 export function LoginForm({
