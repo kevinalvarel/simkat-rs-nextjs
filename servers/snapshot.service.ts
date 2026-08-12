@@ -152,6 +152,7 @@ export async function updateWaktuMakanConfig(
     }
 
     revalidatePath('/dashboard/ag-katering/status-snapshot');
+    revalidatePath('/dashboard/ag-katering/overview');
     return {
       success: true,
       message: `Waktu cut-off ${jenisMakan} berhasil diperbarui menjadi ${newWaktu}.`,
@@ -216,6 +217,7 @@ export async function triggerManualSnapshot(
     }
 
     revalidatePath('/dashboard/ag-katering/status-snapshot');
+    revalidatePath('/dashboard/ag-katering/overview');
     return {
       success: true,
       message: `Batch snapshot ${batchCode} berhasil dibuat dengan ${activePatients.length} pasien ter-lock.`,

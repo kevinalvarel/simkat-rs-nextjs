@@ -4,8 +4,8 @@ import { useState } from 'react';
 import type { Patient, KelasOption } from '@/servers/patient.service';
 import type { GedungWithRuangan } from '@/servers/tempat.service';
 import { updatePatientField } from '@/servers/patient.service';
+import type { PatientFormValues } from '@/validations/PatientFormSchema';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   Table,
   TableBody,
@@ -21,18 +21,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
   MoreHorizontal,
   Pencil,
   Trash2,
-  Check,
-  X,
   DoorOpen,
   Home,
   Sparkles,
@@ -40,6 +31,11 @@ import {
 import { toast } from 'sonner';
 
 import { StatusBadge, NpoBadge } from './ui/PatientBadges';
+import {
+  InlineTextCell,
+  InlineDietCell,
+  InlineSelectCell,
+} from './ui/InlineCellEditors';
 import PatientContextMenu, {
   type ContextMenuState,
 } from './PatientContextMenu';
@@ -53,9 +49,19 @@ interface PatientTableProps {
   kelasList?: KelasOption[];
 }
 
+type EditableField =
+  | 'nama_pasien'
+  | 'no_rm'
+  | 'diet'
+  | 'kelas'
+  | 'ruangan'
+  | 'bed'
+  | 'gedung'
+  | 'status_pasien';
+
 type EditingTarget = {
   patientId: number;
-  field: 'diet' | 'kelas' | 'bed' | 'status_pasien';
+  field: EditableField;
 } | null;
 
 const STATUS_OPTIONS = [
@@ -88,9 +94,8 @@ export default function PatientTable({
   kelasList = [],
 }: PatientTableProps) {
   const [editingTarget, setEditingTarget] = useState<EditingTarget>(null);
-  const [tempValue, setTempValue] = useState<string>('');
 
-  // Track modified fields for visual indicator
+  // Track modified fields for visual glow/badge
   const [modifiedFields, setModifiedFields] = useState<
     Record<number, Record<string, boolean>>
   >({});
@@ -113,7 +118,7 @@ export default function PatientTable({
 
   async function handleSaveField(
     patient: Patient,
-    field: 'diet' | 'kelas' | 'bed' | 'status_pasien' | 'is_npo',
+    field: keyof PatientFormValues,
     value: string | boolean,
   ) {
     if (patient[field] === value) {
@@ -171,15 +176,15 @@ export default function PatientTable({
     ]),
   ];
 
+  const gedungOptions = gedungList.map((g) => g.namaGedung);
+
   return (
     <div className='space-y-3'>
       {/* Helper Banner */}
       <div className='flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 p-2.5 px-4 rounded-lg border border-border/50'>
         <span className='text-amber-500 text-sm'>💡</span>
         <span>
-          <strong>Tips Cepat:</strong> Klik sel (Diet, Kelas, Bed, Status, NPO)
-          untuk edit langsung · Klik kanan atau tap lama pada baris untuk menu
-          aksi cepat.
+          <strong>Tips Cepat:</strong> Klik pada sel mana saja (Nama, RM, Diet, Kelas, Ruangan, Bed, Gedung, Status, NPO) untuk edit langsung · Klik kanan pada baris untuk aksi cepat.
         </span>
       </div>
 
@@ -193,12 +198,7 @@ export default function PatientTable({
                 </TableHead>
                 <TableHead className='font-semibold'>Nama Pasien</TableHead>
                 <TableHead className='font-semibold'>No. RM</TableHead>
-                <TableHead className='font-semibold'>
-                  Diet{' '}
-                  <span className='text-xs font-normal text-muted-foreground'>
-                    (Klik untuk edit)
-                  </span>
-                </TableHead>
+                <TableHead className='font-semibold'>Diet</TableHead>
                 <TableHead className='font-semibold'>Kelas</TableHead>
                 <TableHead className='font-semibold'>Ruangan</TableHead>
                 <TableHead className='font-semibold'>Bed</TableHead>
@@ -213,18 +213,20 @@ export default function PatientTable({
             <TableBody>
               {patients.map((patient, index) => {
                 const isModifiedRow = Boolean(modifiedFields[patient.id]);
-                const isEditingDiet =
-                  editingTarget?.patientId === patient.id &&
-                  editingTarget.field === 'diet';
-                const isEditingKelas =
-                  editingTarget?.patientId === patient.id &&
-                  editingTarget.field === 'kelas';
-                const isEditingBed =
-                  editingTarget?.patientId === patient.id &&
-                  editingTarget.field === 'bed';
-                const isEditingStatus =
-                  editingTarget?.patientId === patient.id &&
-                  editingTarget.field === 'status_pasien';
+
+                // Determine ruangan options based on current patient's gedung
+                const patientGedungObj = gedungList.find(
+                  (g) => g.namaGedung === patient.gedung,
+                );
+                const ruanganOptions = patientGedungObj
+                  ? patientGedungObj.ruanganList.map((r) => r.namaRuangan)
+                  : [
+                      ...new Set(
+                        gedungList.flatMap((g) =>
+                          g.ruanganList.map((r) => r.namaRuangan),
+                        ),
+                      ),
+                    ];
 
                 return (
                   <TableRow
@@ -241,267 +243,243 @@ export default function PatientTable({
                       {index + 1}
                     </TableCell>
 
-                    {/* Nama Pasien */}
-                    <TableCell className='font-medium relative'>
-                      <div className='flex items-center gap-1.5'>
-                        <span>{patient.nama_pasien}</span>
-                        {isModifiedRow && (
+                    {/* Nama Pasien (Inline Editable) */}
+                    <InlineTextCell
+                      value={patient.nama_pasien}
+                      isEditing={
+                        editingTarget?.patientId === patient.id &&
+                        editingTarget.field === 'nama_pasien'
+                      }
+                      onStartEdit={() =>
+                        setEditingTarget({
+                          patientId: patient.id,
+                          field: 'nama_pasien',
+                        })
+                      }
+                      onSave={(val) =>
+                        handleSaveField(patient, 'nama_pasien', val)
+                      }
+                      onCancel={() => setEditingTarget(null)}
+                      isModified={modifiedFields[patient.id]?.nama_pasien}
+                      placeholder='Nama Pasien'
+                      title='Klik untuk mengedit Nama Pasien'
+                      extraDisplayContent={
+                        isModifiedRow ? (
                           <span
-                            className='inline-flex items-center gap-0.5 text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 px-1.5 py-0.5 rounded font-medium border border-amber-200 dark:border-amber-800 animate-in fade-in duration-300'
+                            className='inline-flex items-center gap-0.5 text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 px-1.5 py-0.5 rounded font-medium border border-amber-200 dark:border-amber-800 animate-in fade-in duration-300 ml-1 shrink-0'
                             title='Data pasien ini baru saja diubah'
                           >
                             <Sparkles className='w-2.5 h-2.5 text-amber-500' />
                             Diubah
                           </span>
-                        )}
-                      </div>
-                    </TableCell>
+                        ) : null
+                      }
+                    />
 
-                    {/* No. RM */}
-                    <TableCell className='font-mono text-sm'>
-                      {patient.no_rm}
-                    </TableCell>
+                    {/* No. RM (Inline Editable) */}
+                    <InlineTextCell
+                      value={patient.no_rm}
+                      isEditing={
+                        editingTarget?.patientId === patient.id &&
+                        editingTarget.field === 'no_rm'
+                      }
+                      onStartEdit={() =>
+                        setEditingTarget({
+                          patientId: patient.id,
+                          field: 'no_rm',
+                        })
+                      }
+                      onSave={(val) => handleSaveField(patient, 'no_rm', val)}
+                      onCancel={() => setEditingTarget(null)}
+                      isModified={modifiedFields[patient.id]?.no_rm}
+                      placeholder='No. RM'
+                      displayClassName='font-mono text-sm'
+                      inputClassName='h-7 text-xs font-mono'
+                      title='Klik untuk mengedit No. RM'
+                    />
 
-                    {/* DIET CELL (INLINE EDITABLE) */}
-                    <TableCell
-                      className={`relative transition-all cursor-pointer ${
-                        modifiedFields[patient.id]?.diet
-                          ? 'ring-1 ring-amber-500/50 bg-amber-500/10 rounded'
-                          : 'hover:bg-primary/5'
-                      }`}
-                      onClick={() => {
-                        if (!isEditingDiet) {
-                          setEditingTarget({
-                            patientId: patient.id,
-                            field: 'diet',
-                          });
-                          setTempValue(patient.diet);
-                        }
-                      }}
-                      title='Klik untuk mengedit Diet'
-                    >
-                      {isEditingDiet ? (
-                        <div
-                          className='flex flex-col gap-1.5 p-1 bg-popover rounded-md shadow-md border z-20 min-w-48 animate-in fade-in zoom-in-95'
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div className='flex items-center gap-1'>
-                            <Input
-                              value={tempValue}
-                              onChange={(e) => setTempValue(e.target.value)}
-                              autoFocus
-                              placeholder='Input Diet...'
-                              className='h-7 text-xs font-semibold'
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  handleSaveField(patient, 'diet', tempValue);
-                                } else if (e.key === 'Escape') {
-                                  setEditingTarget(null);
-                                }
-                              }}
-                            />
-                            <Button
-                              size='icon'
-                              className='h-7 w-7 shrink-0'
-                              onClick={() =>
-                                handleSaveField(patient, 'diet', tempValue)
-                              }
-                            >
-                              <Check className='h-3.5 w-3.5' />
-                            </Button>
-                            <Button
-                              size='icon'
-                              variant='ghost'
-                              className='h-7 w-7 shrink-0'
-                              onClick={() => setEditingTarget(null)}
-                            >
-                              <X className='h-3.5 w-3.5' />
-                            </Button>
-                          </div>
-                          {/* Quick Chips */}
-                          <div className='flex flex-wrap gap-1 pt-1 border-t'>
-                            {QUICK_DIET_SUGGESTIONS.map((tag) => (
-                              <button
-                                key={tag}
-                                type='button'
-                                onClick={() => {
-                                  setTempValue(tag);
-                                  handleSaveField(patient, 'diet', tag);
-                                }}
-                                className='text-[10px] px-1.5 py-0.5 bg-secondary hover:bg-primary hover:text-primary-foreground rounded transition-colors font-medium'
-                              >
-                                {tag}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      ) : (
-                        <div className='flex items-center justify-between group/cell'>
-                          <span className='font-semibold text-primary'>
-                            {patient.diet}
-                          </span>
-                          <Pencil className='h-3 w-3 text-muted-foreground opacity-0 group-hover/cell:opacity-100 transition-opacity' />
-                        </div>
-                      )}
-                    </TableCell>
+                    {/* Diet (Inline Editable) */}
+                    <InlineDietCell
+                      value={patient.diet}
+                      isEditing={
+                        editingTarget?.patientId === patient.id &&
+                        editingTarget.field === 'diet'
+                      }
+                      onStartEdit={() =>
+                        setEditingTarget({
+                          patientId: patient.id,
+                          field: 'diet',
+                        })
+                      }
+                      onSave={(val) => handleSaveField(patient, 'diet', val)}
+                      onCancel={() => setEditingTarget(null)}
+                      isModified={modifiedFields[patient.id]?.diet}
+                      suggestions={QUICK_DIET_SUGGESTIONS}
+                    />
 
-                    {/* KELAS CELL (INLINE EDITABLE) */}
-                    <TableCell
-                      className={`relative transition-all cursor-pointer ${
-                        modifiedFields[patient.id]?.kelas
-                          ? 'ring-1 ring-amber-500/50 bg-amber-500/10 rounded'
-                          : 'hover:bg-primary/5'
-                      }`}
-                      onClick={() => {
-                        if (!isEditingKelas) {
-                          setEditingTarget({
-                            patientId: patient.id,
-                            field: 'kelas',
-                          });
-                        }
-                      }}
+                    {/* Kelas (Inline Editable Select) */}
+                    <InlineSelectCell
+                      value={patient.kelas}
+                      options={kelasOptions}
+                      isEditing={
+                        editingTarget?.patientId === patient.id &&
+                        editingTarget.field === 'kelas'
+                      }
+                      onStartEdit={() =>
+                        setEditingTarget({
+                          patientId: patient.id,
+                          field: 'kelas',
+                        })
+                      }
+                      onSave={(val) => handleSaveField(patient, 'kelas', val)}
+                      onCancel={() => setEditingTarget(null)}
+                      isModified={modifiedFields[patient.id]?.kelas}
+                      placeholder='Pilih Kelas'
+                      triggerClassName='h-7 text-xs w-28'
                       title='Klik untuk mengedit Kelas'
-                    >
-                      {isEditingKelas ? (
-                        <div onClick={(e) => e.stopPropagation()}>
-                          <Select
-                            value={patient.kelas}
-                            onValueChange={(val) => {
-                              if (val !== null) {
-                                handleSaveField(patient, 'kelas', val);
-                              }
-                            }}
-                          >
-                            <SelectTrigger className='h-7 text-xs w-28'>
-                              <SelectValue placeholder='Pilih Kelas' />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {kelasOptions.map((k) => (
-                                <SelectItem key={k} value={k}>
-                                  {k}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      ) : (
-                        <div className='flex items-center justify-between group/cell'>
-                          <span>{patient.kelas}</span>
-                          <Pencil className='h-3 w-3 text-muted-foreground opacity-0 group-hover/cell:opacity-100 transition-opacity' />
-                        </div>
-                      )}
-                    </TableCell>
+                    />
 
-                    {/* RUANGAN */}
-                    <TableCell>{patient.ruangan}</TableCell>
-
-                    {/* BED CELL (INLINE EDITABLE) */}
-                    <TableCell
-                      className={`relative transition-all cursor-pointer ${
-                        modifiedFields[patient.id]?.bed
-                          ? 'ring-1 ring-amber-500/50 bg-amber-500/10 rounded'
-                          : 'hover:bg-primary/5'
-                      }`}
-                      onClick={() => {
-                        if (!isEditingBed) {
+                    {/* Ruangan (Inline Editable Select / Text fallback) */}
+                    {ruanganOptions.length > 0 ? (
+                      <InlineSelectCell
+                        value={patient.ruangan}
+                        options={ruanganOptions}
+                        isEditing={
+                          editingTarget?.patientId === patient.id &&
+                          editingTarget.field === 'ruangan'
+                        }
+                        onStartEdit={() =>
                           setEditingTarget({
                             patientId: patient.id,
-                            field: 'bed',
-                          });
-                          setTempValue(patient.bed);
+                            field: 'ruangan',
+                          })
                         }
-                      }}
-                      title='Klik untuk mengedit Nomor Bed'
-                    >
-                      {isEditingBed ? (
-                        <div
-                          className='flex items-center gap-1 p-0.5 bg-popover rounded border z-20 min-w-24'
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Input
-                            value={tempValue}
-                            onChange={(e) => setTempValue(e.target.value)}
-                            autoFocus
-                            placeholder='Bed'
-                            className='h-7 text-xs w-16'
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                handleSaveField(patient, 'bed', tempValue);
-                              } else if (e.key === 'Escape') {
-                                setEditingTarget(null);
-                              }
-                            }}
-                          />
-                          <Button
-                            size='icon'
-                            className='h-7 w-7'
-                            onClick={() =>
-                              handleSaveField(patient, 'bed', tempValue)
-                            }
-                          >
-                            <Check className='h-3 w-3' />
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className='flex items-center justify-between group/cell'>
-                          <span className='font-mono font-medium'>
-                            {patient.bed}
-                          </span>
-                          <Pencil className='h-3 w-3 text-muted-foreground opacity-0 group-hover/cell:opacity-100 transition-opacity' />
-                        </div>
-                      )}
-                    </TableCell>
-
-                    {/* GEDUNG */}
-                    <TableCell className='text-muted-foreground text-sm'>
-                      {patient.gedung}
-                    </TableCell>
-
-                    {/* STATUS PASIEN CELL (INLINE EDITABLE) */}
-                    <TableCell
-                      className={`relative transition-all cursor-pointer ${
-                        modifiedFields[patient.id]?.status_pasien
-                          ? 'ring-1 ring-amber-500/50 bg-amber-500/10 rounded'
-                          : ''
-                      }`}
-                      onClick={() => {
-                        if (!isEditingStatus) {
+                        onSave={(val) =>
+                          handleSaveField(patient, 'ruangan', val)
+                        }
+                        onCancel={() => setEditingTarget(null)}
+                        isModified={modifiedFields[patient.id]?.ruangan}
+                        placeholder='Pilih Ruangan'
+                        triggerClassName='h-7 text-xs w-32'
+                        title='Klik untuk mengedit Ruangan'
+                      />
+                    ) : (
+                      <InlineTextCell
+                        value={patient.ruangan}
+                        isEditing={
+                          editingTarget?.patientId === patient.id &&
+                          editingTarget.field === 'ruangan'
+                        }
+                        onStartEdit={() =>
                           setEditingTarget({
                             patientId: patient.id,
-                            field: 'status_pasien',
-                          });
+                            field: 'ruangan',
+                          })
                         }
-                      }}
+                        onSave={(val) =>
+                          handleSaveField(patient, 'ruangan', val)
+                        }
+                        onCancel={() => setEditingTarget(null)}
+                        isModified={modifiedFields[patient.id]?.ruangan}
+                        placeholder='Ruangan'
+                        title='Klik untuk mengedit Ruangan'
+                      />
+                    )}
+
+                    {/* Bed (Inline Editable Text) */}
+                    <InlineTextCell
+                      value={patient.bed}
+                      isEditing={
+                        editingTarget?.patientId === patient.id &&
+                        editingTarget.field === 'bed'
+                      }
+                      onStartEdit={() =>
+                        setEditingTarget({
+                          patientId: patient.id,
+                          field: 'bed',
+                        })
+                      }
+                      onSave={(val) => handleSaveField(patient, 'bed', val)}
+                      onCancel={() => setEditingTarget(null)}
+                      isModified={modifiedFields[patient.id]?.bed}
+                      placeholder='Bed'
+                      displayClassName='font-mono font-medium'
+                      inputClassName='h-7 text-xs font-mono w-20'
+                      title='Klik untuk mengedit Bed'
+                    />
+
+                    {/* Gedung (Inline Editable Select / Text fallback) */}
+                    {gedungOptions.length > 0 ? (
+                      <InlineSelectCell
+                        value={patient.gedung}
+                        options={gedungOptions}
+                        isEditing={
+                          editingTarget?.patientId === patient.id &&
+                          editingTarget.field === 'gedung'
+                        }
+                        onStartEdit={() =>
+                          setEditingTarget({
+                            patientId: patient.id,
+                            field: 'gedung',
+                          })
+                        }
+                        onSave={(val) => handleSaveField(patient, 'gedung', val)}
+                        onCancel={() => setEditingTarget(null)}
+                        isModified={modifiedFields[patient.id]?.gedung}
+                        placeholder='Pilih Gedung'
+                        triggerClassName='h-7 text-xs w-32'
+                        title='Klik untuk mengedit Gedung'
+                      />
+                    ) : (
+                      <InlineTextCell
+                        value={patient.gedung}
+                        isEditing={
+                          editingTarget?.patientId === patient.id &&
+                          editingTarget.field === 'gedung'
+                        }
+                        onStartEdit={() =>
+                          setEditingTarget({
+                            patientId: patient.id,
+                            field: 'gedung',
+                          })
+                        }
+                        onSave={(val) => handleSaveField(patient, 'gedung', val)}
+                        onCancel={() => setEditingTarget(null)}
+                        isModified={modifiedFields[patient.id]?.gedung}
+                        placeholder='Gedung'
+                        title='Klik untuk mengedit Gedung'
+                      />
+                    )}
+
+                    {/* Status Pasien (Inline Editable Select) */}
+                    <InlineSelectCell
+                      value={patient.status_pasien}
+                      options={STATUS_OPTIONS.map((st) => ({
+                        label: st.replace(/_/g, ' '),
+                        value: st,
+                      }))}
+                      isEditing={
+                        editingTarget?.patientId === patient.id &&
+                        editingTarget.field === 'status_pasien'
+                      }
+                      onStartEdit={() =>
+                        setEditingTarget({
+                          patientId: patient.id,
+                          field: 'status_pasien',
+                        })
+                      }
+                      onSave={(val) =>
+                        handleSaveField(patient, 'status_pasien', val)
+                      }
+                      onCancel={() => setEditingTarget(null)}
+                      isModified={modifiedFields[patient.id]?.status_pasien}
+                      placeholder='Status'
+                      triggerClassName='h-7 text-xs w-36'
                       title='Klik untuk mengedit Status Pasien'
-                    >
-                      {isEditingStatus ? (
-                        <div onClick={(e) => e.stopPropagation()}>
-                          <Select
-                            value={patient.status_pasien}
-                            onValueChange={(val) => {
-                              if (val !== null) {
-                                handleSaveField(patient, 'status_pasien', val);
-                              }
-                            }}
-                          >
-                            <SelectTrigger className='h-7 text-xs w-36'>
-                              <SelectValue placeholder='Status' />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {STATUS_OPTIONS.map((st) => (
-                                <SelectItem key={st} value={st}>
-                                  {st.replace(/_/g, ' ')}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      ) : (
-                        <StatusBadge status={patient.status_pasien} />
-                      )}
-                    </TableCell>
+                      renderDisplay={(st) => <StatusBadge status={st} />}
+                    />
 
-                    {/* NPO CELL (TOGGLE ON CLICK) */}
+                    {/* NPO Cell (Toggle Badge on Click) */}
                     <TableCell
                       onClick={() =>
                         handleSaveField(patient, 'is_npo', !patient.is_npo)
@@ -516,7 +494,7 @@ export default function PatientTable({
                       <NpoBadge isNpo={patient.is_npo} />
                     </TableCell>
 
-                    {/* ACTION DROPDOWN */}
+                    {/* Action Menu */}
                     <TableCell className='text-right'>
                       <DropdownMenu>
                         <DropdownMenuTrigger

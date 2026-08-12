@@ -81,6 +81,7 @@ export async function createPatient(
     });
 
     revalidatePath('/dashboard/ag-rs/data-pasien');
+    revalidatePath('/dashboard/ag-katering/overview');
     return { success: true, message: 'Pasien berhasil ditambahkan.' };
   } catch (error) {
     console.error('Error creating patient:', error);
@@ -120,6 +121,7 @@ export async function updatePatient(
       .where(eq(pasienTable.id, id));
 
     revalidatePath('/dashboard/ag-rs/data-pasien');
+    revalidatePath('/dashboard/ag-katering/overview');
     return { success: true, message: 'Data pasien berhasil diperbarui.' };
   } catch (error) {
     console.error('Error updating patient:', error);
@@ -141,6 +143,7 @@ export async function updatePatientField(
       .where(eq(pasienTable.id, id));
 
     revalidatePath('/dashboard/ag-rs/data-pasien');
+    revalidatePath('/dashboard/ag-katering/overview');
     return { success: true, message: 'Berhasil diperbarui.' };
   } catch (error) {
     console.error('Error updating patient field:', error);
@@ -153,6 +156,7 @@ export async function deletePatient(id: number): Promise<MutationResult> {
     await db.delete(pasienTable).where(eq(pasienTable.id, id));
 
     revalidatePath('/dashboard/ag-rs/data-pasien');
+    revalidatePath('/dashboard/ag-katering/overview');
     return { success: true, message: 'Pasien berhasil dihapus.' };
   } catch (error) {
     console.error('Error deleting patient:', error);

@@ -21,12 +21,19 @@ import {
   SidebarMenuSubItem,
   SidebarRail,
 } from '@/components/ui/sidebar';
-import { routeData } from '@/components/ag-katering/navigation';
+import {
+  routeDataProduksi,
+  routeDataSupervisor,
+} from '@/components/ag-katering/navigation';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
+import { useRole } from '@/lib/use-role';
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname();
+  const { role } = useRole();
+  const routeData =
+    role === 'supervisor' ? routeDataSupervisor : routeDataProduksi;
 
   return (
     <Sidebar {...props}>

@@ -1,10 +1,14 @@
 import React from 'react';
 import { Metadata } from 'next';
+import { headers } from 'next/headers';
+import { redirect } from 'next/navigation';
+import { auth } from '@/lib/auth';
 import {
   getOtorisasiList,
   getOtorisasiStats,
 } from '@/servers/otorisasi-diet.service';
 import OtorisasiPerubahanClient from '@/components/ag-katering/otorisasi-perubahan-diet/OtorisasiPerubahanClient';
+import { Forbidden } from '@/components/auth/forbidden';
 
 export const metadata: Metadata = {
   title: 'Otorisasi Perubahan Diet - Ahli Gizi Katering',
@@ -13,6 +17,23 @@ export const metadata: Metadata = {
 };
 
 export default async function OtorisasiPerubahanDietPage() {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
+
+  if (!session) {
+    redirect('/');
+  }
+
+  if (session.user.role !== 'supervisor') {
+    return (
+      <Forbidden
+        currentUserRole={session.user.role}
+        requiredRole='supervisor'
+      />
+    );
+  }
+
   const items = await getOtorisasiList();
   const stats = await getOtorisasiStats(items);
 

@@ -29,8 +29,6 @@ export async function getGedungWithRuangan(): Promise<GedungWithRuangan[]> {
       .from(gedungTable)
       .leftJoin(ruanganTable, eq(gedungTable.id, ruanganTable.gedung_id));
 
-    console.log('GEDUNG DB RESULT:', result);
-
     if (result && result.length > 0) {
       const gedungMap = new Map<number, GedungWithRuangan>();
 

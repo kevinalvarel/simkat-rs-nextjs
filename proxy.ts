@@ -8,6 +8,10 @@ function redirectByRole(request: NextRequest, role: string | null | undefined) {
       return NextResponse.redirect(
         new URL('/dashboard/ag-katering/overview', request.url),
       );
+    case 'supervisor':
+      return NextResponse.redirect(
+        new URL('/dashboard/ag-katering/overview', request.url),
+      );
     case 'gizi-rs':
       return NextResponse.redirect(new URL('/dashboard/ag-rs', request.url));
     default:

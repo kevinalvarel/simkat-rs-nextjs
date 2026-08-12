@@ -341,6 +341,7 @@ export async function updateStatusRevisi(
         .where(eq(otorisasiPerubahanDietTable.id, id));
 
       revalidatePath('/dashboard/ag-katering/revisi-post-snapshot');
+      revalidatePath('/dashboard/ag-katering/overview');
       return {
         success: true,
         message: `Status revisi #${id} berhasil diperbarui menjadi ${status}.`,
@@ -394,6 +395,7 @@ export async function createRevisiPostSnapshot(data: {
     });
 
     revalidatePath('/dashboard/ag-katering/revisi-post-snapshot');
+    revalidatePath('/dashboard/ag-katering/overview');
     return {
       success: true,
       message: 'Revisi post-snapshot berhasil ditambahkan.',

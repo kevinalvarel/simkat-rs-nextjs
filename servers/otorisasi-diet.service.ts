@@ -311,6 +311,7 @@ export async function approveRevisiDiet(
 
       revalidatePath('/dashboard/ag-katering/otorisasi-perubahan-diet');
       revalidatePath('/dashboard/ag-katering/revisi-post-snapshot');
+      revalidatePath('/dashboard/ag-katering/overview');
       return {
         success: true,
         message: `Permintaan otorisasi #${id} berhasil disetujui.`,
@@ -370,6 +371,7 @@ export async function rejectRevisiDiet(
 
       revalidatePath('/dashboard/ag-katering/otorisasi-perubahan-diet');
       revalidatePath('/dashboard/ag-katering/revisi-post-snapshot');
+      revalidatePath('/dashboard/ag-katering/overview');
       return {
         success: true,
         message: `Permintaan otorisasi #${id} telah ditolak.`,
@@ -420,6 +422,7 @@ export async function bulkApproveRevisiDiet(
 
     revalidatePath('/dashboard/ag-katering/otorisasi-perubahan-diet');
     revalidatePath('/dashboard/ag-katering/revisi-post-snapshot');
+    revalidatePath('/dashboard/ag-katering/overview');
     return {
       success: true,
       message: `${ids.length} permintaan otorisasi berhasil disetujui sekaligus.`,

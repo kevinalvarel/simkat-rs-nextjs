@@ -328,6 +328,7 @@ export async function saveDietMapping(
     }
 
     revalidatePath('/dashboard/ag-katering/mapping-diet');
+    revalidatePath('/dashboard/ag-katering/overview');
     return {
       success: true,
       message: `Mapping diet untuk "${payload.diet_rs_raw}" berhasil disimpan.`,
@@ -356,6 +357,7 @@ export async function bulkSaveDietMapping(
   }
 
   revalidatePath('/dashboard/ag-katering/mapping-diet');
+  revalidatePath('/dashboard/ag-katering/overview');
   return {
     success: true,
     message: `${successCount} dari ${dietRawList.length} mapping berhasil disimpan.`,
