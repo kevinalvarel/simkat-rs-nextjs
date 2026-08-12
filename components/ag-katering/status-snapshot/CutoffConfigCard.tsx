@@ -2,8 +2,17 @@
 
 import { useState, useEffect } from 'react';
 import type { WaktuMakanConfig } from '@/servers/snapshot.service';
-import { updateWaktuMakanConfig, triggerManualSnapshot } from '@/servers/snapshot.service';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import {
+  updateWaktuMakanConfig,
+  triggerManualSnapshot,
+} from '@/servers/snapshot.service';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -38,12 +47,15 @@ export default function CutoffConfigCard({
   onSnapshotTriggered,
 }: CutoffConfigCardProps) {
   // State for edit time dialog
-  const [editingConfig, setEditingConfig] = useState<WaktuMakanConfig | null>(null);
+  const [editingConfig, setEditingConfig] = useState<WaktuMakanConfig | null>(
+    null,
+  );
   const [newTime, setNewTime] = useState<string>('00:00');
   const [isUpdatingTime, setIsUpdatingTime] = useState<boolean>(false);
 
   // State for manual trigger dialog
-  const [triggeringConfig, setTriggeringConfig] = useState<WaktuMakanConfig | null>(null);
+  const [triggeringConfig, setTriggeringConfig] =
+    useState<WaktuMakanConfig | null>(null);
   const [isTriggering, setIsTriggering] = useState<boolean>(false);
 
   // Time state for live countdown display
@@ -66,7 +78,10 @@ export default function CutoffConfigCard({
     if (!editingConfig || !newTime) return;
     setIsUpdatingTime(true);
     try {
-      const res = await updateWaktuMakanConfig(editingConfig.jenis_makan, newTime);
+      const res = await updateWaktuMakanConfig(
+        editingConfig.jenis_makan,
+        newTime,
+      );
       if (res.success) {
         toast.success(res.message);
         setEditingConfig(null);
@@ -138,7 +153,8 @@ export default function CutoffConfigCard({
           <div>
             <h3 className='font-semibold text-sm'>Waktu Server Realtime</h3>
             <p className='text-xs text-muted-foreground'>
-              Sistem akan secara otomatis membekukan data pasien sesuai waktu cut-off
+              Sistem akan secara otomatis membekukan data pasien sesuai waktu
+              cut-off
             </p>
           </div>
         </div>
@@ -184,7 +200,8 @@ export default function CutoffConfigCard({
               <CardContent className='space-y-4 pt-1'>
                 <div className='bg-muted/40 p-3 rounded-lg border flex justify-between items-center text-xs'>
                   <span className='text-muted-foreground flex items-center gap-1.5'>
-                    <Lock className='w-3.5 h-3.5 text-muted-foreground' /> Waktu Cut-off:
+                    <Lock className='w-3.5 h-3.5 text-muted-foreground' /> Waktu
+                    Cut-off:
                   </span>
                   <strong className='font-mono text-sm font-semibold text-foreground'>
                     {config.waktu} WIB
@@ -231,7 +248,8 @@ export default function CutoffConfigCard({
                 Ubah Waktu Cut-Off ({editingConfig.jenis_makan})
               </DialogTitle>
               <DialogDescription>
-                Tentukan jam cut-off baru untuk siklus {editingConfig.jenis_makan}.
+                Tentukan jam cut-off baru untuk siklus{' '}
+                {editingConfig.jenis_makan}.
               </DialogDescription>
             </DialogHeader>
 
@@ -283,22 +301,27 @@ export default function CutoffConfigCard({
                 Kunci & Trigger Snapshot Sekarang?
               </DialogTitle>
               <DialogDescription className='text-xs pt-1 space-y-2'>
-                <p>
-                  Sistem akan mengambil data real-time pasien aktif saat ini untuk siklus{' '}
-                  <strong className='text-foreground'>{triggeringConfig.jenis_makan}</strong>{' '}
-                  dan menguncinya dalam batch snapshot produksi.
-                </p>
+                Sistem akan mengambil data real-time pasien aktif saat ini untuk
+                siklus{' '}
+                <strong className='text-foreground'>
+                  {triggeringConfig.jenis_makan}
+                </strong>{' '}
+                dan menguncinya dalam batch snapshot produksi.
               </DialogDescription>
             </DialogHeader>
 
             <div className='bg-muted/50 p-3 rounded-lg border text-xs space-y-1 my-2'>
               <div className='flex justify-between'>
                 <span className='text-muted-foreground'>Siklus Makan:</span>
-                <strong className='text-foreground'>{triggeringConfig.jenis_makan}</strong>
+                <strong className='text-foreground'>
+                  {triggeringConfig.jenis_makan}
+                </strong>
               </div>
               <div className='flex justify-between'>
                 <span className='text-muted-foreground'>Waktu Acuan:</span>
-                <strong className='text-foreground'>{triggeringConfig.waktu} WIB</strong>
+                <strong className='text-foreground'>
+                  {triggeringConfig.waktu} WIB
+                </strong>
               </div>
             </div>
 
