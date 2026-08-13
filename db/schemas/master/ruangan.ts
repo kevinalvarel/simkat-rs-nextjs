@@ -7,4 +7,6 @@ export const ruanganTable = pgTable('ruangan', {
   gedung_id: integer('gedung_id').references(() => gedungTable.id, {
     onDelete: 'set null',
   }),
+  kelas: text('kelas'),
+  jumlah_bed: integer('jumlah_bed').default(10),
 });
