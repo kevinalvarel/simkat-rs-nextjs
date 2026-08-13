@@ -1,68 +1,25 @@
 'use client';
 
 import { useState } from 'react';
-import type { Patient, KelasOption } from '@/servers/patient.service';
-import type { GedungWithRuangan } from '@/servers/tempat.service';
-import { updatePatientField } from '@/servers/patient.service';
+import { useRouter } from 'next/navigation';
+import type { Patient } from '@/servers/patient.service';
+import { createPatient, updatePatientField } from '@/servers/patient.service';
 import type { PatientFormValues } from '@/validations/PatientFormSchema';
-import { Button } from '@/components/ui/button';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-  MoreHorizontal,
-  Pencil,
-  Trash2,
-  DoorOpen,
-  Home,
-  Sparkles,
-} from 'lucide-react';
+import type {
+  PatientTableProps,
+  EditableField,
+  EditingTarget,
+  ContextMenuState,
+} from '@/types/data-pasien';
+import { Table, TableBody } from '@/components/ui/table';
 import { toast } from 'sonner';
 
-import { StatusBadge, NpoBadge } from './ui/PatientBadges';
-import {
-  InlineTextCell,
-  InlineDietCell,
-  InlineSelectCell,
-} from './ui/InlineCellEditors';
-import PatientContextMenu, {
-  type ContextMenuState,
-} from './PatientContextMenu';
-import PindahRuanganDialog from './PindahRuanganDialog';
-
-interface PatientTableProps {
-  patients: Patient[];
-  onEdit: (patient: Patient) => void;
-  onDelete: (patient: Patient) => void;
-  gedungList?: GedungWithRuangan[];
-  kelasList?: KelasOption[];
-}
-
-type EditableField =
-  | 'nama_pasien'
-  | 'no_rm'
-  | 'diet'
-  | 'kelas'
-  | 'ruangan'
-  | 'bed'
-  | 'gedung'
-  | 'status_pasien';
-
-type EditingTarget = {
-  patientId: number;
-  field: EditableField;
-} | null;
+import { PatientTableHeader } from './ui/PatientTableHeader';
+import { InlineAddRow } from './ui/InlineAddRow';
+import { EmptyBedRow } from './ui/EmptyBedRow';
+import { PatientTableRow } from './ui/PatientTableRow';
+import PatientContextMenu from './ui/PatientContextMenu';
+import PindahRuanganDialog from './ui/PindahRuanganDialog';
 
 const STATUS_OPTIONS = [
   'AKTIF',
@@ -73,17 +30,6 @@ const STATUS_OPTIONS = [
   'PULANG',
 ];
 
-const QUICK_DIET_SUGGESTIONS = [
-  'MB',
-  'ML',
-  'MK',
-  'DM',
-  'Biasa DM (Diabetes)',
-  'Bubur Saring',
-  'Rendah Garam',
-  'TKTP',
-];
-
 const DEFAULT_KELAS_OPTIONS = ['Kelas 1', 'Kelas 2', 'Kelas 3', 'VIP', 'VVIP'];
 
 export default function PatientTable({
@@ -92,7 +38,13 @@ export default function PatientTable({
   onDelete,
   gedungList = [],
   kelasList = [],
+  totalBedCapacity = 6,
+  ruangan = '',
+  gedung = '',
+  searchQuery = '',
 }: PatientTableProps) {
+  const router = useRouter();
+
   const [editingTarget, setEditingTarget] = useState<EditingTarget>(null);
 
   // Track modified fields for visual glow/badge
@@ -105,6 +57,112 @@ export default function PatientTable({
 
   // Quick "Pindah Ruangan" dialog state
   const [pindahPatient, setPindahPatient] = useState<Patient | null>(null);
+
+  // Inline Add Patient State
+  const [inlineAddBedKey, setInlineAddBedKey] = useState<string | null>(null);
+  const [inlineAddDraft, setInlineAddDraft] =
+    useState<PatientFormValues | null>(null);
+  const [isSavingInline, setIsSavingInline] = useState(false);
+
+  const kelasOptions = [
+    ...new Set([
+      ...kelasList.map((k) => k.namaKelas),
+      ...DEFAULT_KELAS_OPTIONS,
+    ]),
+  ];
+
+  const gedungOptions = gedungList.map((g) => g.namaGedung);
+
+  function startInlineAdd(bedLabel: string) {
+    setInlineAddBedKey(bedLabel);
+    setInlineAddDraft({
+      nama_pasien: '',
+      no_rm: '',
+      diet: '',
+      kelas: kelasOptions[0] || 'Kelas 1',
+      gedung: gedung,
+      ruangan: ruangan,
+      bed: bedLabel,
+      status_pasien: 'AKTIF',
+      is_npo: false,
+    });
+  }
+
+  function cancelInlineAdd() {
+    setInlineAddBedKey(null);
+    setInlineAddDraft(null);
+  }
+
+  function updateDraft<K extends keyof PatientFormValues>(
+    field: K,
+    value: PatientFormValues[K],
+  ) {
+    setInlineAddDraft((prev) => (prev ? { ...prev, [field]: value } : prev));
+  }
+
+  async function handleSaveInlineAdd(bedKey: string) {
+    if (!inlineAddDraft || isSavingInline) return;
+
+    if (!inlineAddDraft.nama_pasien?.trim()) {
+      toast.error('Nama pasien wajib diisi.');
+      return;
+    }
+    if (!inlineAddDraft.no_rm?.trim()) {
+      toast.error('No. RM wajib diisi.');
+      return;
+    }
+    if (!inlineAddDraft.diet?.trim()) {
+      toast.error('Diet wajib diisi.');
+      return;
+    }
+
+    setIsSavingInline(true);
+    try {
+      const res = await createPatient({
+        nama_pasien: inlineAddDraft.nama_pasien.trim(),
+        no_rm: inlineAddDraft.no_rm.trim(),
+        diet: inlineAddDraft.diet.trim(),
+        kelas: inlineAddDraft.kelas || kelasOptions[0] || 'Kelas 1',
+        gedung: inlineAddDraft.gedung || gedung,
+        ruangan: inlineAddDraft.ruangan || ruangan,
+        bed: inlineAddDraft.bed || bedKey,
+        status_pasien: inlineAddDraft.status_pasien || 'AKTIF',
+        is_npo: Boolean(inlineAddDraft.is_npo),
+      });
+
+      if (res.success) {
+        toast.success(
+          `Pasien ${inlineAddDraft.nama_pasien.trim()} berhasil ditambahkan ke ${inlineAddDraft.bed || bedKey}!`,
+        );
+        setInlineAddBedKey(null);
+        setInlineAddDraft(null);
+        router.refresh();
+      } else {
+        toast.error(res.message);
+      }
+    } catch {
+      toast.error('Gagal menyimpan data pasien baru.');
+    } finally {
+      setIsSavingInline(false);
+    }
+  }
+
+  function handleRowBlur(
+    e: React.FocusEvent<HTMLTableRowElement>,
+    bedKey: string,
+  ) {
+    const currentTarget = e.currentTarget;
+    if (!currentTarget.contains(e.relatedTarget as Node)) {
+      // Focus moved OUTSIDE this row! Auto-save if draft has content
+      if (
+        inlineAddDraft &&
+        inlineAddBedKey === bedKey &&
+        (inlineAddDraft.nama_pasien.trim() || inlineAddDraft.no_rm.trim())
+      ) {
+        handleSaveInlineAdd(bedKey);
+      }
+    }
+  }
 
   function markAsModified(patientId: number, fieldName: string) {
     setModifiedFields((prev) => ({
@@ -169,14 +227,45 @@ export default function PatientTable({
     }
   }
 
-  const kelasOptions = [
-    ...new Set([
-      ...kelasList.map((k) => k.namaKelas),
-      ...DEFAULT_KELAS_OPTIONS,
-    ]),
-  ];
+  // Extract bed slot number if present (e.g. "Bed 3" -> 3)
+  function getBedSlotIndex(bedStr: string | null | undefined): number | null {
+    if (!bedStr) return null;
+    const match = bedStr.match(/\d+/);
+    if (match) {
+      const num = parseInt(match[0], 10);
+      return num >= 1 ? num : null;
+    }
+    return null;
+  }
 
-  const gedungOptions = gedungList.map((g) => g.namaGedung);
+  const targetCapacity = Math.max(
+    patients.length,
+    totalBedCapacity > 0 ? totalBedCapacity : 6,
+  );
+  const bedSlots: (Patient | null)[] = Array(targetCapacity).fill(null);
+  const unassignedPatients: Patient[] = [];
+
+  patients.forEach((p) => {
+    const slotIdx = getBedSlotIndex(p.bed);
+    if (
+      slotIdx !== null &&
+      slotIdx <= targetCapacity &&
+      !bedSlots[slotIdx - 1]
+    ) {
+      bedSlots[slotIdx - 1] = p;
+    } else {
+      unassignedPatients.push(p);
+    }
+  });
+
+  unassignedPatients.forEach((p) => {
+    const emptyIndex = bedSlots.findIndex((slot) => slot === null);
+    if (emptyIndex !== -1) {
+      bedSlots[emptyIndex] = p;
+    } else {
+      bedSlots.push(p);
+    }
+  });
 
   return (
     <div className='space-y-3'>
@@ -184,359 +273,86 @@ export default function PatientTable({
       <div className='flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 p-2.5 px-4 rounded-lg border border-border/50'>
         <span className='text-amber-500 text-sm'>💡</span>
         <span>
-          <strong>Tips Cepat:</strong> Klik pada sel mana saja (Nama, RM, Diet, Kelas, Ruangan, Bed, Gedung, Status, NPO) untuk edit langsung · Klik kanan pada baris untuk aksi cepat.
+          <strong>Tips Cepat:</strong> Klik sel bed kosong untuk <strong>Tambah Pasien Inline</strong> (otomatis tersimpan saat berpindah baris) · Klik sel pasien terdaftar untuk edit langsung · Klik kanan untuk aksi cepat.
         </span>
       </div>
+
+      {searchQuery.trim() !== '' && patients.length === 0 && (
+        <div className='flex items-center gap-2 text-xs text-muted-foreground bg-amber-500/10 text-amber-900 dark:text-amber-300 p-2.5 px-4 rounded-lg border border-amber-500/20'>
+          <span>🔍</span>
+          <span>
+            Tidak ada pasien terdaftar yang sesuai dengan pencarian &quot;
+            {searchQuery}&quot;. Menampilkan tabel formulir bed kosong (
+            {targetCapacity} Bed).
+          </span>
+        </div>
+      )}
 
       <div className='rounded-lg border overflow-hidden relative'>
         <div className='overflow-x-auto'>
           <Table>
-            <TableHeader>
-              <TableRow className='bg-muted/50'>
-                <TableHead className='font-semibold w-12 text-center'>
-                  No
-                </TableHead>
-                <TableHead className='font-semibold'>Nama Pasien</TableHead>
-                <TableHead className='font-semibold'>No. RM</TableHead>
-                <TableHead className='font-semibold'>Diet</TableHead>
-                <TableHead className='font-semibold'>Kelas</TableHead>
-                <TableHead className='font-semibold'>Ruangan</TableHead>
-                <TableHead className='font-semibold'>Bed</TableHead>
-                <TableHead className='font-semibold'>Gedung</TableHead>
-                <TableHead className='font-semibold'>Status</TableHead>
-                <TableHead className='font-semibold'>NPO</TableHead>
-                <TableHead className='font-semibold text-right'>
-                  Action
-                </TableHead>
-              </TableRow>
-            </TableHeader>
+            <PatientTableHeader />
             <TableBody>
-              {patients.map((patient, index) => {
-                const isModifiedRow = Boolean(modifiedFields[patient.id]);
+              {bedSlots.map((patient, index) => {
+                const bedNumber = index + 1;
+                const defaultBedLabel = `Bed ${bedNumber}`;
 
-                // Determine ruangan options based on current patient's gedung
-                const patientGedungObj = gedungList.find(
-                  (g) => g.namaGedung === patient.gedung,
-                );
-                const ruanganOptions = patientGedungObj
-                  ? patientGedungObj.ruanganList.map((r) => r.namaRuangan)
-                  : [
-                      ...new Set(
-                        gedungList.flatMap((g) =>
-                          g.ruanganList.map((r) => r.namaRuangan),
-                        ),
-                      ),
-                    ];
+                if (!patient) {
+                  if (inlineAddBedKey === defaultBedLabel && inlineAddDraft) {
+                    return (
+                      <InlineAddRow
+                        key={`inline-add-${bedNumber}`}
+                        bedNumber={bedNumber}
+                        defaultBedLabel={defaultBedLabel}
+                        inlineAddDraft={inlineAddDraft}
+                        ruangan={ruangan}
+                        gedung={gedung}
+                        kelasOptions={kelasOptions}
+                        statusOptions={STATUS_OPTIONS}
+                        isSavingInline={isSavingInline}
+                        onUpdateDraft={updateDraft}
+                        onSave={handleSaveInlineAdd}
+                        onCancel={cancelInlineAdd}
+                        onRowBlur={handleRowBlur}
+                      />
+                    );
+                  }
+
+                  return (
+                    <EmptyBedRow
+                      key={`empty-bed-${bedNumber}`}
+                      bedNumber={bedNumber}
+                      defaultBedLabel={defaultBedLabel}
+                      ruangan={ruangan}
+                      gedung={gedung}
+                      onStartInlineAdd={startInlineAdd}
+                    />
+                  );
+                }
 
                 return (
-                  <TableRow
+                  <PatientTableRow
                     key={patient.id}
-                    onContextMenu={(e) => handleContextMenu(e, patient)}
-                    className={`group transition-colors ${
-                      isModifiedRow
-                        ? 'bg-amber-500/5 hover:bg-amber-500/10'
-                        : 'hover:bg-muted/30'
-                    }`}
-                  >
-                    {/* Index */}
-                    <TableCell className='text-center text-xs text-muted-foreground font-mono'>
-                      {index + 1}
-                    </TableCell>
-
-                    {/* Nama Pasien (Inline Editable) */}
-                    <InlineTextCell
-                      value={patient.nama_pasien}
-                      isEditing={
-                        editingTarget?.patientId === patient.id &&
-                        editingTarget.field === 'nama_pasien'
-                      }
-                      onStartEdit={() =>
-                        setEditingTarget({
-                          patientId: patient.id,
-                          field: 'nama_pasien',
-                        })
-                      }
-                      onSave={(val) =>
-                        handleSaveField(patient, 'nama_pasien', val)
-                      }
-                      onCancel={() => setEditingTarget(null)}
-                      isModified={modifiedFields[patient.id]?.nama_pasien}
-                      placeholder='Nama Pasien'
-                      title='Klik untuk mengedit Nama Pasien'
-                      extraDisplayContent={
-                        isModifiedRow ? (
-                          <span
-                            className='inline-flex items-center gap-0.5 text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 px-1.5 py-0.5 rounded font-medium border border-amber-200 dark:border-amber-800 animate-in fade-in duration-300 ml-1 shrink-0'
-                            title='Data pasien ini baru saja diubah'
-                          >
-                            <Sparkles className='w-2.5 h-2.5 text-amber-500' />
-                            Diubah
-                          </span>
-                        ) : null
-                      }
-                    />
-
-                    {/* No. RM (Inline Editable) */}
-                    <InlineTextCell
-                      value={patient.no_rm}
-                      isEditing={
-                        editingTarget?.patientId === patient.id &&
-                        editingTarget.field === 'no_rm'
-                      }
-                      onStartEdit={() =>
-                        setEditingTarget({
-                          patientId: patient.id,
-                          field: 'no_rm',
-                        })
-                      }
-                      onSave={(val) => handleSaveField(patient, 'no_rm', val)}
-                      onCancel={() => setEditingTarget(null)}
-                      isModified={modifiedFields[patient.id]?.no_rm}
-                      placeholder='No. RM'
-                      displayClassName='font-mono text-sm'
-                      inputClassName='h-7 text-xs font-mono'
-                      title='Klik untuk mengedit No. RM'
-                    />
-
-                    {/* Diet (Inline Editable) */}
-                    <InlineDietCell
-                      value={patient.diet}
-                      isEditing={
-                        editingTarget?.patientId === patient.id &&
-                        editingTarget.field === 'diet'
-                      }
-                      onStartEdit={() =>
-                        setEditingTarget({
-                          patientId: patient.id,
-                          field: 'diet',
-                        })
-                      }
-                      onSave={(val) => handleSaveField(patient, 'diet', val)}
-                      onCancel={() => setEditingTarget(null)}
-                      isModified={modifiedFields[patient.id]?.diet}
-                      suggestions={QUICK_DIET_SUGGESTIONS}
-                    />
-
-                    {/* Kelas (Inline Editable Select) */}
-                    <InlineSelectCell
-                      value={patient.kelas}
-                      options={kelasOptions}
-                      isEditing={
-                        editingTarget?.patientId === patient.id &&
-                        editingTarget.field === 'kelas'
-                      }
-                      onStartEdit={() =>
-                        setEditingTarget({
-                          patientId: patient.id,
-                          field: 'kelas',
-                        })
-                      }
-                      onSave={(val) => handleSaveField(patient, 'kelas', val)}
-                      onCancel={() => setEditingTarget(null)}
-                      isModified={modifiedFields[patient.id]?.kelas}
-                      placeholder='Pilih Kelas'
-                      triggerClassName='h-7 text-xs w-28'
-                      title='Klik untuk mengedit Kelas'
-                    />
-
-                    {/* Ruangan (Inline Editable Select / Text fallback) */}
-                    {ruanganOptions.length > 0 ? (
-                      <InlineSelectCell
-                        value={patient.ruangan}
-                        options={ruanganOptions}
-                        isEditing={
-                          editingTarget?.patientId === patient.id &&
-                          editingTarget.field === 'ruangan'
-                        }
-                        onStartEdit={() =>
-                          setEditingTarget({
-                            patientId: patient.id,
-                            field: 'ruangan',
-                          })
-                        }
-                        onSave={(val) =>
-                          handleSaveField(patient, 'ruangan', val)
-                        }
-                        onCancel={() => setEditingTarget(null)}
-                        isModified={modifiedFields[patient.id]?.ruangan}
-                        placeholder='Pilih Ruangan'
-                        triggerClassName='h-7 text-xs w-32'
-                        title='Klik untuk mengedit Ruangan'
-                      />
-                    ) : (
-                      <InlineTextCell
-                        value={patient.ruangan}
-                        isEditing={
-                          editingTarget?.patientId === patient.id &&
-                          editingTarget.field === 'ruangan'
-                        }
-                        onStartEdit={() =>
-                          setEditingTarget({
-                            patientId: patient.id,
-                            field: 'ruangan',
-                          })
-                        }
-                        onSave={(val) =>
-                          handleSaveField(patient, 'ruangan', val)
-                        }
-                        onCancel={() => setEditingTarget(null)}
-                        isModified={modifiedFields[patient.id]?.ruangan}
-                        placeholder='Ruangan'
-                        title='Klik untuk mengedit Ruangan'
-                      />
-                    )}
-
-                    {/* Bed (Inline Editable Text) */}
-                    <InlineTextCell
-                      value={patient.bed}
-                      isEditing={
-                        editingTarget?.patientId === patient.id &&
-                        editingTarget.field === 'bed'
-                      }
-                      onStartEdit={() =>
-                        setEditingTarget({
-                          patientId: patient.id,
-                          field: 'bed',
-                        })
-                      }
-                      onSave={(val) => handleSaveField(patient, 'bed', val)}
-                      onCancel={() => setEditingTarget(null)}
-                      isModified={modifiedFields[patient.id]?.bed}
-                      placeholder='Bed'
-                      displayClassName='font-mono font-medium'
-                      inputClassName='h-7 text-xs font-mono w-20'
-                      title='Klik untuk mengedit Bed'
-                    />
-
-                    {/* Gedung (Inline Editable Select / Text fallback) */}
-                    {gedungOptions.length > 0 ? (
-                      <InlineSelectCell
-                        value={patient.gedung}
-                        options={gedungOptions}
-                        isEditing={
-                          editingTarget?.patientId === patient.id &&
-                          editingTarget.field === 'gedung'
-                        }
-                        onStartEdit={() =>
-                          setEditingTarget({
-                            patientId: patient.id,
-                            field: 'gedung',
-                          })
-                        }
-                        onSave={(val) => handleSaveField(patient, 'gedung', val)}
-                        onCancel={() => setEditingTarget(null)}
-                        isModified={modifiedFields[patient.id]?.gedung}
-                        placeholder='Pilih Gedung'
-                        triggerClassName='h-7 text-xs w-32'
-                        title='Klik untuk mengedit Gedung'
-                      />
-                    ) : (
-                      <InlineTextCell
-                        value={patient.gedung}
-                        isEditing={
-                          editingTarget?.patientId === patient.id &&
-                          editingTarget.field === 'gedung'
-                        }
-                        onStartEdit={() =>
-                          setEditingTarget({
-                            patientId: patient.id,
-                            field: 'gedung',
-                          })
-                        }
-                        onSave={(val) => handleSaveField(patient, 'gedung', val)}
-                        onCancel={() => setEditingTarget(null)}
-                        isModified={modifiedFields[patient.id]?.gedung}
-                        placeholder='Gedung'
-                        title='Klik untuk mengedit Gedung'
-                      />
-                    )}
-
-                    {/* Status Pasien (Inline Editable Select) */}
-                    <InlineSelectCell
-                      value={patient.status_pasien}
-                      options={STATUS_OPTIONS.map((st) => ({
-                        label: st.replace(/_/g, ' '),
-                        value: st,
-                      }))}
-                      isEditing={
-                        editingTarget?.patientId === patient.id &&
-                        editingTarget.field === 'status_pasien'
-                      }
-                      onStartEdit={() =>
-                        setEditingTarget({
-                          patientId: patient.id,
-                          field: 'status_pasien',
-                        })
-                      }
-                      onSave={(val) =>
-                        handleSaveField(patient, 'status_pasien', val)
-                      }
-                      onCancel={() => setEditingTarget(null)}
-                      isModified={modifiedFields[patient.id]?.status_pasien}
-                      placeholder='Status'
-                      triggerClassName='h-7 text-xs w-36'
-                      title='Klik untuk mengedit Status Pasien'
-                      renderDisplay={(st) => <StatusBadge status={st} />}
-                    />
-
-                    {/* NPO Cell (Toggle Badge on Click) */}
-                    <TableCell
-                      onClick={() =>
-                        handleSaveField(patient, 'is_npo', !patient.is_npo)
-                      }
-                      title='Klik untuk toggle NPO'
-                      className={`cursor-pointer transition-all ${
-                        modifiedFields[patient.id]?.is_npo
-                          ? 'ring-1 ring-amber-500/50 bg-amber-500/10 rounded'
-                          : 'hover:bg-rose-500/5'
-                      }`}
-                    >
-                      <NpoBadge isNpo={patient.is_npo} />
-                    </TableCell>
-
-                    {/* Action Menu */}
-                    <TableCell className='text-right'>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          render={
-                            <Button
-                              variant='ghost'
-                              size='icon'
-                              className='h-8 w-8 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity'
-                            />
-                          }
-                        >
-                          <MoreHorizontal className='h-4 w-4' />
-                          <span className='sr-only'>Aksi</span>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align='end'>
-                          <DropdownMenuItem onClick={() => onEdit(patient)}>
-                            <Pencil className='mr-2 h-4 w-4' />
-                            Edit Full
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => setPindahPatient(patient)}
-                          >
-                            <DoorOpen className='mr-2 h-4 w-4' />
-                            Pindah Ruangan
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleQuickPulang(patient)}
-                          >
-                            <Home className='mr-2 h-4 w-4' />
-                            Pasien Pulang
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => onDelete(patient)}
-                            className='text-destructive focus:text-destructive'
-                          >
-                            <Trash2 className='mr-2 h-4 w-4' />
-                            Hapus
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
+                    patient={patient}
+                    index={index}
+                    editingTarget={editingTarget}
+                    isModifiedRow={Boolean(modifiedFields[patient.id])}
+                    modifiedFields={modifiedFields[patient.id]}
+                    kelasOptions={kelasOptions}
+                    gedungOptions={gedungOptions}
+                    gedungList={gedungList}
+                    statusOptions={STATUS_OPTIONS}
+                    onStartEditField={(patientId, field: EditableField) =>
+                      setEditingTarget({ patientId, field })
+                    }
+                    onSaveField={handleSaveField}
+                    onCancelEdit={() => setEditingTarget(null)}
+                    onContextMenu={handleContextMenu}
+                    onEdit={onEdit}
+                    onOpenPindah={(pt) => setPindahPatient(pt)}
+                    onQuickPulang={handleQuickPulang}
+                    onDelete={onDelete}
+                  />
                 );
               })}
             </TableBody>

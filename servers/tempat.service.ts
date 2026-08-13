@@ -26,6 +26,8 @@ export type GedungHierarkis = {
 export type RuanganItem = {
   idRuangan: number;
   namaRuangan: string;
+  jumlahBed?: number;
+  kelas?: string;
 };
 
 export type GedungWithRuangan = {
@@ -112,6 +114,8 @@ export async function getGedungWithRuangan(): Promise<GedungWithRuangan[]> {
     ruanganList: g.ruanganList.map((r) => ({
       idRuangan: r.idRuangan,
       namaRuangan: r.namaRuangan,
+      jumlahBed: r.jumlahBed,
+      kelas: r.kelas,
     })),
   }));
 }

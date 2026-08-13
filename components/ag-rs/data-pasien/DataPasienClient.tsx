@@ -1,27 +1,18 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
-import { ArrowLeft, Plus, Users, DoorOpen } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { ArrowLeft, Plus, DoorOpen, Edit3 } from 'lucide-react';
 
-import type { Patient, KelasOption } from '@/servers/patient.service';
-import type { GedungWithRuangan } from '@/servers/tempat.service';
-
+import type { Patient } from '@/servers/patient.service';
+import type { DataPasienClientProps } from '@/types/data-pasien';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 
-import PatientToolbar from './PatientToolbar';
+import PatientToolbar from './ui/PatientToolbar';
 import PatientTable from './PatientTable';
-import PatientFormDialog from './PatientFormDialog';
+import PatientFormDialog from './ui/PatientFormDialog';
 import DeletePatientDialog from './ui/DeletePatientDialog';
-
-interface DataPasienClientProps {
-  patients: Patient[];
-  ruangan: string;
-  gedung: string;
-  kelasList?: KelasOption[];
-  gedungList?: GedungWithRuangan[];
-}
 
 export default function DataPasienClient({
   patients,
@@ -31,13 +22,41 @@ export default function DataPasienClient({
   gedungList = [],
 }: DataPasienClientProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const isRevisiMode = searchParams.get('isRevisi') === 'true';
+  const revisiMeal = searchParams.get('revisiMeal') || 'Batch Sebelumnya';
 
   // UI state
   const [searchQuery, setSearchQuery] = useState('');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [initialBed, setInitialBed] = useState('');
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [patientToDelete, setPatientToDelete] = useState<Patient | null>(null);
+
+  // Find room details (e.g. jumlahBed count) from database gedungList
+  const targetRuangan = useMemo(() => {
+    if (!gedungList || gedungList.length === 0) return null;
+    const foundGedung = gedungList.find(
+      (g) => g.namaGedung.toLowerCase() === gedung.toLowerCase(),
+    );
+    if (foundGedung) {
+      const foundRoom = foundGedung.ruanganList.find(
+        (r) => r.namaRuangan.toLowerCase() === ruangan.toLowerCase(),
+      );
+      if (foundRoom) return foundRoom;
+    }
+    for (const g of gedungList) {
+      const foundRoom = g.ruanganList.find(
+        (r) => r.namaRuangan.toLowerCase() === ruangan.toLowerCase(),
+      );
+      if (foundRoom) return foundRoom;
+    }
+    return null;
+  }, [gedungList, gedung, ruangan]);
+
+  const totalBedCapacity = targetRuangan?.jumlahBed ?? 6;
 
   // Filter patients based on search query
   const filteredPatients = useMemo(() => {
@@ -51,13 +70,15 @@ export default function DataPasienClient({
   }, [patients, searchQuery]);
 
   // Handlers
-  function handleAddPatient() {
+  function handleAddPatient(defaultBed?: string) {
     setSelectedPatient(null);
+    setInitialBed(typeof defaultBed === 'string' ? defaultBed : '');
     setIsFormOpen(true);
   }
 
   function handleEditPatient(patient: Patient) {
     setSelectedPatient(patient);
+    setInitialBed('');
     setIsFormOpen(true);
   }
 
@@ -75,10 +96,20 @@ export default function DataPasienClient({
       {/* Header */}
       <div className='flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between'>
         <div className='space-y-1'>
-          <h1 className='text-2xl font-bold tracking-tight'>Data Pasien</h1>
+          <div className='flex items-center gap-2'>
+            <h1 className='text-2xl font-bold tracking-tight'>Data Pasien</h1>
+            {isRevisiMode && (
+              <Badge
+                variant='outline'
+                className='bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-500/40 text-xs font-semibold gap-1'
+              >
+                <Edit3 className='w-3 h-3 text-amber-600' /> Mode Revisi ({revisiMeal})
+              </Badge>
+            )}
+          </div>
           <p className='text-sm text-muted-foreground flex items-center gap-1.5'>
             <DoorOpen className='h-4 w-4' />
-            {gedung} · {ruangan}
+            {gedung} · {ruangan} ({totalBedCapacity} Bed)
           </p>
         </div>
         <div className='flex gap-2'>
@@ -86,12 +117,27 @@ export default function DataPasienClient({
             <ArrowLeft className='h-4 w-4' />
             Kembali
           </Button>
-          <Button onClick={handleAddPatient} className='gap-2'>
+          <Button onClick={() => handleAddPatient()} className='gap-2'>
             <Plus className='h-4 w-4' />
             Tambah Pasien
           </Button>
         </div>
       </div>
+
+      {/* Mode Revisi Post-Snapshot Banner */}
+      {isRevisiMode && (
+        <div className='flex items-start gap-3 bg-amber-500/10 dark:bg-amber-950/40 p-4 rounded-xl border border-amber-500/30 text-amber-900 dark:text-amber-200 text-xs sm:text-sm animate-in fade-in duration-300'>
+          <Edit3 className='w-5 h-5 text-amber-600 shrink-0 mt-0.5' />
+          <div>
+            <strong className='font-semibold block'>
+              Mode Revisi Post-Snapshot ({revisiMeal}):
+            </strong>
+            <span>
+              Anda sedang memilih batch sebelumnya ({revisiMeal}). Setiap perubahan diet pasien di ruangan ini akan dicatat sebagai <strong>Revisi Post-Snapshot</strong> untuk proses otorisasi dapur katering.
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Search Toolbar */}
       <PatientToolbar
@@ -101,57 +147,28 @@ export default function DataPasienClient({
         filteredCount={filteredPatients.length}
       />
 
-      {/* Table / Empty State */}
-      {patients.length === 0 ? (
-        // Empty state — no patients at all
-        <Card className='border-dashed'>
-          <CardContent className='flex flex-col items-center justify-center py-16 text-center'>
-            <div className='rounded-full bg-muted p-4 mb-4'>
-              <Users className='h-10 w-10 text-muted-foreground' />
-            </div>
-            <h3 className='text-lg font-semibold mb-1'>Belum Ada Pasien</h3>
-            <p className='text-sm text-muted-foreground mb-6 max-w-xs'>
-              Belum terdapat pasien yang terdaftar pada ruangan ini.
-            </p>
-            <Button onClick={handleAddPatient} className='gap-2'>
-              <Plus className='h-4 w-4' />
-              Tambah Pasien
-            </Button>
-          </CardContent>
-        </Card>
-      ) : filteredPatients.length === 0 ? (
-        // Search returned no results
-        <Card className='border-dashed'>
-          <CardContent className='flex flex-col items-center justify-center py-12 text-center'>
-            <div className='rounded-full bg-muted p-4 mb-4'>
-              <Users className='h-8 w-8 text-muted-foreground' />
-            </div>
-            <h3 className='text-base font-semibold mb-1'>
-              Pasien Tidak Ditemukan
-            </h3>
-            <p className='text-sm text-muted-foreground max-w-xs'>
-              Tidak ada pasien yang sesuai dengan pencarian &quot;{searchQuery}
-              &quot;.
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <PatientTable
-          patients={filteredPatients}
-          onEdit={handleEditPatient}
-          onDelete={handleDeletePatient}
-          gedungList={gedungList}
-          kelasList={kelasList}
-        />
-      )}
+      {/* Table / Formulir Cetak View */}
+      <PatientTable
+        patients={filteredPatients}
+        onEdit={handleEditPatient}
+        onDelete={handleDeletePatient}
+        gedungList={gedungList}
+        kelasList={kelasList}
+        totalBedCapacity={totalBedCapacity}
+        ruangan={ruangan}
+        gedung={gedung}
+        searchQuery={searchQuery}
+        onAddPatientForBed={(bedName) => handleAddPatient(bedName)}
+      />
 
       {/* Form Dialog */}
       <PatientFormDialog
-        open={isFormOpen}
-        onOpenChange={setIsFormOpen}
+        isOpen={isFormOpen}
+        onClose={() => setIsFormOpen(false)}
         patient={selectedPatient}
         defaultRuangan={ruangan}
         defaultGedung={gedung}
+        initialBed={initialBed}
         kelasList={kelasList}
         gedungList={gedungList}
       />

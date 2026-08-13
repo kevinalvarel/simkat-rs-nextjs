@@ -122,10 +122,9 @@ interface InlineDietCellProps {
   value: string;
   isEditing: boolean;
   onStartEdit: () => void;
-  onSave: (newValue: string) => void;
+  onSave: (newDiet: string) => void;
   onCancel: () => void;
   isModified?: boolean;
-  suggestions?: string[];
 }
 
 export function InlineDietCell({
@@ -135,7 +134,6 @@ export function InlineDietCell({
   onSave,
   onCancel,
   isModified = false,
-  suggestions = [],
 }: InlineDietCellProps) {
   const [tempValue, setTempValue] = useState(value);
 
@@ -143,10 +141,10 @@ export function InlineDietCell({
     setTempValue(value);
   }, [value, isEditing]);
 
-  const handleSave = (valToSave?: string) => {
-    const target = valToSave ?? tempValue;
-    if (target.trim() !== '' && target !== value) {
-      onSave(target.trim());
+  const handleSave = () => {
+    const target = tempValue.trim();
+    if (target !== '' && target !== value) {
+      onSave(target);
     } else {
       onCancel();
     }
@@ -166,56 +164,37 @@ export function InlineDietCell({
     >
       {isEditing ? (
         <div
-          className='flex flex-col gap-1.5 p-1.5 bg-popover rounded-md shadow-md border z-20 min-w-48 animate-in fade-in zoom-in-95'
+          className='flex items-center gap-1 p-1 bg-popover rounded-md shadow-md border z-20 min-w-44 animate-in fade-in zoom-in-95'
           onClick={(e) => e.stopPropagation()}
         >
-          <div className='flex items-center gap-1'>
-            <Input
-              value={tempValue}
-              onChange={(e) => setTempValue(e.target.value)}
-              autoFocus
-              placeholder='Input Diet...'
-              className='h-7 text-xs font-semibold'
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleSave();
-                if (e.key === 'Escape') onCancel();
-              }}
-            />
-            <Button
-              size='icon'
-              className='h-7 w-7 shrink-0'
-              onClick={() => handleSave()}
-              type='button'
-            >
-              <Check className='h-3.5 w-3.5' />
-            </Button>
-            <Button
-              size='icon'
-              variant='ghost'
-              className='h-7 w-7 shrink-0'
-              onClick={onCancel}
-              type='button'
-            >
-              <X className='h-3.5 w-3.5' />
-            </Button>
-          </div>
-          {suggestions.length > 0 && (
-            <div className='flex flex-wrap gap-1 pt-1 border-t'>
-              {suggestions.map((tag) => (
-                <button
-                  key={tag}
-                  type='button'
-                  onClick={() => {
-                    setTempValue(tag);
-                    handleSave(tag);
-                  }}
-                  className='text-[10px] px-1.5 py-0.5 bg-secondary hover:bg-primary hover:text-primary-foreground rounded transition-colors font-medium'
-                >
-                  {tag}
-                </button>
-              ))}
-            </div>
-          )}
+          <Input
+            value={tempValue}
+            onChange={(e) => setTempValue(e.target.value)}
+            autoFocus
+            placeholder='Input Diet...'
+            className='h-7 text-xs font-semibold text-primary'
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSave();
+              if (e.key === 'Escape') onCancel();
+            }}
+          />
+          <Button
+            size='icon'
+            className='h-7 w-7 shrink-0'
+            onClick={handleSave}
+            type='button'
+          >
+            <Check className='h-3.5 w-3.5' />
+          </Button>
+          <Button
+            size='icon'
+            variant='ghost'
+            className='h-7 w-7 shrink-0'
+            onClick={onCancel}
+            type='button'
+          >
+            <X className='h-3.5 w-3.5' />
+          </Button>
         </div>
       ) : (
         <div className='flex items-center justify-between group/cell p-2 text-sm'>

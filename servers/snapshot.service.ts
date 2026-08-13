@@ -1,6 +1,6 @@
 'use server';
 
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, and } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
 import { db } from '@/drizzle';
@@ -28,10 +28,14 @@ export type MutationResult = {
 // ---------- Queries ----------
 
 /**
- * Fetch all snapshot batches sorted by latest snapshot timestamp
+ * Fetch all snapshot batches sorted by latest snapshot timestamp.
+ * Automatically checks and triggers auto-lock for any past-due cut-off times for today.
  */
 export async function getSnapshotBatches(): Promise<SnapshotBatch[]> {
   try {
+    // Auto-check and trigger snapshot for any meal cycle whose cutoff time has passed today
+    await checkAndAutoLockSnapshots();
+
     const batches = await db
       .select()
       .from(snapshotBatchTable)
@@ -114,7 +118,67 @@ export async function getSnapshotDetailsByBatchId(
   }
 }
 
-// ---------- Mutations ----------
+// ---------- Mutations & Auto-Lock ----------
+
+/**
+ * Automatically check cut-off times for today and trigger snapshot if past due.
+ * Disables revalidatePath during RSC rendering to avoid Next.js render error.
+ */
+export async function checkAndAutoLockSnapshots(): Promise<{
+  autoLockedCount: number;
+  message: string;
+}> {
+  try {
+    const configs = await getWaktuMakanConfig();
+    const now = new Date();
+    const todayStr = now.toISOString().slice(0, 10);
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    // Fetch existing snapshot batches for today
+    const todayBatches = await db
+      .select()
+      .from(snapshotBatchTable)
+      .where(eq(snapshotBatchTable.tanggal_produksi, todayStr));
+
+    const existingWaktuSet = new Set(todayBatches.map((b) => b.waktu_makan));
+    let autoLockedCount = 0;
+
+    for (const config of configs) {
+      const [h, m] = config.waktu.split(':').map(Number);
+      const cutoffMinutes = h * 60 + m;
+
+      // If current time has reached or passed cutoff AND today's snapshot doesn't exist yet
+      if (
+        currentMinutes >= cutoffMinutes &&
+        !existingWaktuSet.has(config.jenis_makan)
+      ) {
+        // Skip revalidatePath during RSC render
+        const res = await triggerManualSnapshot(
+          config.jenis_makan,
+          config.waktu,
+          true, // skipRevalidate = true
+        );
+        if (res.success) {
+          autoLockedCount++;
+        }
+      }
+    }
+
+    return {
+      autoLockedCount,
+      message:
+        autoLockedCount > 0
+          ? `${autoLockedCount} batch snapshot otomatis ter-lock karena jam cut-off telah tercapai.`
+          : 'Seluruh batch snapshot sudah sesuai jadwal.',
+    };
+  } catch (error) {
+    console.error('Error auto-locking snapshots:', error);
+    return {
+      autoLockedCount: 0,
+      message: 'Gagal mengeksekusi auto-lock snapshot.',
+    };
+  }
+}
 
 /**
  * Update cut-off time for a specific meal time
@@ -151,8 +215,13 @@ export async function updateWaktuMakanConfig(
       });
     }
 
-    revalidatePath('/dashboard/ag-katering/status-snapshot');
-    revalidatePath('/dashboard/ag-katering/overview');
+    try {
+      revalidatePath('/dashboard/ag-katering/status-snapshot');
+      revalidatePath('/dashboard/ag-katering/overview');
+    } catch {
+      // Ignore if called in render context
+    }
+
     return {
       success: true,
       message: `Waktu cut-off ${jenisMakan} berhasil diperbarui menjadi ${newWaktu}.`,
@@ -164,11 +233,13 @@ export async function updateWaktuMakanConfig(
 }
 
 /**
- * Trigger manual snapshot generation for a meal time
+ * Trigger manual snapshot generation for a meal time.
+ * Accepts optional skipRevalidate parameter to prevent revalidatePath during RSC rendering.
  */
 export async function triggerManualSnapshot(
   waktuMakan: string,
   cutoffTime: string,
+  skipRevalidate: boolean = false,
 ): Promise<MutationResult> {
   try {
     const now = new Date();
@@ -193,7 +264,7 @@ export async function triggerManualSnapshot(
         timestamp_snapshot: now,
         total_pasien: activePatients.length,
         status_batch: 'LOCKED',
-        created_by: 'Ahli Gizi Katering (Manual Trigger)',
+        created_by: 'Ahli Gizi Katering (Cut-off Lock)',
         cutoff_time: cutoffTime,
       })
       .returning({ id: snapshotBatchTable.id });
@@ -216,8 +287,15 @@ export async function triggerManualSnapshot(
       await db.insert(snapshotDetailTable).values(snapshotDetails);
     }
 
-    revalidatePath('/dashboard/ag-katering/status-snapshot');
-    revalidatePath('/dashboard/ag-katering/overview');
+    if (!skipRevalidate) {
+      try {
+        revalidatePath('/dashboard/ag-katering/status-snapshot');
+        revalidatePath('/dashboard/ag-katering/overview');
+      } catch {
+        // Ignore if called in render context
+      }
+    }
+
     return {
       success: true,
       message: `Batch snapshot ${batchCode} berhasil dibuat dengan ${activePatients.length} pasien ter-lock.`,

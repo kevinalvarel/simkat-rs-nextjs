@@ -1,6 +1,6 @@
 'use server';
 
-import { eq, and, inArray, ne } from 'drizzle-orm';
+import { eq, and, inArray, ne, asc } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/drizzle';
 import { pasienTable } from '@/db/schemas/patient/pasien';
@@ -111,27 +111,34 @@ const MOCK_UNMAPPED: UnmappedDietItem[] = [
 ];
 
 const MOCK_KATEGORI_MENU: KategoriMenuOption[] = [
-  { id: 1, namaKategori: 'BENTUK_MAKANAN', kodeItem: 'BN', labelItem: 'Biasa Nasi', urutan: 1 },
-  { id: 2, namaKategori: 'BENTUK_MAKANAN', kodeItem: 'BL', labelItem: 'Biasa Lunak', urutan: 2 },
-  { id: 3, namaKategori: 'BENTUK_MAKANAN', kodeItem: 'BC', labelItem: 'Biasa Cincang', urutan: 3 },
-  { id: 4, namaKategori: 'BENTUK_MAKANAN', kodeItem: 'TM', labelItem: 'Tim', urutan: 4 },
-  { id: 5, namaKategori: 'BENTUK_MAKANAN', kodeItem: 'SAR', labelItem: 'Saring', urutan: 5 },
-  { id: 6, namaKategori: 'BENTUK_MAKANAN', kodeItem: 'CAI', labelItem: 'Cair', urutan: 6 },
-  { id: 7, namaKategori: 'DIIT', kodeItem: 'BIASA', labelItem: 'Diet Biasa', urutan: 1 },
-  { id: 8, namaKategori: 'DIIT', kodeItem: 'TKTP', labelItem: 'Tinggi Kalori Tinggi Protein', urutan: 2 },
-  { id: 9, namaKategori: 'DIIT', kodeItem: 'RG', labelItem: 'Rendah Garam', urutan: 3 },
-  { id: 10, namaKategori: 'DIIT', kodeItem: 'DM', labelItem: 'Diabetes Melitus', urutan: 4 },
-  { id: 11, namaKategori: 'DIIT', kodeItem: 'RP', labelItem: 'Rendah Protein', urutan: 5 },
-  { id: 12, namaKategori: 'DIIT', kodeItem: 'RL', labelItem: 'Rendah Lemak', urutan: 6 },
-  { id: 13, namaKategori: 'DIIT', kodeItem: 'RP', labelItem: 'Rendah Purin', urutan: 7 },
-  { id: 14, namaKategori: 'EXTRA', kodeItem: 'PUTEL', labelItem: 'Putih Telur', urutan: 1 },
-  { id: 15, namaKategori: 'EXTRA', kodeItem: 'SUSU', labelItem: 'Susu', urutan: 2 },
-  { id: 16, namaKategori: 'EXTRA', kodeItem: 'PEPAYA', labelItem: 'Pepaya', urutan: 3 },
-  { id: 17, namaKategori: 'BUAH', kodeItem: 'PISANG', labelItem: 'Pisang', urutan: 1 },
-  { id: 18, namaKategori: 'BUAH', kodeItem: 'JERUK', labelItem: 'Jeruk', urutan: 2 },
-  { id: 19, namaKategori: 'BUAH', kodeItem: 'APEL', labelItem: 'Apel', urutan: 3 },
-  { id: 20, namaKategori: 'SNACK', kodeItem: 'SGP', labelItem: 'Snack Gula Pasir', urutan: 1 },
-  { id: 21, namaKategori: 'SNACK', kodeItem: 'SRP', labelItem: 'Snack Rendah Protein', urutan: 2 },
+  { id: 1, namaKategori: 'KARBO', kodeItem: 'BN', labelItem: 'Biasa Nasi', urutan: 1 },
+  { id: 2, namaKategori: 'KARBO', kodeItem: 'BL', labelItem: 'Biasa Lunak', urutan: 2 },
+  { id: 3, namaKategori: 'KARBO', kodeItem: 'BC', labelItem: 'Biasa Cincang', urutan: 3 },
+  { id: 4, namaKategori: 'KARBO', kodeItem: 'TM', labelItem: 'Nasi Tim', urutan: 4 },
+  { id: 5, namaKategori: 'KARBO', kodeItem: 'SAR', labelItem: 'Bubur Saring', urutan: 5 },
+  { id: 6, namaKategori: 'KARBO', kodeItem: 'CAI', labelItem: 'Makanan Cair', urutan: 6 },
+
+  { id: 7, namaKategori: 'HEWANI', kodeItem: 'AYM-G', labelItem: 'Ayam Ungkep Goreng', urutan: 1 },
+  { id: 8, namaKategori: 'HEWANI', kodeItem: 'DND-S', labelItem: 'Daging Sapi Semur', urutan: 2 },
+  { id: 9, namaKategori: 'HEWANI', kodeItem: 'IKN-B', labelItem: 'Ikan Kakap Bakar', urutan: 3 },
+  { id: 10, namaKategori: 'HEWANI', kodeItem: 'TLR-D', labelItem: 'Telur Dadar Daun Bawang', urutan: 4 },
+  { id: 11, namaKategori: 'HEWANI', kodeItem: 'P-TLR', labelItem: 'Putih Telur Rebus', urutan: 5 },
+
+  { id: 12, namaKategori: 'NABATI', kodeItem: 'TMP-B', labelItem: 'Tempe Bacem', urutan: 1 },
+  { id: 13, namaKategori: 'NABATI', kodeItem: 'TFU-G', labelItem: 'Tahu Goreng Tepung', urutan: 2 },
+  { id: 14, namaKategori: 'NABATI', kodeItem: 'TFU-K', labelItem: 'Tahu Kukus Wortel', urutan: 3 },
+
+  { id: 15, namaKategori: 'SAYUR', kodeItem: 'SYR-A', labelItem: 'Sayur Asem Bumbu Kuning', urutan: 1 },
+  { id: 16, namaKategori: 'SAYUR', kodeItem: 'SOP-V', labelItem: 'Sop Bening Sayur Segar', urutan: 2 },
+  { id: 17, namaKategori: 'SAYUR', kodeItem: 'CAP-C', labelItem: 'Capcay Bakso Ayam', urutan: 3 },
+
+  { id: 18, namaKategori: 'BUAH', kodeItem: 'PSG-A', labelItem: 'Pisang Ambon', urutan: 1 },
+  { id: 19, namaKategori: 'BUAH', kodeItem: 'JRK-M', labelItem: 'Jeruk Manis', urutan: 2 },
+  { id: 20, namaKategori: 'BUAH', kodeItem: 'PPY-S', labelItem: 'Pepaya Potong Segar', urutan: 3 },
+
+  { id: 21, namaKategori: 'SNACK', kodeItem: 'SGP', labelItem: 'Snack Gula Pasir', urutan: 1 },
+  { id: 22, namaKategori: 'SNACK', kodeItem: 'SRP', labelItem: 'Snack Rendah Protein', urutan: 2 },
+  { id: 23, namaKategori: 'SNACK', kodeItem: 'BBR-K', labelItem: 'Bubur Kacang Hijau', urutan: 3 },
 ];
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
@@ -217,7 +224,7 @@ export async function getUnmappedDietItems(): Promise<UnmappedDietItem[]> {
 }
 
 /**
- * Fetch all active kategori menu options grouped by namaKategori.
+ * Fetch all active kategori menu options from master database (kategori_menu table).
  */
 export async function getKategoriMenuOptions(): Promise<KategoriMenuOption[]> {
   try {
@@ -225,7 +232,7 @@ export async function getKategoriMenuOptions(): Promise<KategoriMenuOption[]> {
       .select()
       .from(kategoriMenuTable)
       .where(eq(kategoriMenuTable.is_active, true))
-      .orderBy(kategoriMenuTable.urutan);
+      .orderBy(asc(kategoriMenuTable.nama_kategori), asc(kategoriMenuTable.urutan));
 
     if (items && items.length > 0) {
       return items.map((i) => ({
@@ -237,7 +244,7 @@ export async function getKategoriMenuOptions(): Promise<KategoriMenuOption[]> {
       }));
     }
   } catch (error) {
-    console.error('Error fetching kategori menu options:', error);
+    console.error('Error fetching kategori menu options from DB:', error);
   }
 
   return MOCK_KATEGORI_MENU;
@@ -287,7 +294,7 @@ export async function saveDietMapping(
   if (!payload.bentuk_makanan?.trim() || !payload.kategori_diet?.trim()) {
     return {
       success: false,
-      message: 'Bentuk Makanan dan Kategori Diet wajib diisi.',
+      message: 'Karbohidrat dan Lauk Hewani wajib diisi.',
     };
   }
 

@@ -98,7 +98,7 @@ export const routeDataSupervisor = {
       ],
     },
     {
-      title: 'Pengaturan Admin',
+      title: 'Riwayat & Approval (Admin)',
       items: [
         {
           title: 'Riwayat Diet Pasien',
@@ -108,12 +108,21 @@ export const routeDataSupervisor = {
           title: 'Persetujuan Revisi',
           url: '/dashboard/ag-katering/admin/otorisasi-perubahan-diet',
         },
+      ],
+    },
+    {
+      title: 'Konfigurasi (Admin)',
+      items: [
         {
           title: 'Konfigurasi Ruangan',
           url: '/dashboard/ag-katering/admin/konfigurasi-ruangan',
         },
         {
-          title: 'Tambah Pengguna',
+          title: 'Konfigurasi Menu',
+          url: '/dashboard/ag-katering/admin/konfigurasi-menu',
+        },
+        {
+          title: 'Konfigurasi Pengguna',
           url: '/dashboard/ag-katering/admin/tambah-pengguna',
         },
       ],
