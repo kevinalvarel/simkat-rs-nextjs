@@ -6,11 +6,11 @@ function redirectByRole(request: NextRequest, role: string | null | undefined) {
   switch (role) {
     case 'gizi-katering':
       return NextResponse.redirect(
-        new URL('/dashboard/ag-katering/overview', request.url),
+        new URL('/dashboard/ag-katering/overview/produksi', request.url),
       );
     case 'supervisor':
       return NextResponse.redirect(
-        new URL('/dashboard/ag-katering/overview', request.url),
+        new URL('/dashboard/ag-katering/overview/produksi', request.url),
       );
     case 'gizi-rs':
       return NextResponse.redirect(new URL('/dashboard/ag-rs', request.url));

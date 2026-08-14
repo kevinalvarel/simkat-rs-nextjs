@@ -95,8 +95,8 @@ export default function OverviewClient({ initialData }: OverviewClientProps) {
             Dashboard Pemantauan Live - Produksi
           </h1>
           <p className='text-xs sm:text-sm text-muted-foreground'>
-            Layar monitoring real-time porsi diet aktif pasien yang sedang
-            dirawat. (HALAMAN INI DIAMBIL DATANYA DARI MAPPING)
+            Layar monitoring real-time akumulasi porsi menu & diet aktif pasien
+            berdasarkan hasil mapping.
           </p>
         </div>
 
@@ -188,7 +188,7 @@ export default function OverviewClient({ initialData }: OverviewClientProps) {
           </div>
         </Card>
 
-        {/* Right Side: Diet Distribution Cards (3 Columns) */}
+        {/* Right Side: Mapped Diet Distribution Cards (3 Columns) */}
         <div className='lg:col-span-3 flex flex-col justify-between space-y-3'>
           {/* Dynamic Grid for Cards */}
           <div className='grid grid-cols-2 min-[480px]:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-6 gap-3 w-full'>
@@ -203,13 +203,21 @@ export default function OverviewClient({ initialData }: OverviewClientProps) {
                     card.change !== 0 ? 'ring-1 ring-primary/10' : ''
                   }`}
                 >
-                  <div className='border-b border-border/60 py-2 px-3 text-center bg-muted/40'>
+                  <div className='border-b border-border/60 py-2 px-2.5 text-center bg-muted/40'>
                     <span
                       className='font-bold text-xs text-foreground tracking-wide block uppercase truncate'
                       title={card.name}
                     >
                       {card.code}
                     </span>
+                    {card.name && card.name !== card.code && (
+                      <span
+                        className='text-[10px] text-muted-foreground truncate block leading-tight'
+                        title={card.name}
+                      >
+                        {card.name}
+                      </span>
+                    )}
                   </div>
                   <CardContent className='p-4 flex flex-col items-center justify-center text-center space-y-2'>
                     {/* Active Count */}
@@ -242,8 +250,8 @@ export default function OverviewClient({ initialData }: OverviewClientProps) {
           </div>
 
           <div className='text-xs text-muted-foreground text-center lg:text-left font-medium pt-2 border-t border-dashed border-border/80'>
-            * Angka di atas akan berubah otomatis setiap ada perubahan data.
-            Target Kunci Batch:{' '}
+            * Angka di atas merupakan akumulasi porsi per komponen menu hasil
+            mapping diet. Target Kunci Batch:{' '}
             <strong className='text-primary font-bold'>
               {data.cutoffTime} WIB
             </strong>
@@ -259,11 +267,13 @@ export default function OverviewClient({ initialData }: OverviewClientProps) {
             Legenda Keterangan Pemantauan:
           </strong>
           <p>
-            Tiap kotak merepresentasikan kategori diet pasien yang terdaftar
-            secara aktif. Jumlah angka tebal di atas merupakan **jumlah porsi
-            aktif saat ini** secara real-time. Indikator segitiga merah (**▼**)
-            atau hijau (**▲**) menunjukkan perubahan (penambahan/pengurangan)
-            dibandingkan dengan data snapshot produksi yang terakhir dikunci.
+            Tiap kotak merepresentasikan item komponen menu hasil mapping diet
+            (misal: <strong>BN</strong> = Biasa Nasi, <strong>TKTP</strong> =
+            Tinggi Kalori Tinggi Protein, <strong>PUTEL</strong> = Putih Telur).
+            Jumlah angka tebal di atas merupakan **jumlah porsi aktif saat
+            ini** secara real-time. Indikator segitiga merah (**▼**) atau hijau
+            (**▲**) menunjukkan perubahan dibandingkan dengan data snapshot
+            produksi yang terakhir dikunci.
           </p>
           <p className='text-[10px] text-muted-foreground/80 mt-1'>
             Terakhir diperbarui: {data.lastUpdated} WIB

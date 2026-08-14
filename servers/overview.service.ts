@@ -6,10 +6,12 @@ import { snapshotBatchTable } from '@/db/schemas/snapshot/snapshot-batch';
 import { snapshotDetailTable } from '@/db/schemas/snapshot/snapshot-detail';
 import { pasienTable } from '@/db/schemas/patient/pasien';
 import { waktuMakanTable } from '@/db/schemas/patient/waktu-makan';
+import { dietMappingTable } from '@/db/schemas/master/mapping-diet';
+import { kategoriMenuTable } from '@/db/schemas/master/kategori-menu';
 
 export interface MonitoringCardData {
-  code: string; // e.g. BM, BSS, CAIR, NPO, DM, RG, TIM, TKTP
-  name: string; // Display name
+  code: string; // e.g. BN, TKTP, PUTEL, BL, RG, DM, NPO, UNMAPPED
+  name: string; // Display name (e.g. Biasa Nasi, Tinggi Kalori Tinggi Protein, Putih Telur)
   baseline: number; // Count before revision
   active: number; // Current count (baseline + change)
   change: number; // Net change (+1, -1, 0, etc.)
@@ -39,16 +41,22 @@ interface WaktuMakanConfig {
   waktu: string;
 }
 
-function getNextCycle(configs: WaktuMakanConfig[], date: Date = new Date()): NextCycleInfo {
+function getNextCycle(
+  configs: WaktuMakanConfig[],
+  date: Date = new Date(),
+): NextCycleInfo {
   const defaultTimes = {
     PAGI: '05:30',
     SIANG: '10:30',
     MALAM: '16:00',
   };
 
-  const pagiTime = configs.find(c => c.jenis_makan === 'PAGI')?.waktu || defaultTimes.PAGI;
-  const siangTime = configs.find(c => c.jenis_makan === 'SIANG')?.waktu || defaultTimes.SIANG;
-  const malamTime = configs.find(c => c.jenis_makan === 'MALAM')?.waktu || defaultTimes.MALAM;
+  const pagiTime =
+    configs.find((c) => c.jenis_makan === 'PAGI')?.waktu || defaultTimes.PAGI;
+  const siangTime =
+    configs.find((c) => c.jenis_makan === 'SIANG')?.waktu || defaultTimes.SIANG;
+  const malamTime =
+    configs.find((c) => c.jenis_makan === 'MALAM')?.waktu || defaultTimes.MALAM;
 
   const getMinutes = (timeStr: string) => {
     const [h, m] = timeStr.split(':').map(Number);
@@ -92,7 +100,10 @@ function getNextCycle(configs: WaktuMakanConfig[], date: Date = new Date()): Nex
   };
 }
 
-function getNextCycleAfter(current: NextCycleInfo, configs: WaktuMakanConfig[]): NextCycleInfo {
+function getNextCycleAfter(
+  current: NextCycleInfo,
+  configs: WaktuMakanConfig[],
+): NextCycleInfo {
   const defaultTimes: Record<string, string> = {
     PAGI: '05:30',
     SIANG: '10:30',
@@ -103,13 +114,15 @@ function getNextCycleAfter(current: NextCycleInfo, configs: WaktuMakanConfig[]):
   const currentIndex = order.indexOf(current.waktuMakan);
   const nextIndex = (currentIndex + 1) % 3;
   const nextWaktuMakan = order[nextIndex];
-  
+
   const nextDate = new Date(current.tanggalProduksi);
   if (currentIndex === 2) {
     nextDate.setDate(nextDate.getDate() + 1);
   }
 
-  const nextCutoff = configs.find(c => c.jenis_makan === nextWaktuMakan)?.waktu || defaultTimes[nextWaktuMakan];
+  const nextCutoff =
+    configs.find((c) => c.jenis_makan === nextWaktuMakan)?.waktu ||
+    defaultTimes[nextWaktuMakan];
 
   return {
     waktuMakan: nextWaktuMakan,
@@ -119,7 +132,18 @@ function getNextCycleAfter(current: NextCycleInfo, configs: WaktuMakanConfig[]):
 }
 
 /**
- * Fetch live overview monitoring data
+ * Helper to split and normalize comma or slash separated items
+ */
+function extractCodes(val: string | null | undefined): string[] {
+  if (!val || !val.trim()) return [];
+  return val
+    .split(/[,;/]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Fetch live overview monitoring data decomposed into individual mapping components (BN, TKTP, PUTEL, etc.)
  */
 export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
   try {
@@ -128,7 +152,7 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
 
     // 2. Find next unlocked cycle
     let nextCycle = getNextCycle(timeConfigs);
-    
+
     // Check up to 4 cycles ahead to find the first unlocked one
     for (let i = 0; i < 4; i++) {
       const [existingBatch] = await db
@@ -137,8 +161,8 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
         .where(
           and(
             eq(snapshotBatchTable.tanggal_produksi, nextCycle.tanggalProduksi),
-            eq(snapshotBatchTable.waktu_makan, nextCycle.waktuMakan)
-          )
+            eq(snapshotBatchTable.waktu_makan, nextCycle.waktuMakan),
+          ),
         )
         .limit(1);
 
@@ -149,7 +173,80 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
       nextCycle = getNextCycleAfter(nextCycle, timeConfigs);
     }
 
-    // 3. Fetch all live active patients
+    // 3. Fetch Master Menu Categories for human-readable labels (BN -> Biasa Nasi, etc.)
+    const masterMenuItems = await db.select().from(kategoriMenuTable);
+    const labelMap = new Map<string, string>();
+    for (const item of masterMenuItems) {
+      labelMap.set(item.kode_item.toUpperCase(), item.label_item);
+    }
+
+    // Common default labels for medical diets
+    const defaultLabels: Record<string, string> = {
+      BN: 'Biasa Nasi',
+      BL: 'Biasa Lunak',
+      BC: 'Biasa Cincang',
+      TIM: 'Nasi Tim',
+      TM: 'Nasi Tim',
+      SAR: 'Bubur Saring',
+      CAIR: 'Makanan Cair',
+      CAI: 'Makanan Cair',
+      TKTP: 'Tinggi Kalori Tinggi Protein',
+      DM: 'Diabetes Melitus',
+      RG: 'Rendah Garam',
+      RP: 'Rendah Protein',
+      RL: 'Rendah Lemak',
+      RPU: 'Rendah Purin',
+      DH: 'Diet Hati',
+      DJ: 'Diet Jantung',
+      DL: 'Diet Lambung',
+      BIASA: 'Diet Biasa Standar',
+      PUTEL: 'Putih Telur Rebus',
+      'P-TLR': 'Putih Telur Rebus',
+      'TLR-D': 'Telur Dadar',
+      'AYM-G': 'Ayam Ungkep Goreng',
+      'DND-S': 'Daging Sapi Semur',
+      'IKN-B': 'Ikan Bakar',
+      'TMP-B': 'Tempe Bacem',
+      'TFU-G': 'Tahu Goreng',
+      'PSG-A': 'Pisang Ambon',
+      'PPY-S': 'Pepaya Potong',
+      'JRK-M': 'Jeruk Manis',
+      SGP: 'Snack Gula Pasir',
+      SRP: 'Snack Rendah Protein',
+      NPO: 'Puasa / NPO',
+      UNMAPPED: 'Belum Di-mapping',
+    };
+
+    // 4. Fetch Master Diet Mappings
+    const masterMappings = await db
+      .select()
+      .from(dietMappingTable)
+      .where(eq(dietMappingTable.is_active, true));
+
+    const mappingByRaw = new Map<
+      string,
+      {
+        bentuk_makanan: string | null;
+        kategori_diet: string | null;
+        extra: string | null;
+        buah: string | null;
+        snack: string | null;
+        status_mapping: string;
+      }
+    >();
+
+    for (const m of masterMappings) {
+      mappingByRaw.set(m.diet_rs_raw.trim().toLowerCase(), {
+        bentuk_makanan: m.bentuk_makanan,
+        kategori_diet: m.kategori_diet,
+        extra: m.extra,
+        buah: m.buah,
+        snack: m.snack,
+        status_mapping: m.status_mapping,
+      });
+    }
+
+    // 5. Fetch all live active patients
     const activePatients = await db
       .select({
         id: pasienTable.id,
@@ -161,89 +258,208 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
       .from(pasienTable)
       .where(ne(pasienTable.status_pasien, 'PULANG'));
 
-    // 4. Count diets dynamically
-    const dietCounts: Record<string, { active: number; name: string }> = {};
+    // 6. Aggregate Live Counts per atomic mapped code (BN, TKTP, PUTEL, etc.)
+    const liveCounts: Record<string, { count: number; name: string }> = {};
 
-    for (const p of activePatients) {
-      let dietName = p.diet.trim();
-      const isNpo = p.is_npo || p.status_pasien === 'NPO' || dietName.toLowerCase() === 'npo' || dietName.toLowerCase() === 'puasa';
-      
-      if (isNpo) {
-        dietName = 'NPO';
-      } else if (!dietName) {
-        dietName = 'Lain-Lain';
-      } else {
-        // Standardize casing (capitalize first letter of each word)
-        dietName = dietName
-          .split(/\s+/)
-          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-          .join(' ');
-      }
+    function addLiveCount(code: string, customName?: string) {
+      if (!code) return;
+      const normalizedCode = code.trim().toUpperCase();
+      if (!normalizedCode) return;
 
-      if (!dietCounts[dietName]) {
-        dietCounts[dietName] = {
-          active: 0,
-          name: dietName === 'NPO' ? 'Puasa / NPO' : dietName,
-        };
+      const displayName =
+        customName ||
+        labelMap.get(normalizedCode) ||
+        defaultLabels[normalizedCode] ||
+        normalizedCode;
+
+      if (!liveCounts[normalizedCode]) {
+        liveCounts[normalizedCode] = { count: 0, name: displayName };
       }
-      dietCounts[dietName].active++;
+      liveCounts[normalizedCode].count++;
     }
 
-    // 5. Fetch baseline counts from the latest LOCKED snapshot batch (to show real-time changes)
+    for (const p of activePatients) {
+      const rawDiet = (p.diet || '').trim();
+      const isNpo =
+        p.is_npo ||
+        p.status_pasien === 'NPO' ||
+        rawDiet.toLowerCase() === 'npo' ||
+        rawDiet.toLowerCase() === 'puasa';
+
+      if (isNpo) {
+        addLiveCount('NPO', 'Puasa / NPO');
+        continue;
+      }
+
+      // Lookup in master diet mapping
+      const mapped = mappingByRaw.get(rawDiet.toLowerCase());
+
+      const hasValidMapping =
+        mapped &&
+        (mapped.status_mapping === 'MAPPED' ||
+          mapped.status_mapping === 'PARTIAL') &&
+        (mapped.bentuk_makanan ||
+          mapped.kategori_diet ||
+          mapped.extra ||
+          mapped.buah ||
+          mapped.snack);
+
+      if (hasValidMapping) {
+        // Increment Bentuk Makanan (e.g. BN)
+        if (mapped.bentuk_makanan) {
+          extractCodes(mapped.bentuk_makanan).forEach((code) =>
+            addLiveCount(code),
+          );
+        }
+        // Increment Kategori Diet (e.g. TKTP)
+        if (mapped.kategori_diet) {
+          extractCodes(mapped.kategori_diet).forEach((code) =>
+            addLiveCount(code),
+          );
+        }
+        // Increment Extra (e.g. PUTEL)
+        if (mapped.extra) {
+          extractCodes(mapped.extra).forEach((code) => addLiveCount(code));
+        }
+        // Increment Buah
+        if (mapped.buah) {
+          extractCodes(mapped.buah).forEach((code) => addLiveCount(code));
+        }
+        // Increment Snack
+        if (mapped.snack) {
+          extractCodes(mapped.snack).forEach((code) => addLiveCount(code));
+        }
+      } else {
+        // NEVER output raw free text cards. Count as UNMAPPED instead!
+        addLiveCount('UNMAPPED', 'Belum Di-mapping');
+      }
+    }
+
+    // 7. Fetch baseline counts from the latest LOCKED snapshot batch
     const [latestBatch] = await db
       .select()
       .from(snapshotBatchTable)
       .orderBy(desc(snapshotBatchTable.timestamp_snapshot))
       .limit(1);
 
-    const snapshotDietCounts: Record<string, number> = {};
+    const snapshotCounts: Record<string, number> = {};
+
+    function addSnapshotCount(code: string) {
+      if (!code) return;
+      const normalizedCode = code.trim().toUpperCase();
+      if (!normalizedCode) return;
+      snapshotCounts[normalizedCode] =
+        (snapshotCounts[normalizedCode] || 0) + 1;
+    }
+
     if (latestBatch) {
       const snapshotDetails = await db
         .select({
           diet_rs_raw: snapshotDetailTable.diet_rs_raw,
+          bentuk_makanan: snapshotDetailTable.bentuk_makanan,
+          kategori_diet: snapshotDetailTable.kategori_diet,
+          extra: snapshotDetailTable.extra,
+          buah: snapshotDetailTable.buah,
+          snack: snapshotDetailTable.snack,
           status_saat_snapshot: snapshotDetailTable.status_saat_snapshot,
         })
         .from(snapshotDetailTable)
         .where(eq(snapshotDetailTable.batch_id, latestBatch.id));
 
       for (const sd of snapshotDetails) {
-        let dietName = (sd.diet_rs_raw || '').trim();
-        const isNpo = sd.status_saat_snapshot === 'NPO' || dietName.toLowerCase() === 'npo' || dietName.toLowerCase() === 'puasa';
-        
+        const rawDiet = (sd.diet_rs_raw || '').trim();
+        const isNpo =
+          sd.status_saat_snapshot === 'NPO' ||
+          rawDiet.toLowerCase() === 'npo' ||
+          rawDiet.toLowerCase() === 'puasa';
+
         if (isNpo) {
-          dietName = 'NPO';
-        } else if (!dietName) {
-          dietName = 'Lain-Lain';
-        } else {
-          dietName = dietName
-            .split(/\s+/)
-            .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-            .join(' ');
+          addSnapshotCount('NPO');
+          continue;
         }
 
-        snapshotDietCounts[dietName] = (snapshotDietCounts[dietName] || 0) + 1;
+        // Check if parsed columns already exist on snapshot record
+        const hasParsedColumns =
+          sd.bentuk_makanan ||
+          sd.kategori_diet ||
+          sd.extra ||
+          sd.buah ||
+          sd.snack;
+
+        if (hasParsedColumns) {
+          if (sd.bentuk_makanan)
+            extractCodes(sd.bentuk_makanan).forEach(addSnapshotCount);
+          if (sd.kategori_diet)
+            extractCodes(sd.kategori_diet).forEach(addSnapshotCount);
+          if (sd.extra) extractCodes(sd.extra).forEach(addSnapshotCount);
+          if (sd.buah) extractCodes(sd.buah).forEach(addSnapshotCount);
+          if (sd.snack) extractCodes(sd.snack).forEach(addSnapshotCount);
+        } else {
+          // Fallback to lookup mapping by raw text
+          const mapped = mappingByRaw.get(rawDiet.toLowerCase());
+          const hasValidMapping =
+            mapped &&
+            (mapped.status_mapping === 'MAPPED' ||
+              mapped.status_mapping === 'PARTIAL') &&
+            (mapped.bentuk_makanan ||
+              mapped.kategori_diet ||
+              mapped.extra ||
+              mapped.buah ||
+              mapped.snack);
+
+          if (hasValidMapping) {
+            if (mapped.bentuk_makanan)
+              extractCodes(mapped.bentuk_makanan).forEach(addSnapshotCount);
+            if (mapped.kategori_diet)
+              extractCodes(mapped.kategori_diet).forEach(addSnapshotCount);
+            if (mapped.extra)
+              extractCodes(mapped.extra).forEach(addSnapshotCount);
+            if (mapped.buah)
+              extractCodes(mapped.buah).forEach(addSnapshotCount);
+            if (mapped.snack)
+              extractCodes(mapped.snack).forEach(addSnapshotCount);
+          } else {
+            // NEVER output raw text into baseline
+            addSnapshotCount('UNMAPPED');
+          }
+        }
       }
     }
 
-    // 6. Construct cards (only display diets that are currently active / exist)
-    const cards = Object.entries(dietCounts).map(([dietName, info]) => {
-      const activeCount = info.active;
-      const baselineCount = snapshotDietCounts[dietName] || 0;
-      const changeCount = activeCount - baselineCount;
+    // 8. Construct unified list of distinct cards (BN, TKTP, PUTEL, etc.)
+    const allCodes = new Set([
+      ...Object.keys(liveCounts),
+      ...Object.keys(snapshotCounts),
+    ]);
 
-      return {
-        code: dietName,
-        name: info.name,
-        baseline: baselineCount,
-        active: activeCount,
-        change: changeCount,
-      };
-    });
+    const cards: MonitoringCardData[] = Array.from(allCodes)
+      .map((code) => {
+        const liveInfo = liveCounts[code];
+        const activeCount = liveInfo?.count || 0;
+        const baselineCount = snapshotCounts[code] || 0;
+        const changeCount = activeCount - baselineCount;
+        const displayName =
+          liveInfo?.name ||
+          labelMap.get(code) ||
+          defaultLabels[code] ||
+          code;
 
-    // Sort cards alphabetically by code, with 'NPO' always at the end
+        return {
+          code,
+          name: displayName,
+          baseline: baselineCount,
+          active: activeCount,
+          change: changeCount,
+        };
+      })
+      .filter((card) => card.active > 0 || card.baseline > 0);
+
+    // Sort cards: Standard codes first, UNMAPPED near end, NPO always at the very end
     cards.sort((a, b) => {
       if (a.code === 'NPO') return 1;
       if (b.code === 'NPO') return -1;
+      if (a.code === 'UNMAPPED') return 1;
+      if (b.code === 'UNMAPPED') return -1;
       return a.code.localeCompare(b.code);
     });
 

@@ -8,12 +8,12 @@ export const routeDataProduksi = {
       title: 'Dashboard',
       items: [
         {
-          title: 'Overview Produksi',
-          url: '/dashboard/ag-katering/overview',
+          title: 'Produksi',
+          url: '/dashboard/ag-katering/overview/produksi',
         },
         {
-          title: 'Overview Pemorsian',
-          url: '/dashboard/ag-katering/overview-pemorsian',
+          title: 'Pemorsian',
+          url: '/dashboard/ag-katering/overview/pemorsian',
         },
       ],
     },
@@ -57,12 +57,12 @@ export const routeDataSupervisor = {
       title: 'Dashboard',
       items: [
         {
-          title: 'Overview Produksi',
-          url: '/dashboard/ag-katering/overview',
+          title: 'Produksi',
+          url: '/dashboard/ag-katering/overview/produksi',
         },
         {
-          title: 'Overview Pemorsian',
-          url: '/dashboard/ag-katering/overview-pemorsian',
+          title: 'Pemorsian',
+          url: '/dashboard/ag-katering/overview/pemorsian',
         },
       ],
     },

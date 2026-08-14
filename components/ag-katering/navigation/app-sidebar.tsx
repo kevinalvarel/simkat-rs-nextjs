@@ -42,7 +42,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenuItem>
             <SidebarMenuButton
               size='lg'
-              render={<Link href='/ag-katering/dashboard' />}
+              render={<Link href='/dashboard/ag-katering/overview/produksi' />}
             >
               <div className='flex flex-col gap-0.5 leading-none'>
                 <span className='font-medium text-xl'>SIMKAT</span>
