@@ -52,7 +52,8 @@ export default function PatientFormDialog({
   initialBed = '',
   kelasList = [],
   gedungList = [],
-}: PatientFormDialogProps & { initialBed?: string }) {
+  revisionContext,
+}: PatientFormDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isEditMode = patient !== null;
 
@@ -159,8 +160,8 @@ export default function PatientFormDialog({
     try {
       const result =
         isEditMode && patient
-          ? await updatePatient(patient.id, data)
-          : await createPatient(data);
+          ? await updatePatient(patient.id, data, revisionContext)
+          : await createPatient(data, revisionContext);
 
       if (result.success) {
         toast.success(result.message);

@@ -1,11 +1,12 @@
 'use server';
 
-import { eq, desc, inArray } from 'drizzle-orm';
+import { eq, desc, inArray, and } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/drizzle';
 import { otorisasiPerubahanDietTable } from '@/db/schemas/snapshot/perizinan-revisi';
 import { pasienTable } from '@/db/schemas/patient/pasien';
 import { snapshotBatchTable } from '@/db/schemas/snapshot/snapshot-batch';
+import { snapshotDetailTable } from '@/db/schemas/snapshot/snapshot-detail';
 import type {
   WaktuMakanType,
   JenisPerubahanType,
@@ -21,144 +22,6 @@ export interface OtorisasiStats {
   rejectedTodayCount: number;
   totalEmergentCount: number;
 }
-
-const MOCK_OTORISASI_DATA: RevisiPostSnapshotItem[] = [
-  {
-    id: 201,
-    pasien_id: 1,
-    no_rm: 'RM-2026-001',
-    nama_pasien: 'Budi Santoso',
-    gedung: 'Gedung A',
-    ruangan: 'Melati 1',
-    bed: 'Bed 01',
-    kelas: 'Kelas 1',
-    batch_id: 1,
-    batch_code: 'BATCH-20260812-PAGI-9941',
-    waktu_makan: 'PAGI',
-    jenis_perubahan: 'DIET_CHANGE',
-    data_lama: { diet: 'Diet RG (Rendah Garam)', ruangan: 'Melati 1', bed: 'Bed 01' },
-    data_baru: { diet: 'Diet DM (Diabetes Melitus) 1700 kcal', ruangan: 'Melati 1', bed: 'Bed 01' },
-    alasan: 'Instruksi Dokter Penanggung Jawab jam 06:10 - Pasien menunjukkan peningkatan GDS 280 mg/dL',
-    status: 'PENDING',
-    dampak_dapur: 'Perubahan Etiket & Komposisi Menu Diet',
-    requested_by: 'Ns. Ratna (Perawat Melati)',
-    requested_at: '2026-08-12T06:12:00Z',
-  },
-  {
-    id: 202,
-    pasien_id: 6,
-    no_rm: 'RM-2026-210',
-    nama_pasien: 'Dr. Suwandi (Pasien VIP)',
-    gedung: 'Gedung B',
-    ruangan: 'Anggrek VIP',
-    bed: 'Bed 01',
-    kelas: 'VIP Utama',
-    batch_id: 1,
-    batch_code: 'BATCH-20260812-PAGI-9941',
-    waktu_makan: 'PAGI',
-    jenis_perubahan: 'NEW_PATIENT',
-    data_lama: null,
-    data_baru: { diet: 'Diet Cincang Rendah Purin', ruangan: 'Anggrek VIP', bed: 'Bed 01', kelas: 'VIP Utama' },
-    alasan: 'Pasien rujukan eksekutif masuk jam 06:05 WIB pasca snapshot locked',
-    status: 'PENDING',
-    dampak_dapur: '+1 Porsi Emergent (Tambahan Makanan)',
-    requested_by: 'dr. Satrio Sp.PD',
-    requested_at: '2026-08-12T06:15:00Z',
-  },
-  {
-    id: 203,
-    pasien_id: 7,
-    no_rm: 'RM-2026-305',
-    nama_pasien: 'Ratna Sari',
-    gedung: 'Gedung C',
-    ruangan: 'Dahlia 4',
-    bed: 'Bed 03',
-    kelas: 'Kelas 3',
-    batch_id: 1,
-    batch_code: 'BATCH-20260812-PAGI-9941',
-    waktu_makan: 'PAGI',
-    jenis_perubahan: 'NPO',
-    data_lama: { diet: 'Diet Biasa Nasi Tim', status_pasien: 'AKTIF' },
-    data_baru: { diet: 'NPO (Puasa Pre-Op Endoskopi)', status_pasien: 'NPO' },
-    alasan: 'Jadwal CITO Endoskopi cerna jam 07:30 WIB',
-    status: 'PENDING',
-    dampak_dapur: '-1 Porsi Dibatalkan (Tahan Pengiriman)',
-    requested_by: 'Ns. Bambang (Dahlia)',
-    requested_at: '2026-08-12T06:18:00Z',
-  },
-  {
-    id: 204,
-    pasien_id: 2,
-    no_rm: 'RM-2026-042',
-    nama_pasien: 'Siti Aminah',
-    gedung: 'Gedung B',
-    ruangan: 'Mawar 3',
-    bed: 'Bed 04',
-    kelas: 'VIP',
-    batch_id: 1,
-    batch_code: 'BATCH-20260812-PAGI-9941',
-    waktu_makan: 'PAGI',
-    jenis_perubahan: 'NEW_PATIENT',
-    data_lama: null,
-    data_baru: { diet: 'Diet Lunak Rendah Lemak', ruangan: 'Mawar 3', bed: 'Bed 04', kelas: 'VIP' },
-    alasan: 'Pasien baru masuk dari IGD pukul 05:45 WIB',
-    status: 'APPROVED',
-    dampak_dapur: '+1 Porsi Emergent (Tambahan Makanan)',
-    requested_by: 'dr. Hendra Sp.PD (Dokter IGD)',
-    requested_at: '2026-08-12T05:50:00Z',
-    reviewed_by: 'Admin Gizi Utama',
-    reviewed_at: '2026-08-12T05:55:00Z',
-    review_notes: 'Otorisasi disetujui. Disiapkan di lini 2 produksi katering.',
-  },
-  {
-    id: 205,
-    pasien_id: 5,
-    no_rm: 'RM-2026-150',
-    nama_pasien: 'Rahmat Hidayat',
-    gedung: 'Gedung B',
-    ruangan: 'Mawar 1',
-    bed: 'Bed 01',
-    kelas: 'Kelas 1',
-    batch_id: 1,
-    batch_code: 'BATCH-20260812-PAGI-9941',
-    waktu_makan: 'PAGI',
-    jenis_perubahan: 'DISCHARGE',
-    data_lama: { diet: 'Diet RP (Rendah Protein)', status_pasien: 'AKTIF' },
-    data_baru: { diet: 'Pasien Pulang (Discharged)', status_pasien: 'PULANG' },
-    alasan: 'Pasien diizinkan pulang oleh DPJP pukul 06:15 WIB',
-    status: 'APPROVED',
-    dampak_dapur: '-1 Porsi Dibatalkan (Pasien Pulang)',
-    requested_by: 'Ns. Fitri (Mawar)',
-    requested_at: '2026-08-12T06:18:00Z',
-    reviewed_by: 'Admin Gizi Utama',
-    reviewed_at: '2026-08-12T06:22:00Z',
-    review_notes: 'Otorisasi pembatalan disetujui.',
-  },
-  {
-    id: 206,
-    pasien_id: 8,
-    no_rm: 'RM-2026-440',
-    nama_pasien: 'Hendra Wijaya',
-    gedung: 'Gedung A',
-    ruangan: 'Melati 3',
-    bed: 'Bed 02',
-    kelas: 'Kelas 2',
-    batch_id: 1,
-    batch_code: 'BATCH-20260812-PAGI-9941',
-    waktu_makan: 'PAGI',
-    jenis_perubahan: 'DIET_CHANGE',
-    data_lama: { diet: 'Diet Biasa' },
-    data_baru: { diet: 'Diet Cair Nutrisi Tinggi 2000 kcal' },
-    alasan: 'Permintaan tanpa surat DPJP resmi',
-    status: 'REJECTED',
-    dampak_dapur: 'Perubahan Etiket Diet',
-    requested_by: 'Keluarga Pasien',
-    requested_at: '2026-08-12T05:30:00Z',
-    reviewed_by: 'Admin Gizi Utama',
-    reviewed_at: '2026-08-12T05:40:00Z',
-    review_notes: 'Ditolak: Perubahan diet cair memerlukan verifikasi form instruksi DPJP.',
-  },
-];
 
 /**
  * Fetch otorisasi perubahan diet list
@@ -204,7 +67,7 @@ export async function getOtorisasiList(
     const dbResults = await query;
 
     if (dbResults && dbResults.length > 0) {
-      return dbResults.map((r) => {
+      let mapped = dbResults.map((r) => {
         let dataLamaObj: DataDietDetail | null = null;
         let dataBaruObj: DataDietDetail | null = null;
 
@@ -248,20 +111,20 @@ export async function getOtorisasiList(
           review_notes: r.review_notes,
         };
       });
+
+      if (statusFilter && statusFilter !== 'ALL') {
+        mapped = mapped.filter((i) => i.status === statusFilter);
+      }
+      if (waktuFilter && waktuFilter !== 'ALL') {
+        mapped = mapped.filter((i) => i.waktu_makan === waktuFilter);
+      }
+      return mapped;
     }
+    return [];
   } catch (error) {
     console.error('Error fetching otorisasi list from DB:', error);
+    return [];
   }
-
-  // Return mock fallback data
-  let filtered = MOCK_OTORISASI_DATA;
-  if (statusFilter && statusFilter !== 'ALL') {
-    filtered = filtered.filter((i) => i.status === statusFilter);
-  }
-  if (waktuFilter && waktuFilter !== 'ALL') {
-    filtered = filtered.filter((i) => i.waktu_makan === waktuFilter);
-  }
-  return filtered;
 }
 
 /**
@@ -284,6 +147,137 @@ export async function getOtorisasiStats(
   };
 }
 
+async function applyApprovedRevisionToSnapshot(revisi: typeof otorisasiPerubahanDietTable.$inferSelect) {
+  try {
+    const [patient] = await db
+      .select()
+      .from(pasienTable)
+      .where(eq(pasienTable.id, revisi.pasien_id));
+
+    let dataBaru: Record<string, any> = {};
+    try {
+      if (revisi.data_baru) dataBaru = JSON.parse(revisi.data_baru);
+    } catch (_) {}
+
+    if (revisi.jenis_perubahan === 'NEW_PATIENT') {
+      const targetNoRm = dataBaru.no_rm || patient?.no_rm || '';
+
+      if (revisi.batch_id) {
+        const [existingDetail] = await db
+          .select()
+          .from(snapshotDetailTable)
+          .where(
+            and(
+              eq(snapshotDetailTable.batch_id, revisi.batch_id),
+              eq(snapshotDetailTable.no_rm, targetNoRm)
+            )
+          );
+
+        if (!existingDetail) {
+          await db.insert(snapshotDetailTable).values({
+            batch_id: revisi.batch_id,
+            no_rm: dataBaru.no_rm || patient?.no_rm || 'RM-NEW',
+            nama_pasien: dataBaru.nama_pasien || patient?.nama_pasien || 'Pasien Baru',
+            gedung: dataBaru.gedung || patient?.gedung || '',
+            ruangan: dataBaru.ruangan || patient?.ruangan || '',
+            no_bed: dataBaru.bed || patient?.bed || '-',
+            kelas: dataBaru.kelas || patient?.kelas || 'Kelas 1',
+            diet_rs_raw: dataBaru.diet || patient?.diet || 'Diet Biasa',
+            status_saat_snapshot: dataBaru.status_pasien || 'AKTIF',
+            is_emergent: true,
+          });
+        }
+      }
+
+      // Activate in master pasien table
+      await db
+        .update(pasienTable)
+        .set({ status_pasien: 'AKTIF', updated_at: new Date() })
+        .where(eq(pasienTable.id, revisi.pasien_id));
+
+    } else if (revisi.jenis_perubahan === 'DIET_CHANGE' || revisi.jenis_perubahan === 'NPO') {
+      const targetNoRm = dataBaru.no_rm || patient?.no_rm;
+      if (revisi.batch_id && targetNoRm) {
+        await db
+          .update(snapshotDetailTable)
+          .set({
+            diet_rs_raw: dataBaru.diet || (revisi.jenis_perubahan === 'NPO' ? 'NPO' : undefined),
+            status_saat_snapshot: revisi.jenis_perubahan === 'NPO' ? 'NPO' : 'AKTIF',
+          })
+          .where(
+            and(
+              eq(snapshotDetailTable.batch_id, revisi.batch_id),
+              eq(snapshotDetailTable.no_rm, targetNoRm)
+            )
+          );
+      }
+
+      // Apply new diet to master pasien table
+      await db
+        .update(pasienTable)
+        .set({
+          diet: dataBaru.diet || (revisi.jenis_perubahan === 'NPO' ? 'NPO' : undefined),
+          is_npo: revisi.jenis_perubahan === 'NPO' ? true : Boolean(dataBaru.is_npo),
+          status_pasien: revisi.jenis_perubahan === 'NPO' ? 'NPO' : dataBaru.status_pasien || 'AKTIF',
+          updated_at: new Date(),
+        })
+        .where(eq(pasienTable.id, revisi.pasien_id));
+
+    } else if (revisi.jenis_perubahan === 'ROOM_TRANSFER') {
+      const targetNoRm = dataBaru.no_rm || patient?.no_rm;
+      if (revisi.batch_id && targetNoRm) {
+        await db
+          .update(snapshotDetailTable)
+          .set({
+            gedung: dataBaru.gedung || undefined,
+            ruangan: dataBaru.ruangan || undefined,
+            no_bed: dataBaru.bed || undefined,
+          })
+          .where(
+            and(
+              eq(snapshotDetailTable.batch_id, revisi.batch_id),
+              eq(snapshotDetailTable.no_rm, targetNoRm)
+            )
+          );
+      }
+
+      // Apply new room to master pasien table
+      await db
+        .update(pasienTable)
+        .set({
+          gedung: dataBaru.gedung || undefined,
+          ruangan: dataBaru.ruangan || undefined,
+          bed: dataBaru.bed || undefined,
+          updated_at: new Date(),
+        })
+        .where(eq(pasienTable.id, revisi.pasien_id));
+
+    } else if (revisi.jenis_perubahan === 'DISCHARGE') {
+      const targetNoRm = dataBaru.no_rm || patient?.no_rm;
+      if (revisi.batch_id && targetNoRm) {
+        await db
+          .update(snapshotDetailTable)
+          .set({
+            status_saat_snapshot: 'PULANG',
+          })
+          .where(
+            and(
+              eq(snapshotDetailTable.batch_id, revisi.batch_id),
+              eq(snapshotDetailTable.no_rm, targetNoRm)
+            )
+          );
+      }
+      // Mark as PULANG in master pasien table
+      await db
+        .update(pasienTable)
+        .set({ status_pasien: 'PULANG', updated_at: new Date() })
+        .where(eq(pasienTable.id, revisi.pasien_id));
+    }
+  } catch (err) {
+    console.error('Error applying approved revision to snapshot_detail / pasien:', err);
+  }
+}
+
 /**
  * Approve a pending diet modification request
  */
@@ -299,42 +293,44 @@ export async function approveRevisiDiet(
       .where(eq(otorisasiPerubahanDietTable.id, id));
 
     if (existing && existing.length > 0) {
+      const revisi = existing[0];
+
       await db
         .update(otorisasiPerubahanDietTable)
         .set({
           status: 'APPROVED',
           reviewed_by: reviewerName,
           reviewed_at: new Date(),
-          review_notes: reviewNotes || 'Otorisasi disetujui oleh Admin Head Gizi.',
+          review_notes: reviewNotes || 'Otorisasi disetujui oleh Supervisor / Admin Head Gizi.',
         })
         .where(eq(otorisasiPerubahanDietTable.id, id));
 
-      revalidatePath('/dashboard/ag-katering/otorisasi-perubahan-diet');
+      // Apply changes directly to snapshot_detail table for this batch
+      await applyApprovedRevisionToSnapshot(revisi);
+
+      revalidatePath('/dashboard/ag-rs/data-pasien');
+      revalidatePath('/dashboard/ag-katering/admin/otorisasi-perubahan-diet');
       revalidatePath('/dashboard/ag-katering/revisi-post-snapshot');
+      revalidatePath('/dashboard/ag-katering/overview/pemorsian');
+      revalidatePath('/dashboard/ag-katering/overview/produksi');
       revalidatePath('/dashboard/ag-katering/overview');
       return {
         success: true,
-        message: `Permintaan otorisasi #${id} berhasil disetujui.`,
+        message: `Permintaan otorisasi #${id} berhasil disetujui dan disinkronkan ke batch produksi.`,
       };
     }
+
+    return {
+      success: false,
+      message: `Permintaan otorisasi #${id} tidak ditemukan.`,
+    };
   } catch (error) {
     console.error('Error approving revisi diet in DB:', error);
+    return {
+      success: false,
+      message: 'Gagal menyetujui permintaan otorisasi di database.',
+    };
   }
-
-  // Fallback update mock data
-  const idx = MOCK_OTORISASI_DATA.findIndex((i) => i.id === id);
-  if (idx !== -1) {
-    MOCK_OTORISASI_DATA[idx].status = 'APPROVED';
-    MOCK_OTORISASI_DATA[idx].reviewed_by = reviewerName;
-    MOCK_OTORISASI_DATA[idx].reviewed_at = new Date().toISOString();
-    MOCK_OTORISASI_DATA[idx].review_notes = reviewNotes || 'Otorisasi disetujui oleh Admin Head Gizi.';
-  }
-
-  revalidatePath('/dashboard/ag-katering/otorisasi-perubahan-diet');
-  return {
-    success: true,
-    message: `Permintaan otorisasi #${id} berhasil disetujui.`,
-  };
 }
 
 /**
@@ -359,6 +355,8 @@ export async function rejectRevisiDiet(
       .where(eq(otorisasiPerubahanDietTable.id, id));
 
     if (existing && existing.length > 0) {
+      const revisi = existing[0];
+
       await db
         .update(otorisasiPerubahanDietTable)
         .set({
@@ -369,32 +367,42 @@ export async function rejectRevisiDiet(
         })
         .where(eq(otorisasiPerubahanDietTable.id, id));
 
-      revalidatePath('/dashboard/ag-katering/otorisasi-perubahan-diet');
+      // If it was a rejected NEW_PATIENT, remove the unapproved draft from pasienTable
+      if (revisi.jenis_perubahan === 'NEW_PATIENT') {
+        await db
+          .delete(pasienTable)
+          .where(
+            and(
+              eq(pasienTable.id, revisi.pasien_id),
+              eq(pasienTable.status_pasien, 'PENDING_REVISI'),
+            ),
+          );
+      }
+
+      revalidatePath('/dashboard/ag-rs/data-pasien');
+      revalidatePath('/dashboard/ag-katering/admin/otorisasi-perubahan-diet');
       revalidatePath('/dashboard/ag-katering/revisi-post-snapshot');
+      revalidatePath('/dashboard/ag-katering/overview/pemorsian');
+      revalidatePath('/dashboard/ag-katering/overview/produksi');
+      revalidatePath('/dashboard/ag-katering/mapping-diet');
       revalidatePath('/dashboard/ag-katering/overview');
       return {
         success: true,
         message: `Permintaan otorisasi #${id} telah ditolak.`,
       };
     }
+
+    return {
+      success: false,
+      message: `Permintaan otorisasi #${id} tidak ditemukan.`,
+    };
   } catch (error) {
     console.error('Error rejecting revisi diet in DB:', error);
+    return {
+      success: false,
+      message: 'Gagal menolak permintaan otorisasi di database.',
+    };
   }
-
-  // Fallback update mock data
-  const idx = MOCK_OTORISASI_DATA.findIndex((i) => i.id === id);
-  if (idx !== -1) {
-    MOCK_OTORISASI_DATA[idx].status = 'REJECTED';
-    MOCK_OTORISASI_DATA[idx].reviewed_by = reviewerName;
-    MOCK_OTORISASI_DATA[idx].reviewed_at = new Date().toISOString();
-    MOCK_OTORISASI_DATA[idx].review_notes = reviewNotes;
-  }
-
-  revalidatePath('/dashboard/ag-katering/otorisasi-perubahan-diet');
-  return {
-    success: true,
-    message: `Permintaan otorisasi #${id} telah ditolak.`,
-  };
 }
 
 /**
@@ -410,6 +418,11 @@ export async function bulkApproveRevisiDiet(
   }
 
   try {
+    const items = await db
+      .select()
+      .from(otorisasiPerubahanDietTable)
+      .where(inArray(otorisasiPerubahanDietTable.id, ids));
+
     await db
       .update(otorisasiPerubahanDietTable)
       .set({
@@ -420,31 +433,25 @@ export async function bulkApproveRevisiDiet(
       })
       .where(inArray(otorisasiPerubahanDietTable.id, ids));
 
-    revalidatePath('/dashboard/ag-katering/otorisasi-perubahan-diet');
+    for (const item of items) {
+      await applyApprovedRevisionToSnapshot(item);
+    }
+
+    revalidatePath('/dashboard/ag-rs/data-pasien');
+    revalidatePath('/dashboard/ag-katering/admin/otorisasi-perubahan-diet');
     revalidatePath('/dashboard/ag-katering/revisi-post-snapshot');
+    revalidatePath('/dashboard/ag-katering/overview/pemorsian');
+    revalidatePath('/dashboard/ag-katering/overview/produksi');
     revalidatePath('/dashboard/ag-katering/overview');
     return {
       success: true,
-      message: `${ids.length} permintaan otorisasi berhasil disetujui sekaligus.`,
+      message: `${ids.length} permintaan otorisasi berhasil disetujui dan disinkronkan ke batch produksi.`,
     };
   } catch (error) {
     console.error('Error bulk approving revisi diet in DB:', error);
+    return {
+      success: false,
+      message: 'Gagal melakukan persetujuan massal di database.',
+    };
   }
-
-  // Fallback update mock data
-  ids.forEach((id) => {
-    const idx = MOCK_OTORISASI_DATA.findIndex((i) => i.id === id);
-    if (idx !== -1) {
-      MOCK_OTORISASI_DATA[idx].status = 'APPROVED';
-      MOCK_OTORISASI_DATA[idx].reviewed_by = reviewerName;
-      MOCK_OTORISASI_DATA[idx].reviewed_at = new Date().toISOString();
-      MOCK_OTORISASI_DATA[idx].review_notes = reviewNotes;
-    }
-  });
-
-  revalidatePath('/dashboard/ag-katering/otorisasi-perubahan-diet');
-  return {
-    success: true,
-    message: `${ids.length} permintaan otorisasi berhasil disetujui sekaligus.`,
-  };
 }

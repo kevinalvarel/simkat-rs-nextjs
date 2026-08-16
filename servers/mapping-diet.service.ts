@@ -6,6 +6,7 @@ import { db } from '@/drizzle';
 import { pasienTable } from '@/db/schemas/patient/pasien';
 import { dietMappingTable } from '@/db/schemas/master/mapping-diet';
 import { kategoriMenuTable } from '@/db/schemas/master/kategori-menu';
+import { otorisasiPerubahanDietTable } from '@/db/schemas/snapshot/perizinan-revisi';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -45,128 +46,61 @@ export type UnmappedDietItem = {
   is_active: boolean | null;
 };
 
-// ─── Mock Data (fallback) ────────────────────────────────────────────────────
-
-const MOCK_UNMAPPED: UnmappedDietItem[] = [
-  {
-    diet_rs_raw: 'Diet RG Rendah Garam Lunak',
-    jumlah_pasien: 4,
-    mapping_id: null,
-    status_mapping: 'UNMAPPED',
-    bentuk_makanan: null,
-    kategori_diet: null,
-    extra: null,
-    buah: null,
-    snack: null,
-    is_active: null,
-  },
-  {
-    diet_rs_raw: 'Diet DM 1700',
-    jumlah_pasien: 3,
-    mapping_id: null,
-    status_mapping: 'UNMAPPED',
-    bentuk_makanan: null,
-    kategori_diet: null,
-    extra: null,
-    buah: null,
-    snack: null,
-    is_active: null,
-  },
-  {
-    diet_rs_raw: 'Cair Nutrisi Tinggi 2000',
-    jumlah_pasien: 2,
-    mapping_id: null,
-    status_mapping: 'UNMAPPED',
-    bentuk_makanan: null,
-    kategori_diet: null,
-    extra: null,
-    buah: null,
-    snack: null,
-    is_active: null,
-  },
-  {
-    diet_rs_raw: 'RP Rendah Protein Tim',
-    jumlah_pasien: 1,
-    mapping_id: null,
-    status_mapping: 'UNMAPPED',
-    bentuk_makanan: null,
-    kategori_diet: null,
-    extra: null,
-    buah: null,
-    snack: null,
-    is_active: null,
-  },
-  {
-    diet_rs_raw: 'Biasa Nasi TKTP',
-    jumlah_pasien: 6,
-    mapping_id: 10,
-    status_mapping: 'PARTIAL',
-    bentuk_makanan: 'BN',
-    kategori_diet: 'TKTP',
-    extra: null,
-    buah: null,
-    snack: null,
-    is_active: true,
-  },
-];
-
-const MOCK_KATEGORI_MENU: KategoriMenuOption[] = [
-  { id: 1, namaKategori: 'KARBO', kodeItem: 'BN', labelItem: 'Biasa Nasi', urutan: 1 },
-  { id: 2, namaKategori: 'KARBO', kodeItem: 'BL', labelItem: 'Biasa Lunak', urutan: 2 },
-  { id: 3, namaKategori: 'KARBO', kodeItem: 'BC', labelItem: 'Biasa Cincang', urutan: 3 },
-  { id: 4, namaKategori: 'KARBO', kodeItem: 'TM', labelItem: 'Nasi Tim', urutan: 4 },
-  { id: 5, namaKategori: 'KARBO', kodeItem: 'SAR', labelItem: 'Bubur Saring', urutan: 5 },
-  { id: 6, namaKategori: 'KARBO', kodeItem: 'CAI', labelItem: 'Makanan Cair', urutan: 6 },
-
-  { id: 7, namaKategori: 'HEWANI', kodeItem: 'AYM-G', labelItem: 'Ayam Ungkep Goreng', urutan: 1 },
-  { id: 8, namaKategori: 'HEWANI', kodeItem: 'DND-S', labelItem: 'Daging Sapi Semur', urutan: 2 },
-  { id: 9, namaKategori: 'HEWANI', kodeItem: 'IKN-B', labelItem: 'Ikan Kakap Bakar', urutan: 3 },
-  { id: 10, namaKategori: 'HEWANI', kodeItem: 'TLR-D', labelItem: 'Telur Dadar Daun Bawang', urutan: 4 },
-  { id: 11, namaKategori: 'HEWANI', kodeItem: 'P-TLR', labelItem: 'Putih Telur Rebus', urutan: 5 },
-
-  { id: 12, namaKategori: 'NABATI', kodeItem: 'TMP-B', labelItem: 'Tempe Bacem', urutan: 1 },
-  { id: 13, namaKategori: 'NABATI', kodeItem: 'TFU-G', labelItem: 'Tahu Goreng Tepung', urutan: 2 },
-  { id: 14, namaKategori: 'NABATI', kodeItem: 'TFU-K', labelItem: 'Tahu Kukus Wortel', urutan: 3 },
-
-  { id: 15, namaKategori: 'SAYUR', kodeItem: 'SYR-A', labelItem: 'Sayur Asem Bumbu Kuning', urutan: 1 },
-  { id: 16, namaKategori: 'SAYUR', kodeItem: 'SOP-V', labelItem: 'Sop Bening Sayur Segar', urutan: 2 },
-  { id: 17, namaKategori: 'SAYUR', kodeItem: 'CAP-C', labelItem: 'Capcay Bakso Ayam', urutan: 3 },
-
-  { id: 18, namaKategori: 'BUAH', kodeItem: 'PSG-A', labelItem: 'Pisang Ambon', urutan: 1 },
-  { id: 19, namaKategori: 'BUAH', kodeItem: 'JRK-M', labelItem: 'Jeruk Manis', urutan: 2 },
-  { id: 20, namaKategori: 'BUAH', kodeItem: 'PPY-S', labelItem: 'Pepaya Potong Segar', urutan: 3 },
-
-  { id: 21, namaKategori: 'SNACK', kodeItem: 'SGP', labelItem: 'Snack Gula Pasir', urutan: 1 },
-  { id: 22, namaKategori: 'SNACK', kodeItem: 'SRP', labelItem: 'Snack Rendah Protein', urutan: 2 },
-  { id: 23, namaKategori: 'SNACK', kodeItem: 'BBR-K', labelItem: 'Bubur Kacang Hijau', urutan: 3 },
-];
-
 // ─── Queries ──────────────────────────────────────────────────────────────────
 
 /**
  * Fetch all unique diet strings from active patients that are not yet fully mapped.
  * Returns UNMAPPED + PARTIAL records only.
+ * Strictly excludes unapproved pending revisions (Mode Revisi).
  */
 export async function getUnmappedDietItems(): Promise<UnmappedDietItem[]> {
   try {
-    // 1. Get distinct diet strings from all active patients
-    const allPatients = await db
-      .select({ diet: pasienTable.diet })
-      .from(pasienTable)
-      .where(ne(pasienTable.status_pasien, 'PULANG'));
+    // 1. Fetch pending revisions that have not yet been approved by supervisor
+    const pendingRevisions = await db
+      .select({
+        pasien_id: otorisasiPerubahanDietTable.pasien_id,
+        jenis_perubahan: otorisasiPerubahanDietTable.jenis_perubahan,
+      })
+      .from(otorisasiPerubahanDietTable)
+      .where(eq(otorisasiPerubahanDietTable.status, 'PENDING'));
 
-    if (!allPatients || allPatients.length === 0) {
-      return MOCK_UNMAPPED;
+    const pendingNewPatientIds = new Set(
+      pendingRevisions
+        .filter((r) => r.jenis_perubahan === 'NEW_PATIENT')
+        .map((r) => r.pasien_id)
+    );
+
+    // 2. Get distinct diet strings from active (approved) patients
+    const allPatients = await db
+      .select({ id: pasienTable.id, diet: pasienTable.diet })
+      .from(pasienTable)
+      .where(
+        and(
+          ne(pasienTable.status_pasien, 'PULANG'),
+          ne(pasienTable.status_pasien, 'PENDING_REVISI'),
+        )
+      );
+
+    const validPatients = allPatients.filter(
+      (p) => !pendingNewPatientIds.has(p.id)
+    );
+
+    if (!validPatients || validPatients.length === 0) {
+      return [];
     }
 
     // Count occurrences per diet_rs_raw
     const countMap = new Map<string, number>();
-    for (const p of allPatients) {
-      const key = p.diet.trim();
+    for (const p of validPatients) {
+      const key = (p.diet || '').trim();
+      if (!key) continue;
       countMap.set(key, (countMap.get(key) ?? 0) + 1);
     }
 
     const uniqueDiets = Array.from(countMap.keys());
+    if (uniqueDiets.length === 0) {
+      return [];
+    }
 
     // 2. Check existing mappings for these diet strings
     const existingMappings = await db
@@ -216,10 +150,10 @@ export async function getUnmappedDietItems(): Promise<UnmappedDietItem[]> {
       return b.jumlah_pasien - a.jumlah_pasien;
     });
 
-    return results.length > 0 ? results : MOCK_UNMAPPED;
+    return results;
   } catch (error) {
     console.error('Error fetching unmapped diet items:', error);
-    return MOCK_UNMAPPED;
+    return [];
   }
 }
 
@@ -243,11 +177,11 @@ export async function getKategoriMenuOptions(): Promise<KategoriMenuOption[]> {
         urutan: i.urutan,
       }));
     }
+    return [];
   } catch (error) {
     console.error('Error fetching kategori menu options from DB:', error);
+    return [];
   }
-
-  return MOCK_KATEGORI_MENU;
 }
 
 /**

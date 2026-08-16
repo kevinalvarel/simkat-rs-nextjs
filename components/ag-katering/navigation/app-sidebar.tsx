@@ -1,8 +1,6 @@
 'use client';
 import * as React from 'react';
 import { MinusIcon, PlusIcon } from 'lucide-react';
-
-import { SearchForm } from './search-form';
 import {
   Collapsible,
   CollapsibleContent,
@@ -36,7 +34,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     role === 'supervisor' ? routeDataSupervisor : routeDataProduksi;
 
   return (
-    <Sidebar {...props}>
+    <Sidebar variant='inset' {...props}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
@@ -53,7 +51,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
-        <SearchForm />
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>

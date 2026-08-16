@@ -11,7 +11,7 @@ export default function EtiketCard({ data, className = '' }: EtiketCardProps) {
 
   return (
     <div
-      className={`etiket-card etiket-card-print bg-white text-black p-5 sm:p-6 rounded-lg shadow-xs border-2 border-black font-sans w-[320px] max-w-[320px] shrink-0 select-none ${className}`}
+      className={`etiket-card etiket-card-print bg-white text-black p-3.5 sm:p-4 rounded-md shadow-xs border-2 border-black font-sans w-[360px] h-[180px] shrink-0 select-none flex flex-col justify-between ${className}`}
       style={{
         boxSizing: 'border-box',
         backgroundColor: '#ffffff',
@@ -19,47 +19,49 @@ export default function EtiketCard({ data, className = '' }: EtiketCardProps) {
       }}
     >
       {/* 1. Header: E-TICKET MAKAN [WAKTU] */}
-      <div className='text-center pb-2'>
-        <h2 className='text-lg sm:text-xl font-bold tracking-tight text-black font-sans uppercase m-0 leading-tight'>
-          E-TICKET MAKAN {mealTimeUpper}
-        </h2>
-        {data.is_revisi && (
-          <div className='mt-1 text-[11px] font-bold uppercase tracking-wider text-amber-800 bg-amber-100 px-2 py-0.5 rounded border border-amber-400 inline-block'>
-            {data.keterangan_revisi || 'Etiket Revisi'}
-          </div>
-        )}
+      <div className='text-center pb-0.5'>
+        <div className='flex items-center justify-center gap-1.5'>
+          <h2 className='text-sm sm:text-base font-bold tracking-tight text-black font-sans uppercase m-0 leading-tight'>
+            E-TICKET MAKAN {mealTimeUpper}
+          </h2>
+          {data.is_revisi && (
+            <span className='text-[9px] font-bold uppercase tracking-wider text-amber-900 bg-amber-100 px-1 py-0.5 rounded border border-amber-400 leading-none'>
+              {data.keterangan_revisi || 'Revisi'}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* 2. Divider Line */}
-      <hr className='border-0 border-t-2 border-black my-0 mb-3.5' />
+      <hr className='border-0 border-t-2 border-black my-0 mb-1' />
 
       {/* 3. Patient & Diet Details */}
-      <div className='space-y-2.5 text-base sm:text-lg leading-snug text-black font-normal'>
-        <div className='grid grid-cols-[85px_1fr] items-baseline gap-2'>
-          <span className='font-semibold'>Nama:</span>
-          <span className='font-normal truncate' title={data.nama}>
-            {data.nama}
+      <div className='space-y-1 text-xs sm:text-[13px] leading-tight text-black font-normal flex-1 flex flex-col justify-around'>
+        <div className='grid grid-cols-[68px_1fr] items-baseline gap-1'>
+          <span className='font-semibold'>Nama</span>
+          <span className='font-bold truncate' title={data.nama}>
+            : {data.nama}
           </span>
         </div>
 
-        <div className='grid grid-cols-[85px_1fr] items-baseline gap-2'>
-          <span className='font-semibold'>Ruangan:</span>
-          <span className='font-normal'>{data.ruangan}</span>
+        <div className='grid grid-cols-[68px_1fr] items-baseline gap-1'>
+          <span className='font-semibold'>Ruangan</span>
+          <span className='font-normal truncate'>: {data.ruangan}</span>
         </div>
 
-        <div className='grid grid-cols-[85px_1fr] items-baseline gap-2'>
-          <span className='font-semibold'>Bed:</span>
-          <span className='font-normal'>{data.bed || '-'}</span>
+        <div className='grid grid-cols-[68px_1fr] items-baseline gap-1'>
+          <span className='font-semibold'>Bed</span>
+          <span className='font-normal'>: {data.bed || '-'}</span>
         </div>
 
-        <div className='grid grid-cols-[85px_1fr] items-baseline gap-2'>
-          <span className='font-semibold'>Diet:</span>
-          <span className='font-normal break-words'>{data.diet}</span>
+        <div className='grid grid-cols-[68px_1fr] items-baseline gap-1'>
+          <span className='font-semibold'>Diet</span>
+          <span className='font-bold break-words line-clamp-2'>: {data.diet}</span>
         </div>
 
-        <div className='grid grid-cols-[85px_1fr] items-baseline gap-2'>
-          <span className='font-semibold'>Waktu:</span>
-          <span className='font-normal'>{data.waktu}</span>
+        <div className='grid grid-cols-[68px_1fr] items-baseline gap-1'>
+          <span className='font-semibold'>Waktu</span>
+          <span className='font-normal'>: {data.waktu}</span>
         </div>
       </div>
     </div>

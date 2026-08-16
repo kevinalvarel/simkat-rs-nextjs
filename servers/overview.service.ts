@@ -8,26 +8,14 @@ import { pasienTable } from '@/db/schemas/patient/pasien';
 import { waktuMakanTable } from '@/db/schemas/patient/waktu-makan';
 import { dietMappingTable } from '@/db/schemas/master/mapping-diet';
 import { kategoriMenuTable } from '@/db/schemas/master/kategori-menu';
+import { otorisasiPerubahanDietTable } from '@/db/schemas/snapshot/perizinan-revisi';
 
-export interface MonitoringCardData {
-  code: string; // e.g. BN, TKTP, PUTEL, BL, RG, DM, NPO, UNMAPPED
-  name: string; // Display name (e.g. Biasa Nasi, Tinggi Kalori Tinggi Protein, Putih Telur)
-  baseline: number; // Count before revision
-  active: number; // Current count (baseline + change)
-  change: number; // Net change (+1, -1, 0, etc.)
-}
+import type {
+  MonitoringCardData,
+  MonitoringSummary,
+} from '@/types/monitoringtypes';
 
-export interface MonitoringSummary {
-  success: boolean;
-  batchId: number | null;
-  batchCode: string;
-  waktuMakan: string;
-  tanggalProduksi: string;
-  statusBatch: string;
-  cutoffTime: string;
-  cards: MonitoringCardData[];
-  lastUpdated: string;
-}
+export type { MonitoringCardData, MonitoringSummary };
 
 interface NextCycleInfo {
   waktuMakan: string; // PAGI | SIANG | MALAM
@@ -139,7 +127,13 @@ function extractCodes(val: string | null | undefined): string[] {
   return val
     .split(/[,;/]+/)
     .map((s) => s.trim())
-    .filter(Boolean);
+    .filter(
+      (s) =>
+        Boolean(s) &&
+        s.toUpperCase() !== 'TIDAK' &&
+        s.toUpperCase() !== 'NON' &&
+        s !== '-'
+    );
 }
 
 /**
@@ -246,8 +240,22 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
       });
     }
 
-    // 5. Fetch all live active patients
-    const activePatients = await db
+    // 5. Fetch all live active patients (excluding unapproved pending revisions)
+    const pendingRevisions = await db
+      .select({
+        pasien_id: otorisasiPerubahanDietTable.pasien_id,
+        jenis_perubahan: otorisasiPerubahanDietTable.jenis_perubahan,
+      })
+      .from(otorisasiPerubahanDietTable)
+      .where(eq(otorisasiPerubahanDietTable.status, 'PENDING'));
+
+    const pendingNewPatientIds = new Set(
+      pendingRevisions
+        .filter((r) => r.jenis_perubahan === 'NEW_PATIENT')
+        .map((r) => r.pasien_id)
+    );
+
+    const allPatients = await db
       .select({
         id: pasienTable.id,
         nama_pasien: pasienTable.nama_pasien,
@@ -256,7 +264,16 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
         status_pasien: pasienTable.status_pasien,
       })
       .from(pasienTable)
-      .where(ne(pasienTable.status_pasien, 'PULANG'));
+      .where(
+        and(
+          ne(pasienTable.status_pasien, 'PULANG'),
+          ne(pasienTable.status_pasien, 'PENDING_REVISI'),
+        )
+      );
+
+    const activePatients = allPatients.filter(
+      (p) => !pendingNewPatientIds.has(p.id)
+    );
 
     // 6. Aggregate Live Counts per atomic mapped code (BN, TKTP, PUTEL, etc.)
     const liveCounts: Record<string, { count: number; name: string }> = {};
@@ -264,7 +281,14 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
     function addLiveCount(code: string, customName?: string) {
       if (!code) return;
       const normalizedCode = code.trim().toUpperCase();
-      if (!normalizedCode) return;
+      if (
+        !normalizedCode ||
+        normalizedCode === 'UNMAPPED' ||
+        normalizedCode === 'TIDAK' ||
+        normalizedCode === 'NON' ||
+        normalizedCode === '-'
+      )
+        return;
 
       const displayName =
         customName ||
@@ -329,9 +353,6 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
         if (mapped.snack) {
           extractCodes(mapped.snack).forEach((code) => addLiveCount(code));
         }
-      } else {
-        // NEVER output raw free text cards. Count as UNMAPPED instead!
-        addLiveCount('UNMAPPED', 'Belum Di-mapping');
       }
     }
 
@@ -347,7 +368,14 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
     function addSnapshotCount(code: string) {
       if (!code) return;
       const normalizedCode = code.trim().toUpperCase();
-      if (!normalizedCode) return;
+      if (
+        !normalizedCode ||
+        normalizedCode === 'UNMAPPED' ||
+        normalizedCode === 'TIDAK' ||
+        normalizedCode === 'NON' ||
+        normalizedCode === '-'
+      )
+        return;
       snapshotCounts[normalizedCode] =
         (snapshotCounts[normalizedCode] || 0) + 1;
     }
@@ -418,9 +446,6 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
               extractCodes(mapped.buah).forEach(addSnapshotCount);
             if (mapped.snack)
               extractCodes(mapped.snack).forEach(addSnapshotCount);
-          } else {
-            // NEVER output raw text into baseline
-            addSnapshotCount('UNMAPPED');
           }
         }
       }
@@ -433,6 +458,14 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
     ]);
 
     const cards: MonitoringCardData[] = Array.from(allCodes)
+      .filter(
+        (code) =>
+          code &&
+          code.trim().toUpperCase() !== 'UNMAPPED' &&
+          code.trim().toUpperCase() !== 'TIDAK' &&
+          code.trim().toUpperCase() !== 'NON' &&
+          code.trim() !== '-'
+      )
       .map((code) => {
         const liveInfo = liveCounts[code];
         const activeCount = liveInfo?.count || 0;
@@ -452,7 +485,13 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
           change: changeCount,
         };
       })
-      .filter((card) => card.active > 0 || card.baseline > 0);
+      .filter(
+        (card) =>
+          (card.active > 0 || card.baseline > 0) &&
+          card.code.toUpperCase() !== 'UNMAPPED' &&
+          card.code.toUpperCase() !== 'TIDAK' &&
+          card.code.toUpperCase() !== 'NON'
+      );
 
     // Sort cards: Standard codes first, UNMAPPED near end, NPO always at the very end
     cards.sort((a, b) => {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { Patient } from '@/servers/patient.service';
+import type { Patient, RevisionContext } from '@/servers/patient.service';
 import { deletePatient } from '@/servers/patient.service';
 import {
   AlertDialog,
@@ -20,12 +20,14 @@ interface DeletePatientDialogProps {
   patient: Patient | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  revisionContext?: RevisionContext;
 }
 
 export default function DeletePatientDialog({
   patient,
   open,
   onOpenChange,
+  revisionContext,
 }: DeletePatientDialogProps) {
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -34,7 +36,7 @@ export default function DeletePatientDialog({
 
     setIsDeleting(true);
     try {
-      const result = await deletePatient(patient.id);
+      const result = await deletePatient(patient.id, revisionContext);
       if (result.success) {
         toast.success(result.message);
         onOpenChange(false);

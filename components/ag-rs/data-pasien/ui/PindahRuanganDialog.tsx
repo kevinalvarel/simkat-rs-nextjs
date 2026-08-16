@@ -27,6 +27,7 @@ export default function PindahRuanganDialog({
   gedungList,
   onClose,
   onSuccess,
+  revisionContext,
 }: PindahRuanganDialogProps) {
   const [targetGedung, setTargetGedung] = useState<string>('');
   const [targetRuangan, setTargetRuangan] = useState<string>('');
@@ -50,15 +51,21 @@ export default function PindahRuanganDialog({
     if (!patient || !targetGedung || !targetRuangan) return;
     setIsSubmitting(true);
     try {
-      const res = await updatePatientField(patient.id, {
-        gedung: targetGedung,
-        ruangan: targetRuangan,
-        status_pasien: 'PINDAH_RUANGAN',
-      });
+      const res = await updatePatientField(
+        patient.id,
+        {
+          gedung: targetGedung,
+          ruangan: targetRuangan,
+          status_pasien: 'PINDAH_RUANGAN',
+        },
+        revisionContext,
+      );
       if (res.success) {
         onSuccess(patient.id);
         toast.success(
-          `${patient.nama_pasien} dipindahkan ke ${targetGedung} - ${targetRuangan}`,
+          revisionContext?.isRevisiMode
+            ? `Revisi perpindahan ruangan ${patient.nama_pasien} diajukan ke Otorisasi Supervisor.`
+            : `${patient.nama_pasien} dipindahkan ke ${targetGedung} - ${targetRuangan}`,
         );
         onClose();
       } else {

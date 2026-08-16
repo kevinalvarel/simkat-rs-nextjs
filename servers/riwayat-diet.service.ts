@@ -1,6 +1,6 @@
 'use server';
 
-import { eq, desc, inArray } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/drizzle';
 import { user } from '@/db/auth-schema';
@@ -60,226 +60,6 @@ export interface RiwayatDietStats {
   npoEmergentCount: number;
 }
 
-// Fallback Mock Users for Role Gizi-RS
-const MOCK_GIZI_RS_USERS: GiziRsUser[] = [
-  {
-    id: 'usr-gz-001',
-    name: 'Ahmad Rizky, S.Gz',
-    email: 'rizky.gizi@rs-sehat.id',
-    role: 'gizi-rs',
-  },
-  {
-    id: 'usr-gz-002',
-    name: 'Siti Rahma, S.Gz',
-    email: 'rahma.gizi@rs-sehat.id',
-    role: 'gizi-rs',
-  },
-  {
-    id: 'usr-gz-003',
-    name: 'Ns. Ratna Dewi, S.Kep',
-    email: 'ratna.gizi@rs-sehat.id',
-    role: 'gizi-rs',
-  },
-  {
-    id: 'usr-gz-004',
-    name: 'dr. Satrio Sp.PD',
-    email: 'satrio.dpjp@rs-sehat.id',
-    role: 'gizi-rs',
-  },
-  {
-    id: 'usr-gz-005',
-    name: 'Ns. Bambang Kurnia',
-    email: 'bambang.perawat@rs-sehat.id',
-    role: 'gizi-rs',
-  },
-];
-
-// Fallback Mock Data for Riwayat Diet Pasien
-const MOCK_RIWAYAT_DATA: RiwayatDietItem[] = [
-  {
-    id: 301,
-    pasien_id: 1,
-    no_rm: 'RM-2026-001',
-    nama_pasien: 'Budi Santoso',
-    gedung: 'Gedung A',
-    ruangan: 'Melati 1',
-    bed: 'Bed 01',
-    kelas: 'Kelas 1',
-    batch_id: 1,
-    batch_code: 'BATCH-20260812-PAGI-9941',
-    waktu_makan: 'PAGI',
-    jenis_perubahan: 'DIET_CHANGE',
-    data_lama: { diet: 'Diet RG (Rendah Garam)', ruangan: 'Melati 1', bed: 'Bed 01' },
-    data_baru: { diet: 'Diet DM (Diabetes Melitus) 1700 kcal', ruangan: 'Melati 1', bed: 'Bed 01' },
-    alasan: 'Instruksi Dokter Penanggung Jawab jam 06:10 - Pasien menunjukkan peningkatan GDS 280 mg/dL',
-    status: 'APPROVED',
-    dampak_dapur: 'Perubahan Etiket & Komposisi Menu Diet',
-    gizi_rs_id: 'usr-gz-003',
-    gizi_rs_name: 'Ns. Ratna Dewi, S.Kep',
-    gizi_rs_email: 'ratna.gizi@rs-sehat.id',
-    requested_at: '2026-08-12T06:12:00Z',
-    reviewed_by: 'Admin Katering - Anita',
-    reviewed_at: '2026-08-12T06:15:00Z',
-    review_notes: 'Etiket diet DM telah disesuaikan di lini porsi.',
-  },
-  {
-    id: 302,
-    pasien_id: 6,
-    no_rm: 'RM-2026-210',
-    nama_pasien: 'Dr. Suwandi (Pasien VIP)',
-    gedung: 'Gedung B',
-    ruangan: 'Anggrek VIP',
-    bed: 'Bed 01',
-    kelas: 'VIP Utama',
-    batch_id: 1,
-    batch_code: 'BATCH-20260812-PAGI-9941',
-    waktu_makan: 'PAGI',
-    jenis_perubahan: 'NEW_PATIENT',
-    data_lama: null,
-    data_baru: { diet: 'Diet Cincang Rendah Purin', ruangan: 'Anggrek VIP', bed: 'Bed 01', kelas: 'VIP Utama' },
-    alasan: 'Pasien rujukan eksekutif masuk jam 06:05 WIB pasca snapshot locked',
-    status: 'APPROVED',
-    dampak_dapur: '+1 Porsi Emergent (Tambahan Makanan)',
-    gizi_rs_id: 'usr-gz-004',
-    gizi_rs_name: 'dr. Satrio Sp.PD',
-    gizi_rs_email: 'satrio.dpjp@rs-sehat.id',
-    requested_at: '2026-08-12T06:15:00Z',
-    reviewed_by: 'Supervisor Katering - Hendra',
-    reviewed_at: '2026-08-12T06:18:00Z',
-    review_notes: 'Diteruskan ke tim koki dapur utama.',
-  },
-  {
-    id: 303,
-    pasien_id: 7,
-    no_rm: 'RM-2026-305',
-    nama_pasien: 'Ratna Sari',
-    gedung: 'Gedung C',
-    ruangan: 'Dahlia 4',
-    bed: 'Bed 03',
-    kelas: 'Kelas 3',
-    batch_id: 1,
-    batch_code: 'BATCH-20260812-PAGI-9941',
-    waktu_makan: 'PAGI',
-    jenis_perubahan: 'NPO',
-    data_lama: { diet: 'Diet Biasa Nasi Tim', status_pasien: 'AKTIF' },
-    data_baru: { diet: 'NPO (Puasa Pre-Op Endoskopi)', status_pasien: 'NPO' },
-    alasan: 'Jadwal CITO Endoskopi cerna jam 07:30 WIB',
-    status: 'SELESAI',
-    dampak_dapur: '-1 Porsi Dibatalkan (Tahan Pengiriman)',
-    gizi_rs_id: 'usr-gz-005',
-    gizi_rs_name: 'Ns. Bambang Kurnia',
-    gizi_rs_email: 'bambang.perawat@rs-sehat.id',
-    requested_at: '2026-08-12T06:18:00Z',
-    reviewed_by: 'Admin Katering - Anita',
-    reviewed_at: '2026-08-12T06:20:00Z',
-    review_notes: 'Tray makanan ditarik dari rantai pengiriman.',
-  },
-  {
-    id: 304,
-    pasien_id: 2,
-    no_rm: 'RM-2026-042',
-    nama_pasien: 'Siti Aminah',
-    gedung: 'Gedung B',
-    ruangan: 'Mawar 3',
-    bed: 'Bed 04',
-    kelas: 'VIP',
-    batch_id: 1,
-    batch_code: 'BATCH-20260812-PAGI-9941',
-    waktu_makan: 'PAGI',
-    jenis_perubahan: 'NEW_PATIENT',
-    data_lama: null,
-    data_baru: { diet: 'Diet Lunak Rendah Lemak', ruangan: 'Mawar 3', bed: 'Bed 04', kelas: 'VIP' },
-    alasan: 'Pasien baru masuk dari IGD pukul 05:45 WIB',
-    status: 'APPROVED',
-    dampak_dapur: '+1 Porsi Emergent (Tambahan Makanan)',
-    gizi_rs_id: 'usr-gz-001',
-    gizi_rs_name: 'Ahmad Rizky, S.Gz',
-    gizi_rs_email: 'rizky.gizi@rs-sehat.id',
-    requested_at: '2026-08-12T05:50:00Z',
-    reviewed_by: 'Admin Head Gizi',
-    reviewed_at: '2026-08-12T05:55:00Z',
-    review_notes: 'Otorisasi disetujui. Disiapkan di lini 2 produksi katering.',
-  },
-  {
-    id: 305,
-    pasien_id: 5,
-    no_rm: 'RM-2026-150',
-    nama_pasien: 'Rahmat Hidayat',
-    gedung: 'Gedung B',
-    ruangan: 'Mawar 1',
-    bed: 'Bed 01',
-    kelas: 'Kelas 1',
-    batch_id: 1,
-    batch_code: 'BATCH-20260812-PAGI-9941',
-    waktu_makan: 'PAGI',
-    jenis_perubahan: 'DISCHARGE',
-    data_lama: { diet: 'Diet RP (Rendah Protein)', status_pasien: 'AKTIF' },
-    data_baru: { diet: 'Pasien Pulang (Discharged)', status_pasien: 'PULANG' },
-    alasan: 'Pasien diizinkan pulang oleh DPJP pukul 06:15 WIB',
-    status: 'APPROVED',
-    dampak_dapur: '-1 Porsi Dibatalkan (Pasien Pulang)',
-    gizi_rs_id: 'usr-gz-002',
-    gizi_rs_name: 'Siti Rahma, S.Gz',
-    gizi_rs_email: 'rahma.gizi@rs-sehat.id',
-    requested_at: '2026-08-12T06:18:00Z',
-    reviewed_by: 'Admin Head Gizi',
-    reviewed_at: '2026-08-12T06:22:00Z',
-    review_notes: 'Otorisasi pembatalan disetujui.',
-  },
-  {
-    id: 306,
-    pasien_id: 8,
-    no_rm: 'RM-2026-440',
-    nama_pasien: 'Hendra Wijaya',
-    gedung: 'Gedung A',
-    ruangan: 'Melati 3',
-    bed: 'Bed 02',
-    kelas: 'Kelas 2',
-    batch_id: 1,
-    batch_code: 'BATCH-20260812-PAGI-9941',
-    waktu_makan: 'PAGI',
-    jenis_perubahan: 'DIET_CHANGE',
-    data_lama: { diet: 'Diet Biasa' },
-    data_baru: { diet: 'Diet Cair Nutrisi Tinggi 2000 kcal' },
-    alasan: 'Permintaan tanpa verifikasi berkas DPJP lengkap',
-    status: 'REJECTED',
-    dampak_dapur: 'Perubahan Etiket Diet',
-    gizi_rs_id: 'usr-gz-001',
-    gizi_rs_name: 'Ahmad Rizky, S.Gz',
-    gizi_rs_email: 'rizky.gizi@rs-sehat.id',
-    requested_at: '2026-08-12T05:30:00Z',
-    reviewed_by: 'Supervisor Katering',
-    reviewed_at: '2026-08-12T05:40:00Z',
-    review_notes: 'Ditolak: Perubahan diet cair memerlukan verifikasi form instruksi DPJP.',
-  },
-  {
-    id: 307,
-    pasien_id: 4,
-    no_rm: 'RM-2026-112',
-    nama_pasien: 'Dewi Lestari',
-    gedung: 'Gedung C',
-    ruangan: 'Melati 2',
-    bed: 'Bed 05',
-    kelas: 'Kelas 3',
-    batch_id: 1,
-    batch_code: 'BATCH-20260812-PAGI-9941',
-    waktu_makan: 'SIANG',
-    jenis_perubahan: 'ROOM_TRANSFER',
-    data_lama: { ruangan: 'Anggrek 1', bed: 'Bed 02', gedung: 'Gedung B' },
-    data_baru: { ruangan: 'Melati 2', bed: 'Bed 05', gedung: 'Gedung C' },
-    alasan: 'Pasien pindah ruangan isolasi Gedung C',
-    status: 'APPROVED',
-    dampak_dapur: 'Pindah Lokasi Antar (Gedung B ➔ Gedung C)',
-    gizi_rs_id: 'usr-gz-002',
-    gizi_rs_name: 'Siti Rahma, S.Gz',
-    gizi_rs_email: 'rahma.gizi@rs-sehat.id',
-    requested_at: '2026-08-11T11:20:00Z',
-    reviewed_by: 'Admin Head Gizi',
-    reviewed_at: '2026-08-11T11:25:00Z',
-    review_notes: 'Lokasi distribusi diperbarui.',
-  },
-];
-
 /**
  * Fetch all registered users with role 'gizi-rs'
  */
@@ -306,11 +86,11 @@ export async function getGiziRsUsers(): Promise<GiziRsUser[]> {
         createdAt: u.createdAt,
       }));
     }
+    return [];
   } catch (error) {
     console.error('Error fetching gizi-rs users from DB:', error);
+    return [];
   }
-
-  return MOCK_GIZI_RS_USERS;
 }
 
 /**
@@ -360,7 +140,7 @@ export async function getRiwayatDietPasienList(
     const dbResults = await query;
 
     if (dbResults && dbResults.length > 0) {
-      const items: RiwayatDietItem[] = dbResults.map((r, idx) => {
+      let items: RiwayatDietItem[] = dbResults.map((r, idx) => {
         let dataLamaObj: DataDietDetail | null = null;
         let dataBaruObj: DataDietDetail | null = null;
 
@@ -379,8 +159,8 @@ export async function getRiwayatDietPasienList(
         else if (jenis === 'NPO') dampak = '-1 Porsi Dibatalkan (Puasa/NPO)';
         else if (jenis === 'ROOM_TRANSFER') dampak = 'Pindah Lokasi Antar Makanan';
 
-        // Extract or match Gizi-RS user details from requested_by string or round-robin match
-        const reqStr = r.requested_by || 'Ahmad Rizky, S.Gz (rizky.gizi@rs-sehat.id)';
+        // Extract or match Gizi-RS user details from requested_by string
+        const reqStr = r.requested_by || 'Staff Gizi-RS (gizi-rs@rs-sehat.id)';
         let staffName = reqStr;
         let staffEmail = 'gizi-rs@rs-sehat.id';
 
@@ -395,9 +175,8 @@ export async function getRiwayatDietPasienList(
           const parts = reqStr.split('(');
           staffName = parts[0].trim();
           staffEmail = parts[1].replace(')', '').trim();
-        } else {
-          // Assigned fallback from mock users list
-          const fallbackUser = giziRsUsers[idx % giziRsUsers.length] || MOCK_GIZI_RS_USERS[0];
+        } else if (giziRsUsers.length > 0) {
+          const fallbackUser = giziRsUsers[idx % giziRsUsers.length];
           staffName = fallbackUser.name;
           staffEmail = fallbackUser.email;
         }
@@ -430,24 +209,22 @@ export async function getRiwayatDietPasienList(
         };
       });
 
+      if (giziRsEmailFilter && giziRsEmailFilter !== 'ALL') {
+        items = items.filter((i) => i.gizi_rs_email.toLowerCase() === giziRsEmailFilter.toLowerCase());
+      }
+      if (jenisFilter && jenisFilter !== 'ALL') {
+        items = items.filter((i) => i.jenis_perubahan === jenisFilter);
+      }
+      if (waktuFilter && waktuFilter !== 'ALL') {
+        items = items.filter((i) => i.waktu_makan === waktuFilter);
+      }
       return items;
     }
+    return [];
   } catch (error) {
     console.error('Error fetching riwayat diet from DB:', error);
+    return [];
   }
-
-  // Fallback data filtering
-  let filtered = MOCK_RIWAYAT_DATA;
-  if (giziRsEmailFilter && giziRsEmailFilter !== 'ALL') {
-    filtered = filtered.filter((i) => i.gizi_rs_email.toLowerCase() === giziRsEmailFilter.toLowerCase());
-  }
-  if (jenisFilter && jenisFilter !== 'ALL') {
-    filtered = filtered.filter((i) => i.jenis_perubahan === jenisFilter);
-  }
-  if (waktuFilter && waktuFilter !== 'ALL') {
-    filtered = filtered.filter((i) => i.waktu_makan === waktuFilter);
-  }
-  return filtered;
 }
 
 /**
@@ -512,45 +289,9 @@ export async function createRiwayatDietLog(data: {
     };
   } catch (error) {
     console.error('Error logging diet change in DB:', error);
+    return {
+      success: false,
+      message: 'Gagal mencatat riwayat perubahan diet di database.',
+    };
   }
-
-  // Fallback mock insertion
-  const newId = 300 + MOCK_RIWAYAT_DATA.length + 1;
-  const newItem: RiwayatDietItem = {
-    id: newId,
-    pasien_id: data.pasien_id,
-    no_rm: `RM-2026-0${newId}`,
-    nama_pasien: `Pasien #${newId}`,
-    gedung: data.data_baru?.gedung || 'Gedung A',
-    ruangan: data.data_baru?.ruangan || 'Rawat Inap',
-    bed: data.data_baru?.bed || 'Bed 01',
-    kelas: data.data_baru?.kelas || 'Kelas 1',
-    batch_code: 'BATCH-20260812-PAGI-9941',
-    waktu_makan: data.waktu_makan,
-    jenis_perubahan: data.jenis_perubahan,
-    data_lama: data.data_lama || null,
-    data_baru: data.data_baru || null,
-    alasan: data.alasan,
-    status: 'APPROVED',
-    dampak_dapur:
-      data.jenis_perubahan === 'NEW_PATIENT'
-        ? '+1 Porsi Emergent'
-        : data.jenis_perubahan === 'DISCHARGE' || data.jenis_perubahan === 'NPO'
-        ? '-1 Porsi Dibatalkan'
-        : 'Perubahan Etiket Diet',
-    gizi_rs_name: data.gizi_rs_name,
-    gizi_rs_email: data.gizi_rs_email,
-    requested_at: new Date().toISOString(),
-    reviewed_by: 'Sistem Terverifikasi',
-    reviewed_at: new Date().toISOString(),
-    review_notes: 'Tercatat otomatis dalam Riwayat Perubahan Diet RS.',
-  };
-
-  MOCK_RIWAYAT_DATA.unshift(newItem);
-  revalidatePath('/dashboard/ag-katering/admin/riwayat');
-
-  return {
-    success: true,
-    message: `Riwayat perubahan diet berhasil dicatat oleh ${data.gizi_rs_name}.`,
-  };
 }

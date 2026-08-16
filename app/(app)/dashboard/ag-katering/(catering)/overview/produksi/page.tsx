@@ -1,7 +1,7 @@
 import React from 'react';
 import type { Metadata } from 'next';
 import { getLiveMonitoringData } from '@/servers/overview.service';
-import OverviewClient from '@/components/ag-katering/user/overview/OverviewClient';
+import OverviewProductionClient from '@/components/ag-katering/user/overview/produksi/layout/OverviewProductionClient';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -15,5 +15,5 @@ export const metadata: Metadata = {
 export default async function OverviewPage() {
   const initialData = await getLiveMonitoringData();
 
-  return <OverviewClient initialData={initialData} />;
+  return <OverviewProductionClient initialData={initialData} />;
 }

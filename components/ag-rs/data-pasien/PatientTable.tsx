@@ -42,6 +42,7 @@ export default function PatientTable({
   ruangan = '',
   gedung = '',
   searchQuery = '',
+  revisionContext,
 }: PatientTableProps) {
   const router = useRouter();
 
@@ -118,21 +119,26 @@ export default function PatientTable({
 
     setIsSavingInline(true);
     try {
-      const res = await createPatient({
-        nama_pasien: inlineAddDraft.nama_pasien.trim(),
-        no_rm: inlineAddDraft.no_rm.trim(),
-        diet: inlineAddDraft.diet.trim(),
-        kelas: inlineAddDraft.kelas || kelasOptions[0] || 'Kelas 1',
-        gedung: inlineAddDraft.gedung || gedung,
-        ruangan: inlineAddDraft.ruangan || ruangan,
-        bed: inlineAddDraft.bed || bedKey,
-        status_pasien: inlineAddDraft.status_pasien || 'AKTIF',
-        is_npo: Boolean(inlineAddDraft.is_npo),
-      });
+      const res = await createPatient(
+        {
+          nama_pasien: inlineAddDraft.nama_pasien.trim(),
+          no_rm: inlineAddDraft.no_rm.trim(),
+          diet: inlineAddDraft.diet.trim(),
+          kelas: inlineAddDraft.kelas || kelasOptions[0] || 'Kelas 1',
+          gedung: inlineAddDraft.gedung || gedung,
+          ruangan: inlineAddDraft.ruangan || ruangan,
+          bed: inlineAddDraft.bed || bedKey,
+          status_pasien: inlineAddDraft.status_pasien || 'AKTIF',
+          is_npo: Boolean(inlineAddDraft.is_npo),
+        },
+        revisionContext,
+      );
 
       if (res.success) {
         toast.success(
-          `Pasien ${inlineAddDraft.nama_pasien.trim()} berhasil ditambahkan ke ${inlineAddDraft.bed || bedKey}!`,
+          revisionContext?.isRevisiMode
+            ? `Revisi Pasien ${inlineAddDraft.nama_pasien.trim()} diajukan ke Otorisasi Supervisor!`
+            : `Pasien ${inlineAddDraft.nama_pasien.trim()} berhasil ditambahkan ke ${inlineAddDraft.bed || bedKey}!`,
         );
         setInlineAddBedKey(null);
         setInlineAddDraft(null);
@@ -185,11 +191,17 @@ export default function PatientTable({
     }
 
     try {
-      const res = await updatePatientField(patient.id, { [field]: value });
+      const res = await updatePatientField(
+        patient.id,
+        { [field]: value },
+        revisionContext,
+      );
       if (res.success) {
         markAsModified(patient.id, field);
         toast.success(
-          `${field.toUpperCase().replace('_', ' ')} ${patient.nama_pasien} diperbarui`,
+          revisionContext?.isRevisiMode
+            ? `Revisi ${field.toUpperCase().replace('_', ' ')} ${patient.nama_pasien} diajukan ke Otorisasi Supervisor`
+            : `${field.toUpperCase().replace('_', ' ')} ${patient.nama_pasien} diperbarui`,
         );
       } else {
         toast.error(res.message);
@@ -213,12 +225,20 @@ export default function PatientTable({
   async function handleQuickPulang(patient: Patient) {
     setContextMenu(null);
     try {
-      const res = await updatePatientField(patient.id, {
-        status_pasien: 'PULANG',
-      });
+      const res = await updatePatientField(
+        patient.id,
+        {
+          status_pasien: 'PULANG',
+        },
+        revisionContext,
+      );
       if (res.success) {
         markAsModified(patient.id, 'status_pasien');
-        toast.success(`${patient.nama_pasien} diproses PULANG.`);
+        toast.success(
+          revisionContext?.isRevisiMode
+            ? `Revisi kepulangan ${patient.nama_pasien} diajukan ke Otorisasi Supervisor.`
+            : `${patient.nama_pasien} diproses PULANG.`,
+        );
       } else {
         toast.error(res.message);
       }
@@ -238,14 +258,18 @@ export default function PatientTable({
     return null;
   }
 
+  const activePatients = patients.filter(
+    (p) => p.status_pasien !== 'PULANG',
+  );
+
   const targetCapacity = Math.max(
-    patients.length,
+    activePatients.length,
     totalBedCapacity > 0 ? totalBedCapacity : 6,
   );
   const bedSlots: (Patient | null)[] = Array(targetCapacity).fill(null);
   const unassignedPatients: Patient[] = [];
 
-  patients.forEach((p) => {
+  activePatients.forEach((p) => {
     const slotIdx = getBedSlotIndex(p.bed);
     if (
       slotIdx !== null &&
@@ -374,6 +398,7 @@ export default function PatientTable({
         patient={pindahPatient}
         gedungList={gedungList}
         onClose={() => setPindahPatient(null)}
+        revisionContext={revisionContext}
         onSuccess={(id) => {
           markAsModified(id, 'ruangan');
           markAsModified(id, 'gedung');

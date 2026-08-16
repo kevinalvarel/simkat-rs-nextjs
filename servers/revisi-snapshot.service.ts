@@ -65,127 +65,6 @@ export interface MutationResult {
   message: string;
 }
 
-// Fallback Mock Data for realistic demonstration when DB is empty or disconnected
-const MOCK_REVISI_DATA: RevisiPostSnapshotItem[] = [
-  {
-    id: 101,
-    pasien_id: 1,
-    no_rm: 'RM-2026-001',
-    nama_pasien: 'Budi Santoso',
-    gedung: 'Gedung A',
-    ruangan: 'Melati 1',
-    bed: 'Bed 01',
-    kelas: 'Kelas 1',
-    batch_id: 1,
-    batch_code: 'BATCH-20260812-PAGI-9941',
-    waktu_makan: 'PAGI',
-    jenis_perubahan: 'DIET_CHANGE',
-    data_lama: { diet: 'Diet RG (Rendah Garam)', ruangan: 'Melati 1', bed: 'Bed 01' },
-    data_baru: { diet: 'Diet DM (Diabetes Melitus) 1700 kcal', ruangan: 'Melati 1', bed: 'Bed 01' },
-    alasan: 'Instruksi Dokter Penanggung Jawab jam 06:10 - Pasien menunjukkan peningkatan GDS 280 mg/dL',
-    status: 'PENDING',
-    dampak_dapur: 'Perubahan Etiket & Komposisi Menu Diet',
-    requested_by: 'Ns. Ratna (Perawat Melati)',
-    requested_at: '2026-08-12T06:12:00Z',
-  },
-  {
-    id: 102,
-    pasien_id: 2,
-    no_rm: 'RM-2026-042',
-    nama_pasien: 'Siti Aminah',
-    gedung: 'Gedung B',
-    ruangan: 'Mawar 3',
-    bed: 'Bed 04',
-    kelas: 'VIP',
-    batch_id: 1,
-    batch_code: 'BATCH-20260812-PAGI-9941',
-    waktu_makan: 'PAGI',
-    jenis_perubahan: 'NEW_PATIENT',
-    data_lama: null,
-    data_baru: { diet: 'Diet Lunak Rendah Lemak', ruangan: 'Mawar 3', bed: 'Bed 04', kelas: 'VIP' },
-    alasan: 'Pasien baru masuk dari IGD pukul 05:45 WIB pasca snapshot ter-lock',
-    status: 'APPROVED',
-    dampak_dapur: '+1 Porsi Emergent (Tambahan Makanan)',
-    requested_by: 'dr. Hendra Sp.PD (Dokter IGD)',
-    requested_at: '2026-08-12T05:50:00Z',
-    reviewed_by: 'Nutrisionis Dapur - Anita',
-    reviewed_at: '2026-08-12T05:55:00Z',
-    review_notes: 'Disetujui. Porsi ekstra sedang disiapkan di lini 2 dapur.',
-  },
-  {
-    id: 103,
-    pasien_id: 3,
-    no_rm: 'RM-2026-089',
-    nama_pasien: 'Ahmad Dahlan',
-    gedung: 'Gedung A',
-    ruangan: 'Dahlia 2',
-    bed: 'Bed 02',
-    kelas: 'Kelas 2',
-    batch_id: 1,
-    batch_code: 'BATCH-20260812-PAGI-9941',
-    waktu_makan: 'PAGI',
-    jenis_perubahan: 'NPO',
-    data_lama: { diet: 'Diet Biasa Nasi', status_pasien: 'AKTIF' },
-    data_baru: { diet: 'NPO (Fasting / Puasa Pre-Op)', status_pasien: 'NPO' },
-    alasan: 'Jadwal operasi CITO gastrointestinal pukul 08:00 WIB',
-    status: 'SELESAI',
-    dampak_dapur: '-1 Porsi Dibatalkan (Tahan Pengiriman)',
-    requested_by: 'Ns. Maya (Perawat Dahlia)',
-    requested_at: '2026-08-12T06:00:00Z',
-    reviewed_by: 'Nutrisionis Dapur - Anita',
-    reviewed_at: '2026-08-12T06:05:00Z',
-    review_notes: 'Nampan tray ditarik dari troley pengiriman Dahlia.',
-  },
-  {
-    id: 104,
-    pasien_id: 4,
-    no_rm: 'RM-2026-112',
-    nama_pasien: 'Dewi Lestari',
-    gedung: 'Gedung C',
-    ruangan: 'Melati 2',
-    bed: 'Bed 05',
-    kelas: 'Kelas 3',
-    batch_id: 1,
-    batch_code: 'BATCH-20260812-PAGI-9941',
-    waktu_makan: 'PAGI',
-    jenis_perubahan: 'ROOM_TRANSFER',
-    data_lama: { ruangan: 'Anggrek 1', bed: 'Bed 02', gedung: 'Gedung B' },
-    data_baru: { ruangan: 'Melati 2', bed: 'Bed 05', gedung: 'Gedung C' },
-    alasan: 'Pasien pindah ruangan karena alokasi kamar isolasi',
-    status: 'APPROVED',
-    dampak_dapur: 'Pindah Lokasi Antar (Gedung B ➔ Gedung C)',
-    requested_by: 'Pengawas Ruangan Anggrek',
-    requested_at: '2026-08-12T06:20:00Z',
-    reviewed_by: 'Nutrisionis Dapur - Roni',
-    reviewed_at: '2026-08-12T06:25:00Z',
-    review_notes: 'Plat label troley diubah ke Gedung C Melati 2.',
-  },
-  {
-    id: 105,
-    pasien_id: 5,
-    no_rm: 'RM-2026-150',
-    nama_pasien: 'Rahmat Hidayat',
-    gedung: 'Gedung B',
-    ruangan: 'Mawar 1',
-    bed: 'Bed 01',
-    kelas: 'Kelas 1',
-    batch_id: 1,
-    batch_code: 'BATCH-20260812-PAGI-9941',
-    waktu_makan: 'PAGI',
-    jenis_perubahan: 'DISCHARGE',
-    data_lama: { diet: 'Diet RP (Rendah Protein)', status_pasien: 'AKTIF' },
-    data_baru: { diet: 'Pasien Pulang (Discharged)', status_pasien: 'PULANG' },
-    alasan: 'Pasien diizinkan pulang oleh DPJP pukul 06:15 WIB',
-    status: 'APPROVED',
-    dampak_dapur: '-1 Porsi Dibatalkan (Pasien Pulang)',
-    requested_by: 'Ns. Fitri (Mawar)',
-    requested_at: '2026-08-12T06:18:00Z',
-    reviewed_by: 'Nutrisionis Dapur - Roni',
-    reviewed_at: '2026-08-12T06:22:00Z',
-    review_notes: 'Dibatalkan dalam daftar distribusi.',
-  },
-];
-
 /**
  * Fetch all post-snapshot diet revisions with optional filtering
  */
@@ -230,7 +109,7 @@ export async function getRevisiPostSnapshot(
     const dbResults = await query;
 
     if (dbResults && dbResults.length > 0) {
-      return dbResults.map((r) => {
+      let mapped = dbResults.map((r) => {
         let dataLamaObj: DataDietDetail | null = null;
         let dataBaruObj: DataDietDetail | null = null;
 
@@ -274,20 +153,20 @@ export async function getRevisiPostSnapshot(
           review_notes: r.review_notes,
         };
       });
+
+      if (waktuMakan && waktuMakan !== 'ALL') {
+        mapped = mapped.filter((i) => i.waktu_makan === waktuMakan);
+      }
+      if (batchId) {
+        mapped = mapped.filter((i) => i.batch_id === batchId);
+      }
+      return mapped;
     }
+    return [];
   } catch (error) {
     console.error('Error fetching otorisasi_perubahan_diet from DB:', error);
+    return [];
   }
-
-  // Return fallback data if DB table is empty or connection fails
-  let filtered = MOCK_REVISI_DATA;
-  if (waktuMakan && waktuMakan !== 'ALL') {
-    filtered = filtered.filter((i) => i.waktu_makan === waktuMakan);
-  }
-  if (batchId) {
-    filtered = filtered.filter((i) => i.batch_id === batchId);
-  }
-  return filtered;
 }
 
 /**
@@ -347,24 +226,18 @@ export async function updateStatusRevisi(
         message: `Status revisi #${id} berhasil diperbarui menjadi ${status}.`,
       };
     }
+
+    return {
+      success: false,
+      message: `Revisi #${id} tidak ditemukan.`,
+    };
   } catch (error) {
     console.error('Error updating status revisi in DB:', error);
+    return {
+      success: false,
+      message: 'Gagal memperbarui status revisi di database.',
+    };
   }
-
-  // Fallback simulation for mock data
-  const mockIndex = MOCK_REVISI_DATA.findIndex((i) => i.id === id);
-  if (mockIndex !== -1) {
-    MOCK_REVISI_DATA[mockIndex].status = status;
-    MOCK_REVISI_DATA[mockIndex].reviewed_by = reviewerName;
-    MOCK_REVISI_DATA[mockIndex].reviewed_at = new Date().toISOString();
-    MOCK_REVISI_DATA[mockIndex].review_notes = notes || null;
-  }
-
-  revalidatePath('/dashboard/ag-katering/revisi-post-snapshot');
-  return {
-    success: true,
-    message: `Status revisi #${id} berhasil diperbarui menjadi ${status}.`,
-  };
 }
 
 /**
@@ -402,42 +275,9 @@ export async function createRevisiPostSnapshot(data: {
     };
   } catch (error) {
     console.error('Error creating revisi post-snapshot:', error);
+    return {
+      success: false,
+      message: 'Gagal menambahkan revisi post-snapshot ke database.',
+    };
   }
-
-  // Fallback mock insert
-  const newId = 100 + MOCK_REVISI_DATA.length + 1;
-  const mockNew: RevisiPostSnapshotItem = {
-    id: newId,
-    pasien_id: data.pasien_id,
-    no_rm: `RM-2026-${newId}`,
-    nama_pasien: `Pasien Emergent #${newId}`,
-    gedung: data.data_baru?.gedung || 'Gedung A',
-    ruangan: data.data_baru?.ruangan || 'Rawat Inap',
-    bed: data.data_baru?.bed || 'Bed Auto',
-    kelas: data.data_baru?.kelas || 'Kelas 1',
-    batch_id: data.batch_id || 1,
-    batch_code: 'BATCH-20260812-PAGI-9941',
-    waktu_makan: data.waktu_makan,
-    jenis_perubahan: data.jenis_perubahan,
-    data_lama: data.data_lama || null,
-    data_baru: data.data_baru || null,
-    alasan: data.alasan,
-    status: 'PENDING',
-    dampak_dapur:
-      data.jenis_perubahan === 'NEW_PATIENT'
-        ? '+1 Porsi Emergent'
-        : data.jenis_perubahan === 'DISCHARGE' || data.jenis_perubahan === 'NPO'
-        ? '-1 Porsi Dibatalkan'
-        : 'Perubahan Etiket Diet',
-    requested_by: data.requested_by,
-    requested_at: new Date().toISOString(),
-  };
-
-  MOCK_REVISI_DATA.unshift(mockNew);
-  revalidatePath('/dashboard/ag-katering/revisi-post-snapshot');
-
-  return {
-    success: true,
-    message: 'Revisi post-snapshot berhasil ditambahkan.',
-  };
 }

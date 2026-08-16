@@ -40,10 +40,11 @@ export default function EtiketPrintPreviewModal({
   const handlePrint = useReactToPrint({
     contentRef: printRef,
     documentTitle: modalTitle,
+
     pageStyle: `
       @page {
-        size: auto;
-        margin: 8mm;
+        size: 100mm 50mm;
+        margin: 0;
       }
       @media print {
         html, body {
@@ -56,30 +57,48 @@ export default function EtiketPrintPreviewModal({
           font-family: Arial, Helvetica, sans-serif !important;
         }
         .etiket-container-print {
-          display: flex !important;
-          flex-wrap: wrap !important;
-          gap: 8mm !important;
-          justify-content: flex-start !important;
-          align-items: flex-start !important;
-          width: 100% !important;
+          display: block !important;
+          width: 100mm !important;
           margin: 0 !important;
           padding: 0 !important;
         }
         .etiket-card-print {
-          display: block !important;
-          width: 85mm !important;
-          max-width: 85mm !important;
-          min-width: 85mm !important;
-          padding: 5mm 6mm !important;
-          margin: 0 0 6mm 0 !important;
-          border: 2px solid #000000 !important;
-          border-radius: 4px !important;
+          display: flex !important;
+          flex-direction: column !important;
+          justify-content: space-between !important;
+          width: 100mm !important;
+          height: 50mm !important;
+          max-width: 100mm !important;
+          max-height: 50mm !important;
+          min-width: 100mm !important;
+          min-height: 50mm !important;
+          padding: 2.5mm 3.5mm !important;
+          margin: 0 !important;
+          border: 1.5px solid #000000 !important;
+          border-radius: 2px !important;
           background-color: #ffffff !important;
           color: #000000 !important;
           page-break-inside: avoid !important;
+          page-break-after: always !important;
           break-inside: avoid !important;
+          break-after: page !important;
           box-sizing: border-box !important;
           box-shadow: none !important;
+          overflow: hidden !important;
+        }
+        .etiket-card-print h2 {
+          font-size: 10.5pt !important;
+          margin: 0 !important;
+          line-height: 1.1 !important;
+        }
+        .etiket-card-print hr {
+          border-top: 1.5px solid #000000 !important;
+          margin: 1.5mm 0 !important;
+        }
+        .etiket-card-print span,
+        .etiket-card-print div {
+          font-size: 8.5pt !important;
+          line-height: 1.25 !important;
         }
       }
     `,

@@ -1,6 +1,8 @@
-import type { Patient, KelasOption } from '@/servers/patient.service';
+import type { Patient, KelasOption, RevisionContext } from '@/servers/patient.service';
 import type { GedungWithRuangan } from '@/servers/tempat.service';
 import { PatientFormValues } from '@/validations/PatientFormSchema';
+
+export type { RevisionContext };
 
 export type EditableField =
   | 'nama_pasien'
@@ -34,6 +36,7 @@ export interface PatientTableProps {
   gedung?: string;
   searchQuery?: string;
   onAddPatientForBed?: (bedName: string) => void;
+  revisionContext?: RevisionContext;
 }
 
 export interface DataPasienClientProps {
@@ -51,8 +54,10 @@ export interface PatientFormDialogProps {
   defaultRuangan?: string;
   defaultGedung?: string;
   defaultBed?: string;
+  initialBed?: string;
   kelasList?: KelasOption[];
   gedungList?: GedungWithRuangan[];
+  revisionContext?: RevisionContext;
 }
 
 export interface PindahRuanganDialogProps {
@@ -60,20 +65,26 @@ export interface PindahRuanganDialogProps {
   gedungList: GedungWithRuangan[];
   onClose: () => void;
   onSuccess: (patientId: number) => void;
+  revisionContext?: RevisionContext;
 }
 
 export interface DeletePatientDialogProps {
-  isOpen: boolean;
+  isOpen?: boolean;
+  open?: boolean;
   patient: Patient | null;
-  onClose: () => void;
-  onSuccess: () => void;
+  onClose?: () => void;
+  onOpenChange?: (open: boolean) => void;
+  onSuccess?: () => void;
+  revisionContext?: RevisionContext;
 }
 
 export interface PatientToolbarProps {
   searchQuery: string;
   onSearchChange: (value: string) => void;
   onAddPatient: () => void;
-  totalPatients: number;
+  totalPatients?: number;
+  totalCount?: number;
+  filteredCount?: number;
 }
 
 export interface InlineAddRowProps {

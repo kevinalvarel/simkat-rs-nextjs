@@ -26,6 +26,26 @@ export default function DataPasienClient({
 
   const isRevisiMode = searchParams.get('isRevisi') === 'true';
   const revisiMeal = searchParams.get('revisiMeal') || 'Batch Sebelumnya';
+  const waktuMakanParam = searchParams.get('waktuMakan');
+  const waktuMakan: 'PAGI' | 'SIANG' | 'MALAM' =
+    (waktuMakanParam as 'PAGI' | 'SIANG' | 'MALAM') ||
+    (revisiMeal.toUpperCase().includes('SIANG')
+      ? 'SIANG'
+      : revisiMeal.toUpperCase().includes('MALAM')
+        ? 'MALAM'
+        : 'PAGI');
+  const batchIdParam = searchParams.get('batchId');
+  const batchId = batchIdParam ? parseInt(batchIdParam, 10) : null;
+
+  const revisionContext = useMemo(
+    () => ({
+      isRevisiMode,
+      waktuMakan,
+      batchId,
+      requestedBy: 'Ahli Gizi RS',
+    }),
+    [isRevisiMode, waktuMakan, batchId],
+  );
 
   // UI state
   const [searchQuery, setSearchQuery] = useState('');
@@ -58,11 +78,12 @@ export default function DataPasienClient({
 
   const totalBedCapacity = targetRuangan?.jumlahBed ?? 6;
 
-  // Filter patients based on search query
+  // Filter patients based on search query (excluding PULANG patients)
   const filteredPatients = useMemo(() => {
-    if (!searchQuery.trim()) return patients;
+    const active = patients.filter((p) => p.status_pasien !== 'PULANG');
+    if (!searchQuery.trim()) return active;
     const query = searchQuery.toLowerCase().trim();
-    return patients.filter(
+    return active.filter(
       (p) =>
         p.nama_pasien.toLowerCase().includes(query) ||
         p.no_rm.toLowerCase().includes(query),
@@ -159,6 +180,7 @@ export default function DataPasienClient({
         gedung={gedung}
         searchQuery={searchQuery}
         onAddPatientForBed={(bedName) => handleAddPatient(bedName)}
+        revisionContext={revisionContext}
       />
 
       {/* Form Dialog */}
@@ -171,6 +193,7 @@ export default function DataPasienClient({
         initialBed={initialBed}
         kelasList={kelasList}
         gedungList={gedungList}
+        revisionContext={revisionContext}
       />
 
       {/* Delete Confirmation Dialog */}
@@ -178,6 +201,7 @@ export default function DataPasienClient({
         patient={patientToDelete}
         open={isDeleteOpen}
         onOpenChange={setIsDeleteOpen}
+        revisionContext={revisionContext}
       />
     </div>
   );
