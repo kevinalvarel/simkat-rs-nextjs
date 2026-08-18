@@ -124,6 +124,7 @@ export async function createPatient(
 
     revalidatePath('/dashboard/ag-rs/data-pasien');
     revalidatePath('/dashboard/ag-katering/overview');
+    revalidatePath('/dashboard/ag-katering/mapping-diet');
     return {
       success: true,
       message: isRevisi
@@ -196,7 +197,8 @@ export async function updatePatient(
       revalidatePath('/dashboard/ag-katering/overview/pemorsian');
       return {
         success: true,
-        message: 'Perubahan diajukan ke Otorisasi Supervisor (Menunggu Persetujuan).',
+        message:
+          'Perubahan diajukan ke Otorisasi Supervisor (Menunggu Persetujuan).',
       };
     }
 
@@ -276,7 +278,8 @@ export async function updatePatientField(
       revalidatePath('/dashboard/ag-katering/overview/pemorsian');
       return {
         success: true,
-        message: 'Perubahan diajukan ke Otorisasi Supervisor (Menunggu Persetujuan).',
+        message:
+          'Perubahan diajukan ke Otorisasi Supervisor (Menunggu Persetujuan).',
       };
     }
 
@@ -331,7 +334,8 @@ export async function deletePatient(
       revalidatePath('/dashboard/ag-katering/overview/pemorsian');
       return {
         success: true,
-        message: 'Pengajuan kepulangan pasien dikirim ke Otorisasi Supervisor (Menunggu Persetujuan).',
+        message:
+          'Pengajuan kepulangan pasien dikirim ke Otorisasi Supervisor (Menunggu Persetujuan).',
       };
     }
 

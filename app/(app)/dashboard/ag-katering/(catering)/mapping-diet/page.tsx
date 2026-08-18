@@ -7,6 +7,8 @@ import {
 } from '@/servers/mapping-diet.service';
 import MappingDietClient from '@/components/ag-katering/user/mapping-diet/MappingDietClient';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'Mapping Diet Pasien - Ahli Gizi Katering',
   description:
