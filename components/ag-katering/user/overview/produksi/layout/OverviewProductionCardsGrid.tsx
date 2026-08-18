@@ -16,7 +16,7 @@ export default function OverviewProductionCardsGrid({
     (card) =>
       card.code &&
       card.code.toUpperCase() !== 'TIDAK' &&
-      card.code.toUpperCase() !== 'NON'
+      card.code.toUpperCase() !== 'NON',
   );
 
   return (

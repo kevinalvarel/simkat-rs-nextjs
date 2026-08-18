@@ -1,64 +1,167 @@
 'use client';
 
-import React, { useState, useEffect, useTransition } from 'react';
-import type { SnapshotBatch, TabulationSummary } from '@/servers/tabulasi.service';
-import { getTabulationSummary } from '@/servers/tabulasi.service';
-import TabulasiStats from './TabulasiStats';
-import TabulasiBreakdown from './TabulasiBreakdown';
-import TabulasiDetailsTable from './TabulasiDetailsTable';
+import React, { useState, useMemo, useTransition } from 'react';
+import type { 
+  TabulasiDashboardData, 
+  TabulasiFilterState, 
+  TabulasiMenuItem 
+} from '@/types/tabulasitypes';
+import { getTabulasiDashboardData } from '@/servers/tabulasi.service';
+import TabulasiHeader from './TabulasiHeader';
+import TabulasiFilters from './TabulasiFilters';
+import TabulasiPatientSummary from './TabulasiPatientSummary';
+import TabulasiLocationDistribution from './TabulasiLocationDistribution';
+import TabulasiDietDistribution from './TabulasiDietDistribution';
+import TabulasiMenuCards from './TabulasiMenuCards';
+import TabulasiMenuDetailModal from './TabulasiMenuDetailModal';
+import TabulasiSnackSection from './TabulasiSnackSection';
+import TabulasiScheduleTimeline from './TabulasiScheduleTimeline';
+import TabulasiQuickActions from './TabulasiQuickActions';
+import TabulasiGenerateModal from './TabulasiGenerateModal';
+import TabulasiExportModal from './TabulasiExportModal';
+import TabulasiPrintView from './TabulasiPrintView';
+import { RefreshCw, FileQuestion, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { 
-  Printer, 
-  Calendar, 
-  Database, 
-  RefreshCw, 
-  GitMerge, 
-  BookOpen, 
-  ListOrdered,
-  FileSpreadsheet
-} from 'lucide-react';
 import { toast } from 'sonner';
 
 interface TabulasiClientProps {
-  batches: SnapshotBatch[];
-  initialSummary: TabulationSummary | null;
+  initialData: TabulasiDashboardData;
 }
 
-export default function TabulasiClient({ batches, initialSummary }: TabulasiClientProps) {
-  const [selectedBatchId, setSelectedBatchId] = useState<number>(
-    initialSummary?.batch?.id ?? (batches[0]?.id || 0)
+export default function TabulasiClient({ initialData }: TabulasiClientProps) {
+  const [data, setData] = useState<TabulasiDashboardData>(initialData);
+  const [selectedDate, setSelectedDate] = useState<string>(
+    initialData.batch?.tanggal_produksi || new Date().toISOString().slice(0, 10)
   );
-  const [summary, setSummary] = useState<TabulationSummary | null>(initialSummary);
-  const [activeTab, setActiveTab] = useState<'rekap' | 'daftar'>('rekap');
+  const [selectedMeal, setSelectedMeal] = useState<string>(
+    initialData.batch?.waktu_makan || 'Pagi'
+  );
+
+  // Filters State
+  const [filters, setFilters] = useState<TabulasiFilterState>({
+    date: selectedDate,
+    mealTime: 'Semua',
+    gedung: 'Semua',
+    lantai: 'Semua',
+    diet: 'Semua',
+    status: 'Semua',
+    search: '',
+  });
+
+  // Modal States
+  const [selectedMenuDetail, setSelectedMenuDetail] = useState<TabulasiMenuItem | null>(null);
+  const [isGenerateOpen, setIsGenerateOpen] = useState(false);
+  const [isExportOpen, setIsExportOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
-  // Load new summary on batch change
-  useEffect(() => {
-    if (selectedBatchId && selectedBatchId !== initialSummary?.batch?.id) {
-      startTransition(async () => {
-        try {
-          const res = await getTabulationSummary(selectedBatchId);
-          if (res) {
-            setSummary(res);
-            toast.success(`Data batch ${res.batch?.batch_code} berhasil dimuat.`);
-          } else {
-            toast.error('Gagal mengambil data rekapitulasi.');
-          }
-        } catch (err) {
-          toast.error('Terjadi kesalahan memuat data.');
-        }
-      });
-    }
-  }, [selectedBatchId, initialSummary]);
+  // Handle filter updates
+  function handleFilterChange(newFilters: Partial<TabulasiFilterState>) {
+    setFilters((prev) => ({ ...prev, ...newFilters }));
+  }
 
+  function handleResetFilters() {
+    setFilters({
+      date: selectedDate,
+      mealTime: 'Semua',
+      gedung: 'Semua',
+      lantai: 'Semua',
+      diet: 'Semua',
+      status: 'Semua',
+      search: '',
+    });
+    toast.info('Filter operasional telah di-reset.');
+  }
+
+  // Handle date change from header
+  function handleDateChange(newDate: string) {
+    setSelectedDate(newDate);
+    setFilters((prev) => ({ ...prev, date: newDate }));
+    handleRefreshData(newDate, selectedMeal);
+  }
+
+  // Handle meal change from header
+  function handleMealChange(newMeal: string) {
+    setSelectedMeal(newMeal);
+    handleRefreshData(selectedDate, newMeal);
+  }
+
+  // Refresh data from server
+  function handleRefreshData(dateParam?: string, mealParam?: string) {
+    startTransition(async () => {
+      try {
+        const refreshed = await getTabulasiDashboardData(
+          undefined,
+          dateParam || selectedDate,
+          mealParam || selectedMeal
+        );
+        setData(refreshed);
+        toast.success(`Data tabulasi ${mealParam || selectedMeal} (${dateParam || selectedDate}) diperbarui.`);
+      } catch (err) {
+        toast.error('Gagal menyegarkan data tabulasi.');
+      }
+    });
+  }
+
+  // Print handler
   function handlePrint() {
     window.print();
   }
 
-  const selectedBatch = summary?.batch;
+  // Dynamic Filtering on Menu Items
+  const filteredMenuItems = useMemo(() => {
+    return data.menuItems.filter((item) => {
+      // 1. Search Query
+      if (filters.search.trim()) {
+        const q = filters.search.toLowerCase();
+        const matchName = item.name.toLowerCase().includes(q);
+        const matchCategory = item.category.toLowerCase().includes(q);
+        const matchDiet = item.dietBreakdown.some((d) => d.diet.toLowerCase().includes(q) || (d.label && d.label.toLowerCase().includes(q)));
+        if (!matchName && !matchCategory && !matchDiet) return false;
+      }
+
+      // 2. Diet Filter
+      if (filters.diet !== 'Semua') {
+        const hasDiet = item.dietBreakdown.some(
+          (d) => d.diet.toUpperCase() === filters.diet.toUpperCase()
+        );
+        if (!hasDiet) return false;
+      }
+
+      // 3. Status Filter
+      if (filters.status !== 'Semua') {
+        const normStatus = filters.status.toUpperCase();
+        if (normStatus === 'READY' && item.status !== 'READY') return false;
+        if (normStatus === 'PENDING' && item.status !== 'PENDING') return false;
+        if (normStatus.includes('PERIKSA') && item.status !== 'CHECK') return false;
+      }
+
+      // 4. Gedung Filter
+      if (filters.gedung !== 'Semua') {
+        const hasGedung = item.locationBreakdown.some((loc) =>
+          loc.gedung.toLowerCase().includes(filters.gedung.toLowerCase())
+        );
+        if (!hasGedung) return false;
+      }
+
+      // 5. Lantai Filter
+      if (filters.lantai !== 'Semua') {
+        const hasFloor = item.locationBreakdown.some((loc) =>
+          loc.floors?.some((fl) => fl.floor.toLowerCase() === filters.lantai.toLowerCase())
+        );
+        if (!hasFloor) return false;
+      }
+
+      return true;
+    });
+  }, [data.menuItems, filters]);
+
+  // Compute filtered total portions
+  const totalFilteredPortions = useMemo(() => {
+    return filteredMenuItems.reduce((sum, item) => sum + item.totalPortions, 0);
+  }, [filteredMenuItems]);
 
   return (
-    <div className="flex flex-1 flex-col gap-5 sm:gap-6 p-3 sm:p-4 md:p-6 max-w-7xl mx-auto w-full min-w-0 overflow-x-hidden print:p-0 print:max-w-none">
+    <div className="flex flex-1 flex-col gap-6 p-3.5 sm:p-5 md:p-6 lg:p-8 max-w-7xl mx-auto w-full min-w-0 overflow-x-hidden print:p-0 print:max-w-none">
       
       {/* CSS @media print styling overrides */}
       <style jsx global>{`
@@ -69,10 +172,10 @@ export default function TabulasiClient({ batches, initialSummary }: TabulasiClie
           aside, header, nav, button, select, [role="tablist"], .no-print {
             display: none !important;
           }
-          #print-area, #print-area * {
+          #tabulasi-print-view, #tabulasi-print-view * {
             visibility: visible;
           }
-          #print-area {
+          #tabulasi-print-view {
             position: absolute;
             left: 0;
             top: 0;
@@ -80,160 +183,172 @@ export default function TabulasiClient({ batches, initialSummary }: TabulasiClie
             display: block !important;
             background: white !important;
             color: black !important;
-            font-size: 12px;
-          }
-          table {
-            width: 100% !important;
-            border-collapse: collapse !important;
-          }
-          th, td {
-            border: 1px solid #ccc !important;
-            padding: 6px !important;
-            text-align: left !important;
+            font-size: 11px;
           }
         }
       `}</style>
 
-      {/* 1. Header Banner (Hidden in Print) */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-gradient-to-r from-teal-500/10 via-primary/5 to-transparent p-4 sm:p-5 rounded-2xl border border-teal-500/20 shadow-xs min-w-0 no-print">
-        <div className="space-y-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground font-sans">
-              Tabulasi & Rekapitulasi Snapshot
-            </h1>
-            <span className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-semibold px-2.5 py-0.5 rounded-full bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300 border border-teal-300">
-              <Database className="w-3.5 h-3.5" /> Data Katering Dapur
-            </span>
-          </div>
-          <p className="text-xs sm:text-sm text-muted-foreground">
-            Rekap porsi memasak, ekstra diet, buah, snack, dan lokasi tujuan pengantaran dari snapshot aktif.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 self-start sm:self-auto shrink-0 flex-wrap">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handlePrint}
-            disabled={!summary || isPending}
-            className="gap-2 shadow-xs text-xs font-bold"
-          >
-            <Printer className="w-4 h-4" />
-            Cetak Dapur (Print)
-          </Button>
-        </div>
-      </div>
-
-      {/* 2. Batch Selector (Hidden in Print) */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-card p-4 rounded-xl border no-print">
-        <div className="flex items-center gap-2">
-          <Calendar className="w-4 h-4 text-primary shrink-0" />
-          <span className="text-xs sm:text-sm font-semibold text-foreground">
-            Pilih Snapshot Batch Terkunci:
-          </span>
-        </div>
-        
-        <div className="relative flex-1 sm:max-w-md">
-          <select
-            value={selectedBatchId}
-            onChange={(e) => setSelectedBatchId(Number(e.target.value))}
-            disabled={isPending}
-            className="w-full h-9 rounded-lg border border-input bg-background px-3 pr-8 text-xs font-semibold focus:outline-hidden focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
-          >
-            {batches.length === 0 ? (
-              <option value="">Tidak ada snapshot terkunci</option>
-            ) : (
-              batches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.batch_code} — {new Date(b.tanggal_produksi).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })} ({b.waktu_makan})
-                </option>
-              ))
-            )}
-          </select>
-        </div>
-      </div>
+      {/* 1. Header (Hidden on Print) */}
+      <TabulasiHeader
+        selectedDate={selectedDate}
+        onDateChange={handleDateChange}
+        selectedMeal={selectedMeal}
+        onMealChange={handleMealChange}
+        onOpenGenerate={() => setIsGenerateOpen(true)}
+        onOpenExport={() => setIsExportOpen(true)}
+        isRefreshing={isPending}
+        onRefresh={() => handleRefreshData()}
+      />
 
       {/* Loading Overlay */}
       {isPending ? (
-        <div className="flex flex-col items-center justify-center p-20 space-y-4 border rounded-2xl bg-card">
-          <RefreshCw className="w-10 h-10 animate-spin text-primary" />
-          <p className="text-sm font-semibold text-muted-foreground">Memuat data rekapitulasi...</p>
+        <div className="flex flex-col items-center justify-center p-16 space-y-3 border border-border/80 rounded-2xl bg-card">
+          <RefreshCw className="w-8 h-8 animate-spin text-primary" />
+          <p className="text-sm font-bold text-foreground">Menghitung ulang tabulasi porsi makanan...</p>
+          <p className="text-xs text-muted-foreground">Menghubungkan data snapshot dengan standar gizi pasien.</p>
         </div>
-      ) : summary ? (
+      ) : data ? (
         
-        /* PRINTABLE WRAPPER */
-        <div id="print-area" className="space-y-6">
+        <div className="space-y-6 no-print">
           
-          {/* Print Only Header */}
-          <div className="hidden print:block border-b-2 border-foreground pb-4 mb-4">
-            <h1 className="text-xl font-bold">REKAPITULASI DAPUR KATERING RS</h1>
-            <p className="text-xs">
-              Batch: <strong>{selectedBatch?.batch_code}</strong> | 
-              Siklus: <strong>{selectedBatch?.waktu_makan}</strong> | 
-              Tanggal: <strong>{selectedBatch?.tanggal_produksi ? new Date(selectedBatch.tanggal_produksi).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-'}</strong>
-            </p>
-            <p className="text-xs mt-1">Total Produksi: <strong>{summary.totalPortions} Porsi Makanan</strong></p>
-          </div>
-
-          {/* 3. Summary Statistics */}
-          <TabulasiStats 
-            total={summary.totalPortions}
-            mapped={summary.mappedPortions}
-            unmapped={summary.unmappedPortions}
-            totalRooms={summary.ruanganBreakdown.length}
+          {/* 2. Operational Filters */}
+          <TabulasiFilters
+            filters={filters}
+            onFilterChange={handleFilterChange}
+            onResetFilters={handleResetFilters}
           />
 
-          {/* 4. Tab Navigation (Hidden in Print) */}
-          <div className="flex border-b border-border/80 gap-2 no-print">
-            <button
-              onClick={() => setActiveTab('rekap')}
-              className={`pb-2.5 px-4 text-xs font-bold transition-all border-b-2 flex items-center gap-1.5 ${
-                activeTab === 'rekap' 
-                  ? 'border-primary text-primary' 
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <BookOpen className="w-4 h-4" />
-              Rekapitulasi Dapur
-            </button>
-            <button
-              onClick={() => setActiveTab('daftar')}
-              className={`pb-2.5 px-4 text-xs font-bold transition-all border-b-2 flex items-center gap-1.5 ${
-                activeTab === 'daftar' 
-                  ? 'border-primary text-primary' 
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <ListOrdered className="w-4 h-4" />
-              Daftar Rincian Diet
-            </button>
+          {/* 3. Patient Summary Cards (5 Key Metrics) */}
+          <TabulasiPatientSummary summary={data.summary} />
+
+          {/* 4. Patient Location Distribution (Horizontal Progress Bars) */}
+          <TabulasiLocationDistribution
+            locations={data.locationDistribution}
+            totalAllPatients={data.summary.totalPatients}
+          />
+
+          {/* 5. Diet Type Distribution Chips (Clickable to Filter) */}
+          <TabulasiDietDistribution
+            diets={data.dietDistribution}
+            selectedDiet={filters.diet}
+            onSelectDiet={(dietCode) => handleFilterChange({ diet: dietCode })}
+          />
+
+          {/* 6. Core Menu Tabulation Cards (NOT Tables) */}
+          <TabulasiMenuCards
+            menuItems={filteredMenuItems}
+            onSelectMenu={(menu) => setSelectedMenuDetail(menu)}
+            totalFilteredPortions={totalFilteredPortions}
+          />
+
+          {/* 7. Snack Tabulation Section */}
+          <TabulasiSnackSection snackSummary={data.snackSummary} />
+
+          {/* 8. Meal Schedule & Distribution Timeline */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+            <div className="lg:col-span-2">
+              <TabulasiScheduleTimeline schedule={data.schedule} />
+            </div>
+
+            {/* Side Status & Information Card */}
+            <div className="bg-card border border-border/80 rounded-2xl p-5 shadow-2xs space-y-3">
+              <div className="flex items-center gap-2 text-primary font-bold text-xs uppercase tracking-wider">
+                <Sparkles className="w-4 h-4" />
+                Catatan Ahli Gizi Jaga
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Tabulasi porsi dihitung berdasarkan cut-off snapshot terkunci. Perubahan diet mendadak (cito/emergent) akan otomatis tercatat di modul <strong>Revisi Post-Snapshot</strong>.
+              </p>
+              <div className="pt-2 border-t border-border text-[11px] text-muted-foreground space-y-1">
+                <div className="flex justify-between">
+                  <span>Batch Aktif:</span>
+                  <strong className="text-foreground">{data.batch?.batch_code || 'LIVE-PREVIEW'}</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span>Siklus Terpilih:</span>
+                  <strong className="text-foreground">{selectedMeal} ({selectedDate})</strong>
+                </div>
+                <div className="flex justify-between">
+                  <span>Terakhir Diperbarui:</span>
+                  <strong className="text-foreground">{data.lastUpdated} WIB</strong>
+                </div>
+              </div>
+            </div>
           </div>
 
-          {/* 5. Tab Content */}
-          {activeTab === 'rekap' ? (
-            <div className="animate-in fade-in-50 duration-200">
-              <TabulasiBreakdown
-                total={summary.totalPortions}
-                dietBreakdown={summary.dietBreakdown}
-                extraBreakdown={summary.extraBreakdown}
-                buahBreakdown={summary.buahBreakdown}
-                snackBreakdown={summary.snackBreakdown}
-                ruanganBreakdown={summary.ruanganBreakdown}
-              />
-            </div>
-          ) : (
-            <div className="animate-in fade-in-50 duration-200">
-              <TabulasiDetailsTable details={summary.details} />
-            </div>
-          )}
+          {/* 9. Quick Actions Bar */}
+          <TabulasiQuickActions
+            onOpenGenerate={() => setIsGenerateOpen(true)}
+            onPrint={handlePrint}
+            onExportPdf={handlePrint}
+            onExportExcel={() => {
+              import('@/lib/exportTabulasiExcel').then(({ exportTabulasiToExcel }) => {
+                exportTabulasiToExcel(data, selectedDate, selectedMeal);
+                toast.success('File Excel (.xlsx) berhasil diunduh.');
+              });
+            }}
+            onRefresh={() => handleRefreshData()}
+            isRefreshing={isPending}
+          />
 
         </div>
 
       ) : (
-        <div className="text-center p-12 border border-dashed rounded-2xl">
-          <FileSpreadsheet className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-          <p className="text-sm font-semibold text-muted-foreground">Pilih snapshot batch untuk melihat tabulasi.</p>
+        /* Empty State */
+        <div className="text-center p-16 border border-dashed border-border rounded-2xl bg-card space-y-4 no-print">
+          <div className="p-4 rounded-full bg-primary/10 text-primary w-fit mx-auto">
+            <FileQuestion className="w-10 h-10" />
+          </div>
+          <div className="space-y-1 max-w-md mx-auto">
+            <h3 className="text-base font-bold text-foreground">Belum Ada Tabulasi</h3>
+            <p className="text-xs text-muted-foreground">
+              Belum ada data makanan untuk tanggal dan waktu makan yang dipilih. Silakan generate tabulasi baru untuk memulai rekapitulasi.
+            </p>
+          </div>
+          <Button
+            onClick={() => setIsGenerateOpen(true)}
+            className="gap-2 text-xs font-bold rounded-xl bg-primary text-primary-foreground"
+          >
+            <Sparkles className="w-4 h-4 text-yellow-300" />
+            Generate Tabulasi Sekarang
+          </Button>
         </div>
+      )}
+
+      {/* Menu Detail Drawer / Sheet */}
+      <TabulasiMenuDetailModal
+        menu={selectedMenuDetail}
+        isOpen={Boolean(selectedMenuDetail)}
+        onClose={() => setSelectedMenuDetail(null)}
+      />
+
+      {/* Generate Tabulasi Modal */}
+      <TabulasiGenerateModal
+        isOpen={isGenerateOpen}
+        onClose={() => setIsGenerateOpen(false)}
+        defaultDate={selectedDate}
+        defaultMeal={selectedMeal}
+        onSuccess={() => handleRefreshData()}
+      />
+
+      {/* Export Modal */}
+      <TabulasiExportModal
+        isOpen={isExportOpen}
+        onClose={() => setIsExportOpen(false)}
+        onPrint={handlePrint}
+        data={data}
+        selectedDate={selectedDate}
+        selectedMeal={selectedMeal}
+      />
+
+      {/* Clean Printable A4 Layout for Hospital Kitchen */}
+      {data && (
+        <TabulasiPrintView
+          data={data}
+          date={selectedDate}
+          mealTime={selectedMeal}
+          filteredMenuItems={filteredMenuItems}
+        />
       )}
 
     </div>

@@ -28,7 +28,7 @@ export interface OtorisasiStats {
  */
 export async function getOtorisasiList(
   statusFilter?: string,
-  waktuFilter?: string
+  waktuFilter?: string,
 ): Promise<RevisiPostSnapshotItem[]> {
   try {
     const query = db
@@ -60,8 +60,14 @@ export async function getOtorisasiList(
         batch_code: snapshotBatchTable.batch_code,
       })
       .from(otorisasiPerubahanDietTable)
-      .leftJoin(pasienTable, eq(otorisasiPerubahanDietTable.pasien_id, pasienTable.id))
-      .leftJoin(snapshotBatchTable, eq(otorisasiPerubahanDietTable.batch_id, snapshotBatchTable.id))
+      .leftJoin(
+        pasienTable,
+        eq(otorisasiPerubahanDietTable.pasien_id, pasienTable.id),
+      )
+      .leftJoin(
+        snapshotBatchTable,
+        eq(otorisasiPerubahanDietTable.batch_id, snapshotBatchTable.id),
+      )
       .orderBy(desc(otorisasiPerubahanDietTable.requested_at));
 
     const dbResults = await query;
@@ -81,10 +87,13 @@ export async function getOtorisasiList(
 
         const jenis = r.jenis_perubahan as JenisPerubahanType;
         let dampak = 'Perubahan Etiket Diet';
-        if (jenis === 'NEW_PATIENT') dampak = '+1 Porsi Emergent (Tambahan Makanan)';
-        else if (jenis === 'DISCHARGE') dampak = '-1 Porsi Dibatalkan (Pasien Pulang)';
+        if (jenis === 'NEW_PATIENT')
+          dampak = '+1 Porsi Makanan (Tambahan Makanan)';
+        else if (jenis === 'DISCHARGE')
+          dampak = '-1 Porsi Dibatalkan (Pasien Pulang)';
         else if (jenis === 'NPO') dampak = '-1 Porsi Dibatalkan (Puasa/NPO)';
-        else if (jenis === 'ROOM_TRANSFER') dampak = 'Pindah Lokasi Antar Makanan';
+        else if (jenis === 'ROOM_TRANSFER')
+          dampak = 'Pindah Lokasi Antar Makanan';
 
         return {
           id: r.id,
@@ -105,7 +114,9 @@ export async function getOtorisasiList(
           status: (r.status as StatusRevisiType) || 'PENDING',
           dampak_dapur: dampak,
           requested_by: r.requested_by || 'Staf RS',
-          requested_at: r.requested_at ? r.requested_at.toISOString() : new Date().toISOString(),
+          requested_at: r.requested_at
+            ? r.requested_at.toISOString()
+            : new Date().toISOString(),
           reviewed_by: r.reviewed_by,
           reviewed_at: r.reviewed_at ? r.reviewed_at.toISOString() : null,
           review_notes: r.review_notes,
@@ -131,13 +142,15 @@ export async function getOtorisasiList(
  * Fetch summary stats for Admin Otorisasi
  */
 export async function getOtorisasiStats(
-  items?: RevisiPostSnapshotItem[]
+  items?: RevisiPostSnapshotItem[],
 ): Promise<OtorisasiStats> {
   const data = items || (await getOtorisasiList());
   const pendingCount = data.filter((i) => i.status === 'PENDING').length;
   const approvedTodayCount = data.filter((i) => i.status === 'APPROVED').length;
   const rejectedTodayCount = data.filter((i) => i.status === 'REJECTED').length;
-  const totalEmergentCount = data.filter((i) => i.jenis_perubahan === 'NEW_PATIENT').length;
+  const totalEmergentCount = data.filter(
+    (i) => i.jenis_perubahan === 'NEW_PATIENT',
+  ).length;
 
   return {
     pendingCount,
@@ -147,7 +160,9 @@ export async function getOtorisasiStats(
   };
 }
 
-async function applyApprovedRevisionToSnapshot(revisi: typeof otorisasiPerubahanDietTable.$inferSelect) {
+async function applyApprovedRevisionToSnapshot(
+  revisi: typeof otorisasiPerubahanDietTable.$inferSelect,
+) {
   try {
     const [patient] = await db
       .select()
@@ -169,15 +184,16 @@ async function applyApprovedRevisionToSnapshot(revisi: typeof otorisasiPerubahan
           .where(
             and(
               eq(snapshotDetailTable.batch_id, revisi.batch_id),
-              eq(snapshotDetailTable.no_rm, targetNoRm)
-            )
+              eq(snapshotDetailTable.no_rm, targetNoRm),
+            ),
           );
 
         if (!existingDetail) {
           await db.insert(snapshotDetailTable).values({
             batch_id: revisi.batch_id,
             no_rm: dataBaru.no_rm || patient?.no_rm || 'RM-NEW',
-            nama_pasien: dataBaru.nama_pasien || patient?.nama_pasien || 'Pasien Baru',
+            nama_pasien:
+              dataBaru.nama_pasien || patient?.nama_pasien || 'Pasien Baru',
             gedung: dataBaru.gedung || patient?.gedung || '',
             ruangan: dataBaru.ruangan || patient?.ruangan || '',
             no_bed: dataBaru.bed || patient?.bed || '-',
@@ -194,21 +210,26 @@ async function applyApprovedRevisionToSnapshot(revisi: typeof otorisasiPerubahan
         .update(pasienTable)
         .set({ status_pasien: 'AKTIF', updated_at: new Date() })
         .where(eq(pasienTable.id, revisi.pasien_id));
-
-    } else if (revisi.jenis_perubahan === 'DIET_CHANGE' || revisi.jenis_perubahan === 'NPO') {
+    } else if (
+      revisi.jenis_perubahan === 'DIET_CHANGE' ||
+      revisi.jenis_perubahan === 'NPO'
+    ) {
       const targetNoRm = dataBaru.no_rm || patient?.no_rm;
       if (revisi.batch_id && targetNoRm) {
         await db
           .update(snapshotDetailTable)
           .set({
-            diet_rs_raw: dataBaru.diet || (revisi.jenis_perubahan === 'NPO' ? 'NPO' : undefined),
-            status_saat_snapshot: revisi.jenis_perubahan === 'NPO' ? 'NPO' : 'AKTIF',
+            diet_rs_raw:
+              dataBaru.diet ||
+              (revisi.jenis_perubahan === 'NPO' ? 'NPO' : undefined),
+            status_saat_snapshot:
+              revisi.jenis_perubahan === 'NPO' ? 'NPO' : 'AKTIF',
           })
           .where(
             and(
               eq(snapshotDetailTable.batch_id, revisi.batch_id),
-              eq(snapshotDetailTable.no_rm, targetNoRm)
-            )
+              eq(snapshotDetailTable.no_rm, targetNoRm),
+            ),
           );
       }
 
@@ -216,13 +237,18 @@ async function applyApprovedRevisionToSnapshot(revisi: typeof otorisasiPerubahan
       await db
         .update(pasienTable)
         .set({
-          diet: dataBaru.diet || (revisi.jenis_perubahan === 'NPO' ? 'NPO' : undefined),
-          is_npo: revisi.jenis_perubahan === 'NPO' ? true : Boolean(dataBaru.is_npo),
-          status_pasien: revisi.jenis_perubahan === 'NPO' ? 'NPO' : dataBaru.status_pasien || 'AKTIF',
+          diet:
+            dataBaru.diet ||
+            (revisi.jenis_perubahan === 'NPO' ? 'NPO' : undefined),
+          is_npo:
+            revisi.jenis_perubahan === 'NPO' ? true : Boolean(dataBaru.is_npo),
+          status_pasien:
+            revisi.jenis_perubahan === 'NPO'
+              ? 'NPO'
+              : dataBaru.status_pasien || 'AKTIF',
           updated_at: new Date(),
         })
         .where(eq(pasienTable.id, revisi.pasien_id));
-
     } else if (revisi.jenis_perubahan === 'ROOM_TRANSFER') {
       const targetNoRm = dataBaru.no_rm || patient?.no_rm;
       if (revisi.batch_id && targetNoRm) {
@@ -236,8 +262,8 @@ async function applyApprovedRevisionToSnapshot(revisi: typeof otorisasiPerubahan
           .where(
             and(
               eq(snapshotDetailTable.batch_id, revisi.batch_id),
-              eq(snapshotDetailTable.no_rm, targetNoRm)
-            )
+              eq(snapshotDetailTable.no_rm, targetNoRm),
+            ),
           );
       }
 
@@ -251,7 +277,6 @@ async function applyApprovedRevisionToSnapshot(revisi: typeof otorisasiPerubahan
           updated_at: new Date(),
         })
         .where(eq(pasienTable.id, revisi.pasien_id));
-
     } else if (revisi.jenis_perubahan === 'DISCHARGE') {
       const targetNoRm = dataBaru.no_rm || patient?.no_rm;
       if (revisi.batch_id && targetNoRm) {
@@ -263,8 +288,8 @@ async function applyApprovedRevisionToSnapshot(revisi: typeof otorisasiPerubahan
           .where(
             and(
               eq(snapshotDetailTable.batch_id, revisi.batch_id),
-              eq(snapshotDetailTable.no_rm, targetNoRm)
-            )
+              eq(snapshotDetailTable.no_rm, targetNoRm),
+            ),
           );
       }
       // Mark as PULANG in master pasien table
@@ -274,7 +299,10 @@ async function applyApprovedRevisionToSnapshot(revisi: typeof otorisasiPerubahan
         .where(eq(pasienTable.id, revisi.pasien_id));
     }
   } catch (err) {
-    console.error('Error applying approved revision to snapshot_detail / pasien:', err);
+    console.error(
+      'Error applying approved revision to snapshot_detail / pasien:',
+      err,
+    );
   }
 }
 
@@ -284,7 +312,7 @@ async function applyApprovedRevisionToSnapshot(revisi: typeof otorisasiPerubahan
 export async function approveRevisiDiet(
   id: number,
   reviewNotes?: string,
-  reviewerName: string = 'Admin Head Gizi'
+  reviewerName: string = 'Admin Head Gizi',
 ): Promise<MutationResult> {
   try {
     const existing = await db
@@ -301,7 +329,9 @@ export async function approveRevisiDiet(
           status: 'APPROVED',
           reviewed_by: reviewerName,
           reviewed_at: new Date(),
-          review_notes: reviewNotes || 'Otorisasi disetujui oleh Supervisor / Admin Head Gizi.',
+          review_notes:
+            reviewNotes ||
+            'Otorisasi disetujui oleh Supervisor / Admin Head Gizi.',
         })
         .where(eq(otorisasiPerubahanDietTable.id, id));
 
@@ -339,7 +369,7 @@ export async function approveRevisiDiet(
 export async function rejectRevisiDiet(
   id: number,
   reviewNotes: string,
-  reviewerName: string = 'Admin Head Gizi'
+  reviewerName: string = 'Admin Head Gizi',
 ): Promise<MutationResult> {
   if (!reviewNotes || !reviewNotes.trim()) {
     return {
@@ -411,7 +441,7 @@ export async function rejectRevisiDiet(
 export async function bulkApproveRevisiDiet(
   ids: number[],
   reviewNotes: string = 'Otorisasi persetujuan massal oleh Admin Head Gizi',
-  reviewerName: string = 'Admin Head Gizi'
+  reviewerName: string = 'Admin Head Gizi',
 ): Promise<MutationResult> {
   if (!ids || ids.length === 0) {
     return { success: false, message: 'Tidak ada item dipilih.' };
