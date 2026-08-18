@@ -101,12 +101,16 @@ export default function SelectionClient({
 
     const now = new Date();
     const todayStr = now.toISOString().slice(0, 10);
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
     // Cut-off minutes for each meal cycle
     const getMin = (timeStr: string) => {
-      const [h, m] = timeStr.split(':').map(Number);
-      return h * 60 + m;
+      const [h, m] = (timeStr || '12:00').split(':').map(Number);
+      return (h || 0) * 60 + (m || 0);
     };
 
     const pagiCutoffStr =
@@ -120,6 +124,11 @@ export default function SelectionClient({
     const siangMin = getMin(siangCutoffStr);
     const malamMin = getMin(malamCutoffStr);
 
+    const hasTodayMalamBatch = snapshotBatches.some(
+      (b) => b.tanggal_produksi === todayStr && b.waktu_makan === 'MALAM',
+    );
+    const isMalamLocked = currentMinutes >= malamMin || hasTodayMalamBatch;
+
     // Determine current running cycle & immediately previous cycle
     let runningCycle: 'PAGI' | 'SIANG' | 'MALAM' = 'PAGI';
     let prevCycle: 'PAGI' | 'SIANG' | 'MALAM' = 'MALAM';
@@ -130,23 +139,37 @@ export default function SelectionClient({
     } else if (currentMinutes < siangMin) {
       runningCycle = 'SIANG';
       prevCycle = 'PAGI'; // Today's Pagi (cut-off has passed)
-    } else if (currentMinutes < malamMin) {
+    } else if (currentMinutes < malamMin && !hasTodayMalamBatch) {
       runningCycle = 'MALAM';
       prevCycle = 'SIANG'; // Today's Siang (cut-off has passed)
     } else {
+      // Malam is locked -> running cycle rolls over to tomorrow's PAGI, prevCycle is today's MALAM
       runningCycle = 'PAGI';
-      prevCycle = 'MALAM'; // Today's Malam (cut-off has passed)
+      prevCycle = 'MALAM';
     }
 
-    const [h, m] = cutoffTime.split(':').map(Number);
-    const cutoffMinutes = h * 60 + m;
+    let isLocked = false;
+    let hasBatchForCycle = false;
+    let isCutoffPassed = false;
 
-    const isCutoffPassed = currentMinutes >= cutoffMinutes;
-    const hasBatchToday = snapshotBatches.some(
-      (b) => b.tanggal_produksi === todayStr && b.waktu_makan === jenisMakan,
-    );
+    if (isMalamLocked && jenisMakan === 'PAGI') {
+      // Makan Pagi now targets TOMORROW: active until tomorrow morning
+      hasBatchForCycle = snapshotBatches.some(
+        (b) => b.tanggal_produksi === tomorrowStr && b.waktu_makan === 'PAGI',
+      );
+      isLocked = hasBatchForCycle; // Only locked if tomorrow's batch was already snapshotted
+      isCutoffPassed = false;
+    } else {
+      // Normal today evaluation
+      const [h, m] = cutoffTime.split(':').map(Number);
+      const cutoffMinutes = (h || 0) * 60 + (m || 0);
 
-    const isLocked = isCutoffPassed || hasBatchToday;
+      isCutoffPassed = currentMinutes >= cutoffMinutes;
+      hasBatchForCycle = snapshotBatches.some(
+        (b) => b.tanggal_produksi === todayStr && b.waktu_makan === jenisMakan,
+      );
+      isLocked = isCutoffPassed || hasBatchForCycle;
+    }
 
     // Previous batch is ONLY eligible if it is locked AND equals prevCycle
     const isPreviousBatch = isLocked && jenisMakan === prevCycle;
@@ -157,7 +180,7 @@ export default function SelectionClient({
       isPreviousBatch,
       isOlderLocked,
       cutoffTime,
-      hasBatchToday,
+      hasBatchToday: hasBatchForCycle,
       isCutoffPassed,
       runningCycle,
       prevCycle,

@@ -33,8 +33,8 @@ export function LoginForm({
       router.push('/dashboard');
     } else {
       toast.error(message as string);
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }
 
   const form = useForm<LoginFormSchema>({

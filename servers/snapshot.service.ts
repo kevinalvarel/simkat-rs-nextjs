@@ -9,16 +9,14 @@ import { snapshotDetailTable } from '@/db/schemas/snapshot/snapshot-detail';
 import { pasienTable } from '@/db/schemas/patient/pasien';
 import { waktuMakanTable } from '@/db/schemas/patient/waktu-makan';
 
+import type { WaktuMakanConfig, MealCycleStatus } from '@/lib/snapshot-cycle';
+
+export type { WaktuMakanConfig, MealCycleStatus };
+
 // ---------- Types ----------
 
 export type SnapshotBatch = typeof snapshotBatchTable.$inferSelect;
 export type SnapshotDetail = typeof snapshotDetailTable.$inferSelect;
-
-export type WaktuMakanConfig = {
-  id: number;
-  jenis_makan: string; // PAGI | SIANG | MALAM
-  waktu: string; // HH:mm format
-};
 
 export type MutationResult = {
   success: boolean;
@@ -152,11 +150,12 @@ export async function checkAndAutoLockSnapshots(): Promise<{
         currentMinutes >= cutoffMinutes &&
         !existingWaktuSet.has(config.jenis_makan)
       ) {
-        // Skip revalidatePath during RSC render
+        // Skip revalidatePath during RSC render and lock explicitly for today's batch
         const res = await triggerManualSnapshot(
           config.jenis_makan,
           config.waktu,
           true, // skipRevalidate = true
+          todayStr, // targetDateStr = todayStr
         );
         if (res.success) {
           autoLockedCount++;
@@ -235,15 +234,51 @@ export async function updateWaktuMakanConfig(
 /**
  * Trigger manual snapshot generation for a meal time.
  * Accepts optional skipRevalidate parameter to prevent revalidatePath during RSC rendering.
+ * Accepts optional targetDateStr parameter (YYYY-MM-DD) to support tomorrow's cycle snapshot.
  */
 export async function triggerManualSnapshot(
   waktuMakan: string,
   cutoffTime: string,
   skipRevalidate: boolean = false,
+  targetDateStr?: string,
 ): Promise<MutationResult> {
   try {
     const now = new Date();
-    const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
+    let prodDate = targetDateStr;
+
+    if (!prodDate) {
+      const todayStr = now.toISOString().slice(0, 10);
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+      const configs = await getWaktuMakanConfig();
+      const malamCutoff =
+        configs.find((c) => c.jenis_makan === 'MALAM')?.waktu || '16:00';
+      const [malamH, malamM] = malamCutoff.split(':').map(Number);
+      const malamMinutes = malamH * 60 + malamM;
+
+      // Check if malam batch exists today
+      const todayMalamBatch = await db
+        .select()
+        .from(snapshotBatchTable)
+        .where(
+          and(
+            eq(snapshotBatchTable.tanggal_produksi, todayStr),
+            eq(snapshotBatchTable.waktu_makan, 'MALAM'),
+          ),
+        );
+
+      if (
+        waktuMakan === 'PAGI' &&
+        (currentMinutes >= malamMinutes || todayMalamBatch.length > 0)
+      ) {
+        const tomorrow = new Date(now);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        prodDate = tomorrow.toISOString().slice(0, 10);
+      } else {
+        prodDate = todayStr;
+      }
+    }
+
+    const dateStr = prodDate.replace(/-/g, '');
     const batchCode = `BATCH-${dateStr}-${waktuMakan}-${Date.now()
       .toString()
       .slice(-4)}`;
@@ -259,7 +294,7 @@ export async function triggerManualSnapshot(
       .insert(snapshotBatchTable)
       .values({
         batch_code: batchCode,
-        tanggal_produksi: now.toISOString().slice(0, 10),
+        tanggal_produksi: prodDate,
         waktu_makan: waktuMakan,
         timestamp_snapshot: now,
         total_pasien: activePatients.length,
@@ -298,7 +333,7 @@ export async function triggerManualSnapshot(
 
     return {
       success: true,
-      message: `Batch snapshot ${batchCode} berhasil dibuat dengan ${activePatients.length} pasien ter-lock.`,
+      message: `Batch snapshot ${batchCode} (Produksi: ${prodDate}) berhasil dibuat dengan ${activePatients.length} pasien ter-lock.`,
     };
   } catch (error) {
     console.error('Error triggering manual snapshot:', error);
