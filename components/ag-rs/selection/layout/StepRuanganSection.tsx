@@ -12,6 +12,7 @@ import type { MealTimeType } from '@/types/ag-rs-types';
 interface StepRuanganSectionProps {
   selectedMealTime: MealTimeType;
   selectedGedung: GedungWithRuangan;
+  selectedRuangan?: RuanganItem | null;
   onBack: () => void;
   onSelectRuangan: (ruangan: RuanganItem) => void;
 }
@@ -19,6 +20,7 @@ interface StepRuanganSectionProps {
 export default function StepRuanganSection({
   selectedMealTime,
   selectedGedung,
+  selectedRuangan,
   onBack,
   onSelectRuangan,
 }: StepRuanganSectionProps) {
@@ -61,6 +63,7 @@ export default function StepRuanganSection({
             <RuanganCard
               key={ruangan.idRuangan}
               ruangan={ruangan}
+              isSelected={selectedRuangan?.idRuangan === ruangan.idRuangan}
               onSelect={() => onSelectRuangan(ruangan)}
             />
           ))}

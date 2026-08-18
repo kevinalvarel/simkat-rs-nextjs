@@ -20,6 +20,7 @@ interface DeletePatientDialogProps {
   patient: Patient | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onDeleteOptimistic?: (patientId: number) => void;
   revisionContext?: RevisionContext;
 }
 
@@ -27,12 +28,19 @@ export default function DeletePatientDialog({
   patient,
   open,
   onOpenChange,
+  onDeleteOptimistic,
   revisionContext,
 }: DeletePatientDialogProps) {
   const [isDeleting, setIsDeleting] = useState(false);
 
   async function handleDelete() {
     if (!patient) return;
+
+    if (onDeleteOptimistic) {
+      onDeleteOptimistic(patient.id);
+      onOpenChange(false);
+      return;
+    }
 
     setIsDeleting(true);
     try {

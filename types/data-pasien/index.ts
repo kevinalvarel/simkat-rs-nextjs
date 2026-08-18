@@ -29,6 +29,19 @@ export interface PatientTableProps {
   patients: Patient[];
   onEdit: (patient: Patient) => void;
   onDelete: (patient: Patient) => void;
+  onSaveField?: (
+    patient: Patient,
+    field: keyof PatientFormValues,
+    value: string | boolean,
+  ) => void;
+  onInlineAdd?: (draft: PatientFormValues, defaultBedLabel: string) => void;
+  onQuickPulang?: (patient: Patient) => void;
+  onOpenPindah?: (patient: Patient) => void;
+  onPindahOptimistic?: (
+    patientId: number,
+    targetGedung: string,
+    targetRuangan: string,
+  ) => void;
   gedungList?: GedungWithRuangan[];
   kelasList?: KelasOption[];
   totalBedCapacity?: number;
@@ -58,13 +71,23 @@ export interface PatientFormDialogProps {
   kelasList?: KelasOption[];
   gedungList?: GedungWithRuangan[];
   revisionContext?: RevisionContext;
+  onSubmitOptimistic?: (
+    data: PatientFormValues,
+    isEdit: boolean,
+    patientId?: number,
+  ) => void;
 }
 
 export interface PindahRuanganDialogProps {
   patient: Patient | null;
   gedungList: GedungWithRuangan[];
   onClose: () => void;
-  onSuccess: (patientId: number) => void;
+  onSuccess?: (patientId: number) => void;
+  onPindahOptimistic?: (
+    patientId: number,
+    targetGedung: string,
+    targetRuangan: string,
+  ) => void;
   revisionContext?: RevisionContext;
 }
 
@@ -75,6 +98,7 @@ export interface DeletePatientDialogProps {
   onClose?: () => void;
   onOpenChange?: (open: boolean) => void;
   onSuccess?: () => void;
+  onDeleteOptimistic?: (patientId: number) => void;
   revisionContext?: RevisionContext;
 }
 
@@ -104,3 +128,4 @@ export interface InlineAddRowProps {
   onCancel: () => void;
   onRowBlur: (e: React.FocusEvent<HTMLTableRowElement>, bedKey: string) => void;
 }
+

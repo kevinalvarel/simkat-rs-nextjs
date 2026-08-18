@@ -53,6 +53,7 @@ export default function PatientFormDialog({
   kelasList = [],
   gedungList = [],
   revisionContext,
+  onSubmitOptimistic,
 }: PatientFormDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isEditMode = patient !== null;
@@ -156,6 +157,12 @@ export default function PatientFormDialog({
   ]);
 
   async function onSubmit(data: PatientFormValues) {
+    if (onSubmitOptimistic) {
+      onSubmitOptimistic(data, isEditMode, patient?.id);
+      onClose();
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const result =

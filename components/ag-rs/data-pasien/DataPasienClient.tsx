@@ -1,13 +1,21 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Plus, DoorOpen, Edit3 } from 'lucide-react';
 
 import type { Patient } from '@/servers/patient.service';
+import {
+  createPatient,
+  updatePatient,
+  updatePatientField,
+  deletePatient,
+} from '@/servers/patient.service';
+import type { PatientFormValues } from '@/validations/PatientFormSchema';
 import type { DataPasienClientProps } from '@/types/data-pasien';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { toast } from 'sonner';
 
 import PatientToolbar from './ui/PatientToolbar';
 import PatientTable from './PatientTable';
@@ -47,7 +55,15 @@ export default function DataPasienClient({
     [isRevisiMode, waktuMakan, batchId],
   );
 
-  // UI state
+  // Local optimistic state for immediate UI updates
+  const [patientList, setPatientList] = useState<Patient[]>(() => patients);
+
+  // Synchronize when server data is revalidated or room changes
+  useEffect(() => {
+    setPatientList(patients);
+  }, [patients]);
+
+  // UI modal / search states
   const [searchQuery, setSearchQuery] = useState('');
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
@@ -80,7 +96,7 @@ export default function DataPasienClient({
 
   // Filter patients based on search query (excluding PULANG patients)
   const filteredPatients = useMemo(() => {
-    const active = patients.filter((p) => p.status_pasien !== 'PULANG');
+    const active = patientList.filter((p) => p.status_pasien !== 'PULANG');
     if (!searchQuery.trim()) return active;
     const query = searchQuery.toLowerCase().trim();
     return active.filter(
@@ -88,9 +104,244 @@ export default function DataPasienClient({
         p.nama_pasien.toLowerCase().includes(query) ||
         p.no_rm.toLowerCase().includes(query),
     );
-  }, [patients, searchQuery]);
+  }, [patientList, searchQuery]);
 
-  // Handlers
+  // =========================================================================
+  // OPTIMISTIC ACTIONS (Instant Frontend UI + Background Server Mutations)
+  // =========================================================================
+
+  // 1. Optimistic Add Patient
+  const handleOptimisticAdd = async (
+    draftData: PatientFormValues,
+    defaultBed?: string,
+  ) => {
+    const tempId = -Date.now();
+    const optimisticPatient: Patient = {
+      id: tempId,
+      nama_pasien: draftData.nama_pasien,
+      no_rm: draftData.no_rm,
+      diet: draftData.diet,
+      kelas: draftData.kelas,
+      gedung: draftData.gedung || gedung,
+      ruangan: draftData.ruangan || ruangan,
+      bed: draftData.bed || defaultBed || 'Bed 1',
+      status_pasien: isRevisiMode
+        ? 'PENDING_REVISI'
+        : (draftData.status_pasien || 'AKTIF'),
+      is_npo: Boolean(draftData.is_npo),
+      created_at: new Date(),
+      updated_at: new Date(),
+      updated_by: null,
+    };
+
+    // 1. Instantly update frontend UI
+    setPatientList((prev) => [...prev, optimisticPatient]);
+
+    toast.success(
+      isRevisiMode
+        ? `Revisi Pasien ${draftData.nama_pasien} diajukan ke Otorisasi Supervisor!`
+        : `Pasien ${draftData.nama_pasien} berhasil ditambahkan!`,
+    );
+
+    // 2. Send request to database in background
+    try {
+      const res = await createPatient(draftData, revisionContext);
+      if (!res.success) {
+        // Rollback on failure
+        setPatientList((prev) => prev.filter((p) => p.id !== tempId));
+        toast.error(res.message || 'Gagal menyimpan pasien.');
+      } else {
+        router.refresh();
+      }
+    } catch {
+      setPatientList((prev) => prev.filter((p) => p.id !== tempId));
+      toast.error('Gagal menyimpan pasien ke database.');
+    }
+  };
+
+  // 2. Optimistic Update Field (Inline cell editing / quick status)
+  const handleOptimisticSaveField = async (
+    patient: Patient,
+    field: keyof PatientFormValues,
+    value: string | boolean,
+  ) => {
+    const previousValue = patient[field];
+    if (previousValue === value) return;
+
+    // 1. Instantly update frontend UI
+    setPatientList((prev) =>
+      prev.map((p) => (p.id === patient.id ? { ...p, [field]: value } : p)),
+    );
+
+    toast.success(
+      isRevisiMode
+        ? `Revisi ${field.toUpperCase().replace('_', ' ')} ${patient.nama_pasien} diajukan ke Otorisasi Supervisor`
+        : `${field.toUpperCase().replace('_', ' ')} ${patient.nama_pasien} diperbarui`,
+    );
+
+    // 2. Send update to database in background
+    try {
+      const res = await updatePatientField(
+        patient.id,
+        { [field]: value },
+        revisionContext,
+      );
+      if (!res.success) {
+        // Rollback on failure
+        setPatientList((prev) =>
+          prev.map((p) =>
+            p.id === patient.id ? { ...p, [field]: previousValue } : p,
+          ),
+        );
+        toast.error(res.message || 'Gagal memperbarui data.');
+      } else {
+        router.refresh();
+      }
+    } catch {
+      setPatientList((prev) =>
+        prev.map((p) =>
+          p.id === patient.id ? { ...p, [field]: previousValue } : p,
+        ),
+      );
+      toast.error('Gagal memperbarui data di database.');
+    }
+  };
+
+  // 3. Optimistic Form Submit (Dialog Add / Dialog Edit)
+  const handleOptimisticFormSubmit = async (
+    data: PatientFormValues,
+    isEdit: boolean,
+    patientId?: number,
+  ) => {
+    if (isEdit && patientId) {
+      const previousPatient = patientList.find((p) => p.id === patientId);
+      if (!previousPatient) return;
+
+      // 1. Instantly update frontend UI
+      setPatientList((prev) =>
+        prev.map((p) => (p.id === patientId ? { ...p, ...data } : p)),
+      );
+
+      toast.success(
+        isRevisiMode
+          ? `Revisi data ${data.nama_pasien} diajukan ke Otorisasi Supervisor.`
+          : `Data ${data.nama_pasien} berhasil diperbarui.`,
+      );
+
+      // 2. Background DB sync
+      try {
+        const res = await updatePatient(patientId, data, revisionContext);
+        if (!res.success) {
+          setPatientList((prev) =>
+            prev.map((p) => (p.id === patientId ? previousPatient : p)),
+          );
+          toast.error(res.message || 'Gagal memperbarui data.');
+        } else {
+          router.refresh();
+        }
+      } catch {
+        setPatientList((prev) =>
+          prev.map((p) => (p.id === patientId ? previousPatient : p)),
+        );
+        toast.error('Gagal memperbarui data di database.');
+      }
+    } else {
+      await handleOptimisticAdd(data);
+    }
+  };
+
+  // 4. Optimistic Delete Patient
+  const handleOptimisticDelete = async (patientId: number) => {
+    const previousPatient = patientList.find((p) => p.id === patientId);
+    if (!previousPatient) return;
+
+    // 1. Instantly remove from frontend UI
+    setPatientList((prev) => prev.filter((p) => p.id !== patientId));
+    toast.success(`Pasien ${previousPatient.nama_pasien} berhasil dihapus.`);
+
+    // 2. Background DB sync
+    try {
+      const res = await deletePatient(patientId, revisionContext);
+      if (!res.success) {
+        // Rollback
+        setPatientList((prev) => [...prev, previousPatient]);
+        toast.error(res.message || 'Gagal menghapus pasien.');
+      } else {
+        router.refresh();
+      }
+    } catch {
+      setPatientList((prev) => [...prev, previousPatient]);
+      toast.error('Gagal menghapus pasien di database.');
+    }
+  };
+
+  // 5. Optimistic Room Transfer
+  const handleOptimisticPindahRuangan = async (
+    patientId: number,
+    targetGedung: string,
+    targetRuangan: string,
+  ) => {
+    const previousPatient = patientList.find((p) => p.id === patientId);
+    if (!previousPatient) return;
+
+    // If moved to a different room, immediately remove from current view
+    if (targetRuangan.toLowerCase() !== ruangan.toLowerCase()) {
+      setPatientList((prev) => prev.filter((p) => p.id !== patientId));
+    } else {
+      setPatientList((prev) =>
+        prev.map((p) =>
+          p.id === patientId
+            ? {
+                ...p,
+                gedung: targetGedung,
+                ruangan: targetRuangan,
+                status_pasien: 'PINDAH_RUANGAN',
+              }
+            : p,
+        ),
+      );
+    }
+
+    toast.success(
+      isRevisiMode
+        ? `Revisi perpindahan ruangan ${previousPatient.nama_pasien} diajukan ke Otorisasi Supervisor.`
+        : `${previousPatient.nama_pasien} dipindahkan ke ${targetGedung} - ${targetRuangan}`,
+    );
+
+    // Background DB sync
+    try {
+      const res = await updatePatientField(
+        patientId,
+        {
+          gedung: targetGedung,
+          ruangan: targetRuangan,
+          status_pasien: 'PINDAH_RUANGAN',
+        },
+        revisionContext,
+      );
+      if (!res.success) {
+        setPatientList((prev) => {
+          if (!prev.some((p) => p.id === patientId)) {
+            return [...prev, previousPatient];
+          }
+          return prev.map((p) => (p.id === patientId ? previousPatient : p));
+        });
+        toast.error(res.message || 'Gagal memindahkan pasien.');
+      } else {
+        router.refresh();
+      }
+    } catch {
+      setPatientList((prev) => {
+        if (!prev.some((p) => p.id === patientId)) {
+          return [...prev, previousPatient];
+        }
+        return prev.map((p) => (p.id === patientId ? previousPatient : p));
+      });
+      toast.error('Gagal memindahkan pasien di database.');
+    }
+  };
+
+  // Handlers for Opening Dialogs
   function handleAddPatient(defaultBed?: string) {
     setSelectedPatient(null);
     setInitialBed(typeof defaultBed === 'string' ? defaultBed : '');
@@ -164,15 +415,19 @@ export default function DataPasienClient({
       <PatientToolbar
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
-        totalCount={patients.length}
+        totalCount={patientList.length}
         filteredCount={filteredPatients.length}
       />
 
-      {/* Table / Formulir Cetak View */}
+      {/* Table / Formulir Cetak View with Optimistic Actions */}
       <PatientTable
         patients={filteredPatients}
         onEdit={handleEditPatient}
         onDelete={handleDeletePatient}
+        onSaveField={handleOptimisticSaveField}
+        onInlineAdd={handleOptimisticAdd}
+        onQuickPulang={(p) => handleOptimisticSaveField(p, 'status_pasien', 'PULANG')}
+        onPindahOptimistic={handleOptimisticPindahRuangan}
         gedungList={gedungList}
         kelasList={kelasList}
         totalBedCapacity={totalBedCapacity}
@@ -183,7 +438,7 @@ export default function DataPasienClient({
         revisionContext={revisionContext}
       />
 
-      {/* Form Dialog */}
+      {/* Form Dialog with Optimistic Submit */}
       <PatientFormDialog
         isOpen={isFormOpen}
         onClose={() => setIsFormOpen(false)}
@@ -194,15 +449,18 @@ export default function DataPasienClient({
         kelasList={kelasList}
         gedungList={gedungList}
         revisionContext={revisionContext}
+        onSubmitOptimistic={handleOptimisticFormSubmit}
       />
 
-      {/* Delete Confirmation Dialog */}
+      {/* Delete Confirmation Dialog with Optimistic Delete */}
       <DeletePatientDialog
         patient={patientToDelete}
         open={isDeleteOpen}
         onOpenChange={setIsDeleteOpen}
         revisionContext={revisionContext}
+        onDeleteOptimistic={handleOptimisticDelete}
       />
     </div>
   );
 }
+

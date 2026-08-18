@@ -8,11 +8,17 @@ import type { MealConfigItem, MealLockInfo } from '@/types/ag-rs-types';
 interface MealCardProps {
   meal: MealConfigItem;
   lockInfo: MealLockInfo;
+  isSelected?: boolean;
   onSelect: () => void;
 }
 
-export default function MealCard({ meal, lockInfo, onSelect }: MealCardProps) {
-  const { isLocked, isPreviousBatch, isOlderLocked, cutoffTime } = lockInfo;
+export default function MealCard({
+  meal,
+  lockInfo,
+  isSelected = false,
+  onSelect,
+}: MealCardProps) {
+  const { isPreviousBatch, isOlderLocked, cutoffTime } = lockInfo;
 
   const renderIcon = () => {
     if (isPreviousBatch) return <Edit3 className='w-8 h-8' />;
@@ -25,11 +31,13 @@ export default function MealCard({ meal, lockInfo, onSelect }: MealCardProps) {
   return (
     <Card
       className={`border-2 transition-all duration-200 relative overflow-hidden flex flex-col justify-between ${
-        isPreviousBatch
-          ? 'border-amber-500/60 bg-amber-500/[0.04] dark:bg-amber-950/20 cursor-pointer hover:border-amber-500 hover:shadow-md group'
-          : isOlderLocked
-            ? 'bg-muted/40 border-muted opacity-60 cursor-not-allowed'
-            : 'cursor-pointer hover:border-primary hover:shadow-md group'
+        isSelected
+          ? 'border-primary ring-2 ring-primary/40 shadow-md scale-[1.02]'
+          : isPreviousBatch
+            ? 'border-amber-500/60 bg-amber-500/[0.04] dark:bg-amber-950/20 cursor-pointer hover:border-amber-500 hover:shadow-md group'
+            : isOlderLocked
+              ? 'bg-muted/40 border-muted opacity-60 cursor-not-allowed'
+              : 'cursor-pointer hover:border-primary hover:shadow-md group'
       }`}
       onClick={() => {
         if (!isOlderLocked) onSelect();

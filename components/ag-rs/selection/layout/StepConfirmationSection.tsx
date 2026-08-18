@@ -8,7 +8,15 @@ import {
 } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle2, Clock, Building2, DoorOpen, RefreshCw } from 'lucide-react';
+import {
+  CheckCircle2,
+  Clock,
+  Building2,
+  DoorOpen,
+  RefreshCw,
+  Loader2,
+  ArrowRight,
+} from 'lucide-react';
 import type {
   GedungWithRuangan,
   RuanganItem,
@@ -20,6 +28,7 @@ interface StepConfirmationSectionProps {
   selectedGedung: GedungWithRuangan;
   selectedRuangan: RuanganItem;
   isRevisi: boolean;
+  isNavigating?: boolean;
   onReset: () => void;
   onContinue: () => void;
 }
@@ -29,6 +38,7 @@ export default function StepConfirmationSection({
   selectedGedung,
   selectedRuangan,
   isRevisi,
+  isNavigating = false,
   onReset,
   onContinue,
 }: StepConfirmationSectionProps) {
@@ -89,14 +99,30 @@ export default function StepConfirmationSection({
             variant='outline'
             className='flex-1 gap-2 cursor-pointer'
             onClick={onReset}
+            disabled={isNavigating}
           >
             <RefreshCw className='w-4 h-4' /> Reset Pilihan
           </Button>
-          <Button className='flex-1 cursor-pointer' onClick={onContinue}>
-            Lanjutkan
+          <Button
+            className='flex-1 cursor-pointer gap-2'
+            onClick={onContinue}
+            disabled={isNavigating}
+          >
+            {isNavigating ? (
+              <>
+                <Loader2 className='w-4 h-4 animate-spin' />
+                Membuka Data Pasien...
+              </>
+            ) : (
+              <>
+                Lanjutkan
+                <ArrowRight className='w-4 h-4' />
+              </>
+            )}
           </Button>
         </div>
       </CardContent>
     </Card>
   );
 }
+

@@ -43,10 +43,12 @@ export function InlineTextCell({
   extraDisplayContent,
 }: InlineTextCellProps) {
   const [tempValue, setTempValue] = useState(value);
+  const [prevValue, setPrevValue] = useState(value);
 
-  useEffect(() => {
+  if (prevValue !== value) {
+    setPrevValue(value);
     setTempValue(value);
-  }, [value, isEditing]);
+  }
 
   const handleSave = () => {
     if (tempValue.trim() !== '' && tempValue !== value) {
@@ -136,10 +138,12 @@ export function InlineDietCell({
   isModified = false,
 }: InlineDietCellProps) {
   const [tempValue, setTempValue] = useState(value);
+  const [prevValue, setPrevValue] = useState(value);
 
-  useEffect(() => {
+  if (prevValue !== value) {
+    setPrevValue(value);
     setTempValue(value);
-  }, [value, isEditing]);
+  }
 
   const handleSave = () => {
     const target = tempValue.trim();

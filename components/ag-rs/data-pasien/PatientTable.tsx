@@ -36,6 +36,11 @@ export default function PatientTable({
   patients,
   onEdit,
   onDelete,
+  onSaveField,
+  onInlineAdd,
+  onQuickPulang,
+  onOpenPindah,
+  onPindahOptimistic,
   gedungList = [],
   kelasList = [],
   totalBedCapacity = 6,
@@ -117,28 +122,34 @@ export default function PatientTable({
       return;
     }
 
+    const payload: PatientFormValues = {
+      nama_pasien: inlineAddDraft.nama_pasien.trim(),
+      no_rm: inlineAddDraft.no_rm.trim(),
+      diet: inlineAddDraft.diet.trim(),
+      kelas: inlineAddDraft.kelas || kelasOptions[0] || 'Kelas 1',
+      gedung: inlineAddDraft.gedung || gedung,
+      ruangan: inlineAddDraft.ruangan || ruangan,
+      bed: inlineAddDraft.bed || bedKey,
+      status_pasien: inlineAddDraft.status_pasien || 'AKTIF',
+      is_npo: Boolean(inlineAddDraft.is_npo),
+    };
+
+    if (onInlineAdd) {
+      onInlineAdd(payload, bedKey);
+      setInlineAddBedKey(null);
+      setInlineAddDraft(null);
+      return;
+    }
+
     setIsSavingInline(true);
     try {
-      const res = await createPatient(
-        {
-          nama_pasien: inlineAddDraft.nama_pasien.trim(),
-          no_rm: inlineAddDraft.no_rm.trim(),
-          diet: inlineAddDraft.diet.trim(),
-          kelas: inlineAddDraft.kelas || kelasOptions[0] || 'Kelas 1',
-          gedung: inlineAddDraft.gedung || gedung,
-          ruangan: inlineAddDraft.ruangan || ruangan,
-          bed: inlineAddDraft.bed || bedKey,
-          status_pasien: inlineAddDraft.status_pasien || 'AKTIF',
-          is_npo: Boolean(inlineAddDraft.is_npo),
-        },
-        revisionContext,
-      );
+      const res = await createPatient(payload, revisionContext);
 
       if (res.success) {
         toast.success(
           revisionContext?.isRevisiMode
-            ? `Revisi Pasien ${inlineAddDraft.nama_pasien.trim()} diajukan ke Otorisasi Supervisor!`
-            : `Pasien ${inlineAddDraft.nama_pasien.trim()} berhasil ditambahkan ke ${inlineAddDraft.bed || bedKey}!`,
+            ? `Revisi Pasien ${payload.nama_pasien} diajukan ke Otorisasi Supervisor!`
+            : `Pasien ${payload.nama_pasien} berhasil ditambahkan ke ${payload.bed || bedKey}!`,
         );
         setInlineAddBedKey(null);
         setInlineAddDraft(null);
@@ -190,6 +201,14 @@ export default function PatientTable({
       return;
     }
 
+    markAsModified(patient.id, field);
+    setEditingTarget(null);
+
+    if (onSaveField) {
+      onSaveField(patient, field, value);
+      return;
+    }
+
     try {
       const res = await updatePatientField(
         patient.id,
@@ -197,7 +216,6 @@ export default function PatientTable({
         revisionContext,
       );
       if (res.success) {
-        markAsModified(patient.id, field);
         toast.success(
           revisionContext?.isRevisiMode
             ? `Revisi ${field.toUpperCase().replace('_', ' ')} ${patient.nama_pasien} diajukan ke Otorisasi Supervisor`
@@ -208,8 +226,6 @@ export default function PatientTable({
       }
     } catch {
       toast.error('Gagal memperbarui data pasien.');
-    } finally {
-      setEditingTarget(null);
     }
   }
 
@@ -224,6 +240,13 @@ export default function PatientTable({
 
   async function handleQuickPulang(patient: Patient) {
     setContextMenu(null);
+    markAsModified(patient.id, 'status_pasien');
+
+    if (onQuickPulang) {
+      onQuickPulang(patient);
+      return;
+    }
+
     try {
       const res = await updatePatientField(
         patient.id,
@@ -233,7 +256,6 @@ export default function PatientTable({
         revisionContext,
       );
       if (res.success) {
-        markAsModified(patient.id, 'status_pasien');
         toast.success(
           revisionContext?.isRevisiMode
             ? `Revisi kepulangan ${patient.nama_pasien} diajukan ke Otorisasi Supervisor.`
@@ -389,7 +411,13 @@ export default function PatientTable({
         contextMenu={contextMenu}
         onClose={() => setContextMenu(null)}
         onEdit={onEdit}
-        onOpenPindah={(patient) => setPindahPatient(patient)}
+        onOpenPindah={(patient) => {
+          if (onOpenPindah) {
+            onOpenPindah(patient);
+          } else {
+            setPindahPatient(patient);
+          }
+        }}
         onQuickPulang={handleQuickPulang}
       />
 
@@ -399,6 +427,7 @@ export default function PatientTable({
         gedungList={gedungList}
         onClose={() => setPindahPatient(null)}
         revisionContext={revisionContext}
+        onPindahOptimistic={onPindahOptimistic}
         onSuccess={(id) => {
           markAsModified(id, 'ruangan');
           markAsModified(id, 'gedung');

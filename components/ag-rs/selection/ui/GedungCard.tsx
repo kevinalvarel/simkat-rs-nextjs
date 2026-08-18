@@ -6,15 +6,24 @@ import type { GedungWithRuangan } from '@/servers/tempat.service';
 
 interface GedungCardProps {
   gedung: GedungWithRuangan;
+  isSelected?: boolean;
   onSelect: () => void;
 }
 
-export default function GedungCard({ gedung, onSelect }: GedungCardProps) {
+export default function GedungCard({
+  gedung,
+  isSelected = false,
+  onSelect,
+}: GedungCardProps) {
   const isNewBuilding = gedung.namaGedung.toLowerCase().includes('baru');
 
   return (
     <Card
-      className='cursor-pointer border-2 hover:border-primary hover:shadow-lg transition-all duration-200 group'
+      className={`cursor-pointer border-2 transition-all duration-200 group ${
+        isSelected
+          ? 'border-primary ring-2 ring-primary/40 shadow-lg scale-[1.02]'
+          : 'hover:border-primary hover:shadow-lg'
+      }`}
       onClick={onSelect}
     >
       <CardContent className='p-6 flex flex-col items-center justify-center space-y-4 text-center'>

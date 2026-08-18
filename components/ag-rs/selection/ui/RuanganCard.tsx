@@ -6,13 +6,22 @@ import type { RuanganItem } from '@/servers/tempat.service';
 
 interface RuanganCardProps {
   ruangan: RuanganItem;
+  isSelected?: boolean;
   onSelect: () => void;
 }
 
-export default function RuanganCard({ ruangan, onSelect }: RuanganCardProps) {
+export default function RuanganCard({
+  ruangan,
+  isSelected = false,
+  onSelect,
+}: RuanganCardProps) {
   return (
     <Card
-      className='cursor-pointer border-2 hover:border-primary hover:shadow-md transition-all duration-200 group'
+      className={`cursor-pointer border-2 transition-all duration-200 group ${
+        isSelected
+          ? 'border-primary ring-2 ring-primary/40 shadow-md scale-[1.02]'
+          : 'hover:border-primary hover:shadow-md'
+      }`}
       onClick={onSelect}
     >
       <CardContent className='p-5 flex flex-col items-center text-center space-y-3'>

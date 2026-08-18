@@ -39,6 +39,7 @@ const MEAL_TIMES_CONFIG: MealConfigItem[] = [
 
 interface StepMealTimeSectionProps {
   isLoading: boolean;
+  selectedMealTime?: MealTimeType;
   getMealLockInfo: (
     jenisMakan: 'PAGI' | 'SIANG' | 'MALAM',
     defaultCutoff: string,
@@ -51,6 +52,7 @@ interface StepMealTimeSectionProps {
 
 export default function StepMealTimeSection({
   isLoading,
+  selectedMealTime,
   getMealLockInfo,
   onSelectMealTime,
 }: StepMealTimeSectionProps) {
@@ -91,6 +93,7 @@ export default function StepMealTimeSection({
                 key={meal.key}
                 meal={meal}
                 lockInfo={lockInfo}
+                isSelected={selectedMealTime === meal.key}
                 onSelect={() => onSelectMealTime(meal.key, lockInfo)}
               />
             );

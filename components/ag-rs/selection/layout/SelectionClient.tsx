@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '@/components/ag-rs/navbar';
 import SelectionStepHeader from '@/components/ag-rs/selection/ui/SelectionStepHeader';
@@ -29,8 +29,20 @@ const MEAL_NAME_MAP: Record<string, string> = {
   MALAM: 'Makan Malam',
 };
 
-export default function SelectionClient() {
+interface SelectionClientProps {
+  initialGedungList?: GedungWithRuangan[];
+  initialWaktuConfigs?: WaktuMakanConfig[];
+  initialSnapshotBatches?: SnapshotBatch[];
+}
+
+export default function SelectionClient({
+  initialGedungList,
+  initialWaktuConfigs,
+  initialSnapshotBatches,
+}: SelectionClientProps = {}) {
   const router = useRouter();
+  const [isNavigating, startNavigationTransition] = useTransition();
+
   const [selectedMealTime, setSelectedMealTime] = useState<MealTimeType>(null);
   const [selectedGedung, setSelectedGedung] =
     useState<GedungWithRuangan | null>(null);
@@ -38,12 +50,23 @@ export default function SelectionClient() {
     null,
   );
 
-  const [gedungList, setGedungList] = useState<GedungWithRuangan[]>([]);
-  const [waktuConfigs, setWaktuConfigs] = useState<WaktuMakanConfig[]>([]);
-  const [snapshotBatches, setSnapshotBatches] = useState<SnapshotBatch[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [gedungList, setGedungList] = useState<GedungWithRuangan[]>(
+    () => initialGedungList || [],
+  );
+  const [waktuConfigs, setWaktuConfigs] = useState<WaktuMakanConfig[]>(
+    () => initialWaktuConfigs || [],
+  );
+  const [snapshotBatches, setSnapshotBatches] = useState<SnapshotBatch[]>(
+    () => initialSnapshotBatches || [],
+  );
+  const [isLoading, setIsLoading] = useState<boolean>(
+    () => !initialGedungList || initialGedungList.length === 0,
+  );
 
   useEffect(() => {
+    if (initialGedungList && initialGedungList.length > 0) return;
+
+    let isMounted = true;
     async function loadData() {
       setIsLoading(true);
       try {
@@ -52,17 +75,21 @@ export default function SelectionClient() {
           getWaktuMakanConfig(),
           getSnapshotBatches(),
         ]);
+        if (!isMounted) return;
         setGedungList(gData);
         setWaktuConfigs(cData);
         setSnapshotBatches(bData);
       } catch (err) {
         console.error('Gagal mengambil data master RS:', err);
       } finally {
-        setIsLoading(false);
+        if (isMounted) setIsLoading(false);
       }
     }
     loadData();
-  }, []);
+    return () => {
+      isMounted = false;
+    };
+  }, [initialGedungList]);
 
   // Helper to determine lock status and whether a meal cycle is the IMMEDIATELY PREVIOUS batch (eligible for revision)
   function getMealLockInfo(
@@ -137,6 +164,45 @@ export default function SelectionClient() {
     };
   }
 
+  // Construct target URL for prefetching and direct navigation
+  const buildTargetUrl = (
+    meal: MealTimeType,
+    gedung: GedungWithRuangan | null,
+    ruangan: RuanganItem | null,
+  ) => {
+    if (!meal || !gedung || !ruangan) return null;
+
+    const jenisMakan =
+      meal === 'Makan Pagi'
+        ? 'PAGI'
+        : meal === 'Makan Siang'
+          ? 'SIANG'
+          : 'MALAM';
+    const lock = getMealLockInfo(jenisMakan, '12:00');
+    const isRevisi = lock.isPreviousBatch;
+
+    const targetBatch = snapshotBatches.find(
+      (b) => b.waktu_makan === jenisMakan,
+    );
+
+    const params = new URLSearchParams({
+      ruangan: ruangan.namaRuangan,
+      gedung: gedung.namaGedung,
+      ruanganId: String(ruangan.idRuangan),
+      gedungId: String(gedung.idGedung),
+      ...(isRevisi
+        ? {
+            isRevisi: 'true',
+            revisiMeal: meal,
+            waktuMakan: jenisMakan,
+            batchId: targetBatch ? String(targetBatch.id) : '',
+          }
+        : {}),
+    });
+
+    return `/dashboard/ag-rs/data-pasien?${params.toString()}`;
+  };
+
   const handleSelectMealTime = (
     meal: 'Makan Pagi' | 'Makan Siang' | 'Makan Malam',
     lockInfo: MealLockInfo,
@@ -168,6 +234,12 @@ export default function SelectionClient() {
 
   const handleSelectRuangan = (ruangan: RuanganItem) => {
     setSelectedRuangan(ruangan);
+
+    // Optimistically prefetch target data-pasien page
+    const nextUrl = buildTargetUrl(selectedMealTime, selectedGedung, ruangan);
+    if (nextUrl) {
+      router.prefetch(nextUrl);
+    }
   };
 
   const handleReset = () => {
@@ -176,37 +248,30 @@ export default function SelectionClient() {
     setSelectedRuangan(null);
   };
 
+  const handleStepJump = (step: number) => {
+    if (step === 0) {
+      setSelectedMealTime(null);
+      setSelectedGedung(null);
+      setSelectedRuangan(null);
+    } else if (step === 1) {
+      setSelectedGedung(null);
+      setSelectedRuangan(null);
+    } else if (step === 2) {
+      setSelectedRuangan(null);
+    }
+  };
+
   const handleContinue = () => {
-    if (!selectedMealTime || !selectedGedung || !selectedRuangan) return;
-
-    const jenisMakan =
-      selectedMealTime === 'Makan Pagi'
-        ? 'PAGI'
-        : selectedMealTime === 'Makan Siang'
-          ? 'SIANG'
-          : 'MALAM';
-    const lock = getMealLockInfo(jenisMakan, '12:00');
-    const isRevisi = lock.isPreviousBatch;
-
-    const targetBatch = snapshotBatches.find(
-      (b) => b.waktu_makan === jenisMakan,
+    const targetUrl = buildTargetUrl(
+      selectedMealTime,
+      selectedGedung,
+      selectedRuangan,
     );
+    if (!targetUrl) return;
 
-    const params = new URLSearchParams({
-      ruangan: selectedRuangan.namaRuangan,
-      gedung: selectedGedung.namaGedung,
-      ruanganId: String(selectedRuangan.idRuangan),
-      gedungId: String(selectedGedung.idGedung),
-      ...(isRevisi
-        ? {
-            isRevisi: 'true',
-            revisiMeal: selectedMealTime,
-            waktuMakan: jenisMakan,
-            batchId: targetBatch ? String(targetBatch.id) : '',
-          }
-        : {}),
+    startNavigationTransition(() => {
+      router.push(targetUrl);
     });
-    router.push(`/dashboard/ag-rs/data-pasien?${params.toString()}`);
   };
 
   // Determine current step index (0: Jam Makan, 1: Gedung, 2: Ruangan, 3: Konfirmasi)
@@ -241,13 +306,17 @@ export default function SelectionClient() {
             selectedGedungName={selectedGedung?.namaGedung}
           />
 
-          {/* Progress Indicator */}
-          <SelectionProgressIndicator currentStep={currentStep} />
+          {/* Interactive Progress Indicator */}
+          <SelectionProgressIndicator
+            currentStep={currentStep}
+            onStepClick={handleStepJump}
+          />
 
           {/* STEP 1: Select Meal Time */}
           {currentStep === 0 && (
             <StepMealTimeSection
               isLoading={isLoading}
+              selectedMealTime={selectedMealTime}
               getMealLockInfo={getMealLockInfo}
               onSelectMealTime={handleSelectMealTime}
             />
@@ -257,9 +326,10 @@ export default function SelectionClient() {
           {currentStep === 1 && (
             <StepGedungSection
               selectedMealTime={selectedMealTime}
+              selectedGedung={selectedGedung}
               isLoading={isLoading}
               gedungList={gedungList}
-              onBack={() => setSelectedMealTime(null)}
+              onBack={() => handleStepJump(0)}
               onSelectGedung={handleSelectGedung}
             />
           )}
@@ -269,7 +339,8 @@ export default function SelectionClient() {
             <StepRuanganSection
               selectedMealTime={selectedMealTime}
               selectedGedung={selectedGedung}
-              onBack={() => setSelectedGedung(null)}
+              selectedRuangan={selectedRuangan}
+              onBack={() => handleStepJump(1)}
               onSelectRuangan={handleSelectRuangan}
             />
           )}
@@ -284,6 +355,7 @@ export default function SelectionClient() {
                 selectedGedung={selectedGedung}
                 selectedRuangan={selectedRuangan}
                 isRevisi={Boolean(confirmationLock?.isPreviousBatch)}
+                isNavigating={isNavigating}
                 onReset={handleReset}
                 onContinue={handleContinue}
               />
@@ -293,3 +365,4 @@ export default function SelectionClient() {
     </div>
   );
 }
+
