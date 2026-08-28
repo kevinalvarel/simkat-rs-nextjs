@@ -80,6 +80,23 @@ export function PatientTableRow({
         ),
       ];
 
+  const matchedRuangan = patientGedungObj
+    ? patientGedungObj.ruanganList.find((r) => r.namaRuangan === patient.ruangan)
+    : gedungList
+        .flatMap((g) => g.ruanganList)
+        .find((r) => r.namaRuangan === patient.ruangan);
+
+  const kamarOptions =
+    matchedRuangan?.kamarList && matchedRuangan.kamarList.length > 0
+      ? matchedRuangan.kamarList.map((k) => k.nomorKamar)
+      : ['Kamar 1'];
+
+  const displayKamarValue =
+    (kamarOptions.find((k) => patient.bed.startsWith(k)) ||
+      (patient.gedung && kamarOptions.includes(patient.gedung) ? patient.gedung : null) ||
+      kamarOptions[0] ||
+      'Kamar 1');
+
   return (
     <TableRow
       key={patient.id}
@@ -218,11 +235,11 @@ export function PatientTableRow({
         title='Klik untuk mengedit Bed'
       />
 
-      {/* Gedung (Inline Editable Select / Text fallback) */}
-      {gedungOptions.length > 0 ? (
+      {/* Nomor Kamar (Inline Editable Select / Text fallback) */}
+      {kamarOptions.length > 0 ? (
         <InlineSelectCell
-          value={patient.gedung}
-          options={gedungOptions}
+          value={displayKamarValue}
+          options={kamarOptions}
           isEditing={
             editingTarget?.patientId === patient.id &&
             editingTarget.field === 'gedung'
@@ -231,13 +248,13 @@ export function PatientTableRow({
           onSave={(val) => onSaveField(patient, 'gedung', val)}
           onCancel={onCancelEdit}
           isModified={modifiedFields?.gedung}
-          placeholder='Pilih Gedung'
-          triggerClassName='h-7 text-xs w-32'
-          title='Klik untuk mengedit Gedung'
+          placeholder='Pilih Kamar'
+          triggerClassName='h-7 text-xs w-28'
+          title='Klik untuk mengedit Nomor Kamar'
         />
       ) : (
         <InlineTextCell
-          value={patient.gedung}
+          value={displayKamarValue}
           isEditing={
             editingTarget?.patientId === patient.id &&
             editingTarget.field === 'gedung'
@@ -246,8 +263,8 @@ export function PatientTableRow({
           onSave={(val) => onSaveField(patient, 'gedung', val)}
           onCancel={onCancelEdit}
           isModified={modifiedFields?.gedung}
-          placeholder='Gedung'
-          title='Klik untuk mengedit Gedung'
+          placeholder='Nomor Kamar'
+          title='Klik untuk mengedit Nomor Kamar'
         />
       )}
 

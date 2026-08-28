@@ -13,6 +13,8 @@ import {
   Clock,
   Building2,
   DoorOpen,
+  DoorClosed,
+  BedDouble,
   RefreshCw,
   Loader2,
   ArrowRight,
@@ -21,12 +23,13 @@ import type {
   GedungWithRuangan,
   RuanganItem,
 } from '@/servers/tempat.service';
-import type { MealTimeType } from '@/types/ag-rs-types';
+import type { MealTimeType, SelectedKamarItem } from '@/types/ag-rs-types';
 
 interface StepConfirmationSectionProps {
   selectedMealTime: MealTimeType;
   selectedGedung: GedungWithRuangan;
   selectedRuangan: RuanganItem;
+  selectedKamar: SelectedKamarItem;
   isRevisi: boolean;
   isNavigating?: boolean;
   onReset: () => void;
@@ -37,6 +40,7 @@ export default function StepConfirmationSection({
   selectedMealTime,
   selectedGedung,
   selectedRuangan,
+  selectedKamar,
   isRevisi,
   isNavigating = false,
   onReset,
@@ -83,7 +87,7 @@ export default function StepConfirmationSection({
             </span>
           </div>
 
-          <div className='flex justify-between items-center'>
+          <div className='flex justify-between items-center pb-2 border-b border-border/50'>
             <span className='text-sm text-muted-foreground flex items-center gap-2'>
               <DoorOpen className='w-4 h-4 text-primary' />
               Ruangan
@@ -91,6 +95,22 @@ export default function StepConfirmationSection({
             <span className='font-semibold text-primary'>
               {selectedRuangan.namaRuangan}
             </span>
+          </div>
+
+          <div className='flex justify-between items-center'>
+            <span className='text-sm text-muted-foreground flex items-center gap-2'>
+              <DoorClosed className='w-4 h-4 text-primary' />
+              Kamar / Pintu
+            </span>
+            <div className='flex items-center gap-2'>
+              <span className='font-semibold text-primary'>
+                {selectedKamar.nomorKamar}
+              </span>
+              <Badge variant='secondary' className='text-[10px] gap-1 px-1.5 py-0.2'>
+                <BedDouble className='w-3 h-3 text-primary' />
+                {selectedKamar.jumlahBed} Bed
+              </Badge>
+            </div>
           </div>
         </div>
 

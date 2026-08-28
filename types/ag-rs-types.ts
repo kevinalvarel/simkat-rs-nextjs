@@ -1,10 +1,21 @@
-import type { GedungWithRuangan, RuanganItem } from '@/servers/tempat.service';
+import type {
+  GedungWithRuangan,
+  RuanganItem,
+  KamarDetail,
+} from '@/servers/tempat.service';
 import type {
   WaktuMakanConfig,
   SnapshotBatch,
 } from '@/servers/snapshot.service';
 
 export type MealTimeType = 'Makan Pagi' | 'Makan Siang' | 'Makan Malam' | null;
+
+export type SelectedKamarItem = KamarDetail | {
+  idKamar: string;
+  nomorKamar: string;
+  jumlahBed: number;
+  kelas?: string;
+};
 
 export interface MealConfigItem {
   key: 'Makan Pagi' | 'Makan Siang' | 'Makan Malam';
@@ -30,8 +41,10 @@ export interface SelectionState {
   selectedMealTime: MealTimeType;
   selectedGedung: GedungWithRuangan | null;
   selectedRuangan: RuanganItem | null;
+  selectedKamar: SelectedKamarItem | null;
   gedungList: GedungWithRuangan[];
   waktuConfigs: WaktuMakanConfig[];
   snapshotBatches: SnapshotBatch[];
   isLoading: boolean;
 }
+

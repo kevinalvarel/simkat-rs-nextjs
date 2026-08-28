@@ -1,6 +1,7 @@
 export * from './auth-schema';
 export * from './schemas/master/gedung';
 export * from './schemas/master/ruangan';
+export * from './schemas/master/kamar';
 export * from './schemas/master/kelas';
 export * from './schemas/master/kategori-menu';
 export * from './schemas/master/mapping-diet';

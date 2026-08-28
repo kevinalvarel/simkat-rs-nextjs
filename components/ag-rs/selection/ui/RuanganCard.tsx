@@ -33,7 +33,11 @@ export default function RuanganCard({
             {ruangan.namaRuangan}
           </h4>
           <p className='text-xs text-muted-foreground mt-0.5'>
-            ID: #{ruangan.idRuangan}
+            {ruangan.kamarList && ruangan.kamarList.length > 0
+              ? `${ruangan.kamarList.length} Kamar/Pintu · ${ruangan.jumlahBed || 0} Bed`
+              : ruangan.jumlahBed
+                ? `${ruangan.jumlahBed} Bed`
+                : `ID: #${ruangan.idRuangan}`}
           </p>
         </div>
         <Button

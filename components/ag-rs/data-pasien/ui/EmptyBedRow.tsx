@@ -9,6 +9,7 @@ interface EmptyBedRowProps {
   defaultBedLabel: string;
   ruangan: string;
   gedung: string;
+  kamar?: string;
   onStartInlineAdd: (bedLabel: string) => void;
 }
 
@@ -17,6 +18,7 @@ export function EmptyBedRow({
   defaultBedLabel,
   ruangan,
   gedung,
+  kamar,
   onStartInlineAdd,
 }: EmptyBedRowProps) {
   return (
@@ -47,7 +49,7 @@ export function EmptyBedRow({
         {defaultBedLabel}
       </TableCell>
       <TableCell className='text-xs text-muted-foreground/60'>
-        {gedung || '-'}
+        {kamar || 'Kamar 1'}
       </TableCell>
       <TableCell>
         <span className='inline-flex items-center rounded-md border border-dashed border-muted-foreground/30 px-2 py-0.5 text-[10px] font-medium text-muted-foreground/40 bg-muted/20'>

@@ -31,8 +31,8 @@ export function KonfigurasiHeader({
           Konfigurasi Tempat & Ruangan
         </h1>
         <p className='text-xs sm:text-sm text-muted-foreground max-w-2xl'>
-          Modul hirarki <strong>Gedung ➔ Ruangan ➔ Kelas ➔ Bed</strong> untuk
-          menentukan lokasi rawat inap pasien dan kapasitas bed rumah sakit.
+          Modul hierarki <strong>Gedung ➔ Ruangan ➔ Nomor Pintu / Kamar ➔ Bed</strong> untuk
+          mengatur tata letak rawat inap pasien dan kapasitas bed rumah sakit.
         </p>
       </div>
 

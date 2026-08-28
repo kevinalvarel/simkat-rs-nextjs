@@ -47,6 +47,8 @@ export interface PatientTableProps {
   totalBedCapacity?: number;
   ruangan?: string;
   gedung?: string;
+  kamar?: string;
+  kamarId?: string;
   searchQuery?: string;
   onAddPatientForBed?: (bedName: string) => void;
   revisionContext?: RevisionContext;
@@ -56,6 +58,8 @@ export interface DataPasienClientProps {
   patients: Patient[];
   ruangan: string;
   gedung: string;
+  kamar?: string;
+  kamarId?: string;
   kelasList?: KelasOption[];
   gedungList?: GedungWithRuangan[];
 }
@@ -66,6 +70,7 @@ export interface PatientFormDialogProps {
   patient?: Patient | null;
   defaultRuangan?: string;
   defaultGedung?: string;
+  defaultKamar?: string;
   defaultBed?: string;
   initialBed?: string;
   kelasList?: KelasOption[];
@@ -117,6 +122,8 @@ export interface InlineAddRowProps {
   inlineAddDraft: PatientFormValues;
   ruangan: string;
   gedung: string;
+  kamar?: string;
+  kamarOptions?: string[];
   kelasOptions: string[];
   statusOptions: string[];
   isSavingInline: boolean;

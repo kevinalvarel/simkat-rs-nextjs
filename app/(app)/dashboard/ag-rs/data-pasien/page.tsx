@@ -10,6 +10,8 @@ interface DataPasienPageProps {
     gedung?: string;
     ruanganId?: string;
     gedungId?: string;
+    kamar?: string;
+    kamarId?: string;
   }>;
 }
 
@@ -19,6 +21,8 @@ export default async function DataPasienPage({
   const params = await searchParams;
   const ruangan = params.ruangan;
   const gedung = params.gedung;
+  const kamar = params.kamar;
+  const kamarId = params.kamarId;
 
   // Redirect back if no room is selected
   if (!ruangan || !gedung) {
@@ -42,6 +46,8 @@ export default async function DataPasienPage({
             patients={patients}
             ruangan={ruangan}
             gedung={gedung}
+            kamar={kamar}
+            kamarId={kamarId}
             kelasList={kelasList}
             gedungList={gedungList}
           />

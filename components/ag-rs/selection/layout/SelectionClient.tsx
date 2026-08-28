@@ -8,6 +8,7 @@ import SelectionProgressIndicator from '@/components/ag-rs/selection/ui/Selectio
 import StepMealTimeSection from './StepMealTimeSection';
 import StepGedungSection from './StepGedungSection';
 import StepRuanganSection from './StepRuanganSection';
+import StepKamarSection from './StepKamarSection';
 import StepConfirmationSection from './StepConfirmationSection';
 import { toast } from 'sonner';
 import {
@@ -21,7 +22,11 @@ import {
   WaktuMakanConfig,
   SnapshotBatch,
 } from '@/servers/snapshot.service';
-import type { MealTimeType, MealLockInfo } from '@/types/ag-rs-types';
+import type {
+  MealTimeType,
+  MealLockInfo,
+  SelectedKamarItem,
+} from '@/types/ag-rs-types';
 
 const MEAL_NAME_MAP: Record<string, string> = {
   PAGI: 'Makan Pagi',
@@ -49,6 +54,8 @@ export default function SelectionClient({
   const [selectedRuangan, setSelectedRuangan] = useState<RuanganItem | null>(
     null,
   );
+  const [selectedKamar, setSelectedKamar] =
+    useState<SelectedKamarItem | null>(null);
 
   const [gedungList, setGedungList] = useState<GedungWithRuangan[]>(
     () => initialGedungList || [],
@@ -192,6 +199,7 @@ export default function SelectionClient({
     meal: MealTimeType,
     gedung: GedungWithRuangan | null,
     ruangan: RuanganItem | null,
+    kamar: SelectedKamarItem | null,
   ) => {
     if (!meal || !gedung || !ruangan) return null;
 
@@ -213,6 +221,12 @@ export default function SelectionClient({
       gedung: gedung.namaGedung,
       ruanganId: String(ruangan.idRuangan),
       gedungId: String(gedung.idGedung),
+      ...(kamar && kamar.idKamar !== 'all'
+        ? {
+            kamar: kamar.nomorKamar,
+            kamarId: String(kamar.idKamar),
+          }
+        : {}),
       ...(isRevisi
         ? {
             isRevisi: 'true',
@@ -248,18 +262,30 @@ export default function SelectionClient({
     setSelectedMealTime(meal);
     setSelectedGedung(null);
     setSelectedRuangan(null);
+    setSelectedKamar(null);
   };
 
   const handleSelectGedung = (gedung: GedungWithRuangan) => {
     setSelectedGedung(gedung);
     setSelectedRuangan(null);
+    setSelectedKamar(null);
   };
 
   const handleSelectRuangan = (ruangan: RuanganItem) => {
     setSelectedRuangan(ruangan);
+    setSelectedKamar(null);
+  };
+
+  const handleSelectKamar = (kamar: SelectedKamarItem) => {
+    setSelectedKamar(kamar);
 
     // Optimistically prefetch target data-pasien page
-    const nextUrl = buildTargetUrl(selectedMealTime, selectedGedung, ruangan);
+    const nextUrl = buildTargetUrl(
+      selectedMealTime,
+      selectedGedung,
+      selectedRuangan,
+      kamar,
+    );
     if (nextUrl) {
       router.prefetch(nextUrl);
     }
@@ -269,6 +295,7 @@ export default function SelectionClient({
     setSelectedMealTime(null);
     setSelectedGedung(null);
     setSelectedRuangan(null);
+    setSelectedKamar(null);
   };
 
   const handleStepJump = (step: number) => {
@@ -276,11 +303,16 @@ export default function SelectionClient({
       setSelectedMealTime(null);
       setSelectedGedung(null);
       setSelectedRuangan(null);
+      setSelectedKamar(null);
     } else if (step === 1) {
       setSelectedGedung(null);
       setSelectedRuangan(null);
+      setSelectedKamar(null);
     } else if (step === 2) {
       setSelectedRuangan(null);
+      setSelectedKamar(null);
+    } else if (step === 3) {
+      setSelectedKamar(null);
     }
   };
 
@@ -289,6 +321,7 @@ export default function SelectionClient({
       selectedMealTime,
       selectedGedung,
       selectedRuangan,
+      selectedKamar,
     );
     if (!targetUrl) return;
 
@@ -297,14 +330,16 @@ export default function SelectionClient({
     });
   };
 
-  // Determine current step index (0: Jam Makan, 1: Gedung, 2: Ruangan, 3: Konfirmasi)
+  // Determine current step index (0: Jam Makan, 1: Gedung, 2: Ruangan, 3: Kamar/Pintu, 4: Konfirmasi)
   const currentStep = !selectedMealTime
     ? 0
     : !selectedGedung
       ? 1
       : !selectedRuangan
         ? 2
-        : 3;
+        : !selectedKamar
+          ? 3
+          : 4;
 
   const currentJenisMakan =
     selectedMealTime === 'Makan Pagi'
@@ -327,6 +362,7 @@ export default function SelectionClient({
             currentStep={currentStep}
             selectedMealTime={selectedMealTime}
             selectedGedungName={selectedGedung?.namaGedung}
+            selectedRuanganName={selectedRuangan?.namaRuangan}
           />
 
           {/* Interactive Progress Indicator */}
@@ -368,15 +404,29 @@ export default function SelectionClient({
             />
           )}
 
-          {/* STEP 4: Final Confirmation */}
-          {currentStep === 3 &&
+          {/* STEP 4: Select Kamar / Pintu */}
+          {currentStep === 3 && selectedGedung && selectedRuangan && (
+            <StepKamarSection
+              selectedMealTime={selectedMealTime}
+              selectedGedung={selectedGedung}
+              selectedRuangan={selectedRuangan}
+              selectedKamar={selectedKamar}
+              onBack={() => handleStepJump(2)}
+              onSelectKamar={handleSelectKamar}
+            />
+          )}
+
+          {/* STEP 5: Final Confirmation */}
+          {currentStep === 4 &&
             selectedMealTime &&
             selectedGedung &&
-            selectedRuangan && (
+            selectedRuangan &&
+            selectedKamar && (
               <StepConfirmationSection
                 selectedMealTime={selectedMealTime}
                 selectedGedung={selectedGedung}
                 selectedRuangan={selectedRuangan}
+                selectedKamar={selectedKamar}
                 isRevisi={Boolean(confirmationLock?.isPreviousBatch)}
                 isNavigating={isNavigating}
                 onReset={handleReset}
@@ -388,4 +438,5 @@ export default function SelectionClient({
     </div>
   );
 }
+
 

@@ -93,6 +93,7 @@ export function DeleteRuanganDialog({
           <DialogDescription className='text-xs pt-1'>
             Apakah Anda yakin ingin menghapus ruangan{' '}
             <strong className='text-foreground'>{ruangan.namaRuangan}</strong>?
+            Seluruh kamar ({ruangan.kamarList?.length || 0} kamar) dan bed di dalamnya juga akan terhapus.
           </DialogDescription>
         </DialogHeader>
 
@@ -119,3 +120,70 @@ export function DeleteRuanganDialog({
     </Dialog>
   );
 }
+
+interface DeleteKamarDialogProps {
+  kamarTarget: {
+    ruangan: RuanganDetail;
+    kamar: { idKamar: string; nomorKamar: string; jumlahBed: number };
+  } | null;
+  isDeleting: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}
+
+export function DeleteKamarDialog({
+  kamarTarget,
+  isDeleting,
+  onClose,
+  onConfirm,
+}: DeleteKamarDialogProps) {
+  if (!kamarTarget) return null;
+
+  return (
+    <Dialog
+      open={Boolean(kamarTarget)}
+      onOpenChange={(open) => !open && onClose()}
+    >
+      <DialogContent className='sm:max-w-md'>
+        <DialogHeader>
+          <DialogTitle className='flex items-center gap-2 text-destructive'>
+            <Trash2 className='w-5 h-5' />
+            Hapus Kamar / Nomor Pintu?
+          </DialogTitle>
+          <DialogDescription className='text-xs pt-1'>
+            Apakah Anda yakin ingin menghapus{' '}
+            <strong className='text-foreground'>
+              {kamarTarget.kamar.nomorKamar}
+            </strong>{' '}
+            ({kamarTarget.kamar.jumlahBed} bed) dari ruangan{' '}
+            <strong className='text-foreground'>
+              {kamarTarget.ruangan.namaRuangan}
+            </strong>
+            ?
+          </DialogDescription>
+        </DialogHeader>
+
+        <DialogFooter>
+          <Button variant='outline' onClick={onClose} disabled={isDeleting}>
+            Batal
+          </Button>
+          <Button
+            variant='destructive'
+            onClick={onConfirm}
+            disabled={isDeleting}
+          >
+            {isDeleting ? (
+              <>
+                <Loader2 className='mr-2 h-4 w-4 animate-spin' />
+                Menghapus...
+              </>
+            ) : (
+              'Hapus Kamar'
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+

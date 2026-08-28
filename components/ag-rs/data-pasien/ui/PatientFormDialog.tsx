@@ -49,6 +49,7 @@ export default function PatientFormDialog({
   patient = null,
   defaultRuangan,
   defaultGedung,
+  defaultKamar,
   initialBed = '',
   kelasList = [],
   gedungList = [],
@@ -65,7 +66,7 @@ export default function PatientFormDialog({
       no_rm: '',
       diet: '',
       kelas: '',
-      gedung: defaultGedung,
+      gedung: defaultKamar || defaultGedung || 'Kamar 1',
       ruangan: defaultRuangan,
       bed: '',
       status_pasien: 'AKTIF',
@@ -73,6 +74,7 @@ export default function PatientFormDialog({
   });
 
   const selectedGedungName = form.watch('gedung');
+  const selectedRuanganName = form.watch('ruangan') || defaultRuangan;
 
   // Compute available Kelas options
   const availableKelasOptions = useMemo(() => {
@@ -100,7 +102,7 @@ export default function PatientFormDialog({
   const availableRuanganOptions = useMemo(() => {
     const set = new Set<string>();
     const matchedGedung = gedungList.find(
-      (g) => g.namaGedung.toLowerCase() === selectedGedungName.toLowerCase(),
+      (g) => g.namaGedung.toLowerCase() === (selectedGedungName || '').toLowerCase(),
     );
 
     if (matchedGedung && matchedGedung.ruanganList.length > 0) {
@@ -116,6 +118,28 @@ export default function PatientFormDialog({
 
     return Array.from(set);
   }, [gedungList, selectedGedungName, defaultRuangan, patient?.ruangan]);
+
+  // Compute available Kamar options based on selected Ruangan
+  const availableKamarOptions = useMemo(() => {
+    const set = new Set<string>();
+    const matchedRuangan = gedungList
+      .flatMap((g) => g.ruanganList)
+      .find(
+        (r) =>
+          r.namaRuangan.toLowerCase() ===
+          (selectedRuanganName || defaultRuangan || '').toLowerCase(),
+      );
+
+    if (matchedRuangan?.kamarList && matchedRuangan.kamarList.length > 0) {
+      matchedRuangan.kamarList.forEach((k) => set.add(k.nomorKamar));
+    }
+    if (defaultKamar) set.add(defaultKamar);
+    if (set.size === 0) {
+      set.add('Kamar 1');
+      set.add('Kamar 2');
+    }
+    return Array.from(set);
+  }, [gedungList, selectedRuanganName, defaultRuangan, defaultKamar]);
 
   // Reset form when dialog opens/closes or patient changes
   useEffect(() => {
@@ -138,7 +162,7 @@ export default function PatientFormDialog({
           no_rm: '',
           diet: '',
           kelas: availableKelasOptions[0] || 'Kelas 1',
-          gedung: defaultGedung,
+          gedung: defaultKamar || availableKamarOptions[0] || defaultGedung || 'Kamar 1',
           ruangan: defaultRuangan,
           bed: initialBed,
           status_pasien: 'AKTIF',
@@ -151,8 +175,10 @@ export default function PatientFormDialog({
     patient,
     defaultRuangan,
     defaultGedung,
+    defaultKamar,
     initialBed,
     availableKelasOptions,
+    availableKamarOptions,
     form,
   ]);
 
@@ -290,54 +316,8 @@ export default function PatientFormDialog({
             )}
           </div>
 
-          {/* Gedung & Ruangan (Dropdown / Select) */}
+          {/* Ruangan & Nomor Kamar */}
           <div className='grid grid-cols-2 gap-3'>
-            {/* Gedung */}
-            <div className='space-y-1.5'>
-              <Label>Gedung</Label>
-              <Select
-                value={form.watch('gedung')}
-                onValueChange={(val) => {
-                  if (val !== null) {
-                    form.setValue('gedung', val, { shouldValidate: true });
-                    // Auto-select first room of new building if current room is not in it
-                    const newMatched = gedungList.find(
-                      (g) => g.namaGedung.toLowerCase() === val.toLowerCase(),
-                    );
-                    if (
-                      newMatched &&
-                      newMatched.ruanganList.length > 0 &&
-                      !newMatched.ruanganList.some(
-                        (r) => r.namaRuangan === form.getValues('ruangan'),
-                      )
-                    ) {
-                      form.setValue(
-                        'ruangan',
-                        newMatched.ruanganList[0].namaRuangan,
-                        { shouldValidate: true },
-                      );
-                    }
-                  }
-                }}
-              >
-                <SelectTrigger className='w-full'>
-                  <SelectValue placeholder='Pilih Gedung' />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableGedungOptions.map((g) => (
-                    <SelectItem key={g} value={g}>
-                      {g}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {form.formState.errors.gedung && (
-                <p className='text-xs text-destructive'>
-                  {form.formState.errors.gedung.message}
-                </p>
-              )}
-            </div>
-
             {/* Ruangan */}
             <div className='space-y-1.5'>
               <Label>Ruangan</Label>
@@ -363,6 +343,35 @@ export default function PatientFormDialog({
               {form.formState.errors.ruangan && (
                 <p className='text-xs text-destructive'>
                   {form.formState.errors.ruangan.message}
+                </p>
+              )}
+            </div>
+
+            {/* Nomor Kamar */}
+            <div className='space-y-1.5'>
+              <Label>Nomor Kamar</Label>
+              <Select
+                value={form.watch('gedung')}
+                onValueChange={(val) => {
+                  if (val !== null) {
+                    form.setValue('gedung', val, { shouldValidate: true });
+                  }
+                }}
+              >
+                <SelectTrigger className='w-full'>
+                  <SelectValue placeholder='Pilih Nomor Kamar' />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableKamarOptions.map((k) => (
+                    <SelectItem key={k} value={k}>
+                      {k}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {form.formState.errors.gedung && (
+                <p className='text-xs text-destructive'>
+                  {form.formState.errors.gedung.message}
                 </p>
               )}
             </div>

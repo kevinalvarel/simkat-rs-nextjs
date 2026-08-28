@@ -1,5 +1,7 @@
 import { pgTable, serial, text, integer } from 'drizzle-orm/pg-core';
+import { relations } from 'drizzle-orm';
 import { gedungTable } from './gedung';
+import { kamarTable } from './kamar';
 
 export const ruanganTable = pgTable('ruangan', {
   id: serial('id').primaryKey(),
@@ -10,3 +12,13 @@ export const ruanganTable = pgTable('ruangan', {
   kelas: text('kelas'),
   jumlah_bed: integer('jumlah_bed').default(10),
 });
+
+export const ruanganRelations = relations(ruanganTable, ({ one, many }) => ({
+  gedung: one(gedungTable, {
+    fields: [ruanganTable.gedung_id],
+    references: [gedungTable.id],
+  }),
+  kamarList: many(kamarTable),
+}));
+
+

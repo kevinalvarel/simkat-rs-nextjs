@@ -5,12 +5,14 @@ interface SelectionStepHeaderProps {
   currentStep: number;
   selectedMealTime: MealTimeType;
   selectedGedungName?: string;
+  selectedRuanganName?: string;
 }
 
 export default function SelectionStepHeader({
   currentStep,
   selectedMealTime,
   selectedGedungName,
+  selectedRuanganName,
 }: SelectionStepHeaderProps) {
   return (
     <div className='text-center space-y-2'>
@@ -18,7 +20,8 @@ export default function SelectionStepHeader({
         {currentStep === 0 && 'Pilih Waktu Makan'}
         {currentStep === 1 && 'Pilih Lokasi Gedung'}
         {currentStep === 2 && 'Pilih Ruangan'}
-        {currentStep === 3 && 'Pilihan Berhasil Disimpan'}
+        {currentStep === 3 && 'Pilih Kamar / Pintu'}
+        {currentStep === 4 && 'Pilihan Berhasil Disimpan'}
       </h2>
       <p className='text-sm text-muted-foreground'>
         {currentStep === 0 &&
@@ -28,7 +31,9 @@ export default function SelectionStepHeader({
         {currentStep === 2 &&
           `Gedung terpilih: ${selectedGedungName}. Pilih ruangan rawat/instalasi.`}
         {currentStep === 3 &&
-          'Berikut adalah ringkasan waktu makan, gedung, dan ruangan yang Anda pilih'}
+          `Ruangan terpilih: ${selectedRuanganName}. Pilih nomor kamar / pintu rawat.`}
+        {currentStep === 4 &&
+          'Berikut adalah ringkasan waktu makan, gedung, ruangan, dan kamar yang Anda pilih'}
       </p>
     </div>
   );

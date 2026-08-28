@@ -26,11 +26,16 @@ export default function DataPasienClient({
   patients,
   ruangan,
   gedung,
+  kamar,
+  kamarId,
   kelasList = [],
   gedungList = [],
 }: DataPasienClientProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  const activeKamar = kamar || searchParams.get('kamar') || undefined;
+  const activeKamarId = kamarId || searchParams.get('kamarId') || undefined;
 
   const isRevisiMode = searchParams.get('isRevisi') === 'true';
   const revisiMeal = searchParams.get('revisiMeal') || 'Batch Sebelumnya';
@@ -92,7 +97,21 @@ export default function DataPasienClient({
     return null;
   }, [gedungList, gedung, ruangan]);
 
-  const totalBedCapacity = targetRuangan?.jumlahBed ?? 6;
+  const targetKamar = useMemo(() => {
+    if (!activeKamar || !targetRuangan?.kamarList) return null;
+    if (activeKamar.toLowerCase().startsWith('semua kamar')) return null;
+    return (
+      targetRuangan.kamarList.find(
+        (k) =>
+          k.nomorKamar.toLowerCase() === activeKamar.toLowerCase() ||
+          (activeKamarId && String(k.idKamar) === String(activeKamarId)),
+      ) || null
+    );
+  }, [activeKamar, activeKamarId, targetRuangan]);
+
+  const totalBedCapacity = targetKamar
+    ? targetKamar.jumlahBed
+    : (targetRuangan?.jumlahBed ?? 6);
 
   // Filter patients based on search query (excluding PULANG patients)
   const filteredPatients = useMemo(() => {
@@ -381,7 +400,8 @@ export default function DataPasienClient({
           </div>
           <p className='text-sm text-muted-foreground flex items-center gap-1.5'>
             <DoorOpen className='h-4 w-4' />
-            {gedung} · {ruangan} ({totalBedCapacity} Bed)
+            {gedung} · {ruangan}
+            {activeKamar ? ` · ${activeKamar}` : ''} ({totalBedCapacity} Bed)
           </p>
         </div>
         <div className='flex gap-2'>
@@ -433,6 +453,8 @@ export default function DataPasienClient({
         totalBedCapacity={totalBedCapacity}
         ruangan={ruangan}
         gedung={gedung}
+        kamar={activeKamar}
+        kamarId={activeKamarId}
         searchQuery={searchQuery}
         onAddPatientForBed={(bedName) => handleAddPatient(bedName)}
         revisionContext={revisionContext}
@@ -445,6 +467,7 @@ export default function DataPasienClient({
         patient={selectedPatient}
         defaultRuangan={ruangan}
         defaultGedung={gedung}
+        defaultKamar={activeKamar}
         initialBed={initialBed}
         kelasList={kelasList}
         gedungList={gedungList}

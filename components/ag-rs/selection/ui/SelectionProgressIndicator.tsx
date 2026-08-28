@@ -10,6 +10,7 @@ const STEPS = [
   { id: 0, label: 'Waktu Makan' },
   { id: 1, label: 'Gedung' },
   { id: 2, label: 'Ruangan' },
+  { id: 3, label: 'Kamar / Pintu' },
 ];
 
 export default function SelectionProgressIndicator({

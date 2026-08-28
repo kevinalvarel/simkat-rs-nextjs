@@ -1,7 +1,11 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import type { GedungHierarkis, RuanganDetail } from '@/servers/tempat.service';
+import type {
+  GedungHierarkis,
+  RuanganDetail,
+  KamarDetail,
+} from '@/servers/tempat.service';
 import {
   createGedung,
   updateGedung,
@@ -9,7 +13,7 @@ import {
   createRuangan,
   updateRuangan,
   deleteRuangan,
-  updateBedCount,
+  updateRuanganKamarList,
 } from '@/servers/tempat.service';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -23,9 +27,11 @@ import { GedungCard } from './GedungCard';
 import { FloatingSaveBar } from './FloatingSaveBar';
 import { GedungDialog } from './GedungDialog';
 import { RuanganDialog } from './RuanganDialog';
+import { KamarDialog } from './KamarDialog';
 import {
   DeleteGedungDialog,
   DeleteRuanganDialog,
+  DeleteKamarDialog,
 } from './DeleteConfirmDialog';
 
 interface KonfigurasiRuanganClientProps {
@@ -70,23 +76,39 @@ export default function KonfigurasiRuanganClient({
   );
   const [ruanganNameInput, setRuanganNameInput] = useState('');
   const [ruanganKelasInput, setRuanganKelasInput] = useState('Kelas 1');
-  const [ruanganBedInput, setRuanganBedInput] = useState<number>(6);
+  const [ruanganKamarListInput, setRuanganKamarListInput] = useState<
+    KamarDetail[]
+  >([]);
   const [isSubmittingRuangan, setIsSubmittingRuangan] = useState(false);
 
-  // 3. Delete Confirmation Dialogs
+  // 3. Kamar Dialog (Quick Add / Edit Kamar)
+  const [isKamarDialogOpen, setIsKamarDialogOpen] = useState(false);
+  const [kamarParentRuangan, setKamarParentRuangan] =
+    useState<RuanganDetail | null>(null);
+  const [editingKamar, setEditingKamar] = useState<KamarDetail | null>(null);
+  const [nomorKamarInput, setNomorKamarInput] = useState('');
+  const [kamarBedInput, setKamarBedInput] = useState<number>(2);
+  const [kamarKelasInput, setKamarKelasInput] = useState('');
+  const [isSubmittingKamar, setIsSubmittingKamar] = useState(false);
+
+  // 4. Delete Confirmation Dialogs
   const [deletingGedungTarget, setDeletingGedungTarget] =
     useState<GedungHierarkis | null>(null);
   const [deletingRuanganTarget, setDeletingRuanganTarget] =
     useState<RuanganDetail | null>(null);
+  const [deletingKamarTarget, setDeletingKamarTarget] = useState<{
+    ruangan: RuanganDetail;
+    kamar: KamarDetail;
+  } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // ---------- Track Unsaved Bed Changes ----------
-  const pendingBedChanges = useMemo(() => {
+  // ---------- Track Unsaved Bed / Kamar Changes ----------
+  const pendingChanges = useMemo(() => {
     const changes: {
       idRuangan: number;
-      newJumlahBed: number;
-      oldJumlahBed: number;
       namaRuangan: string;
+      kamarList: KamarDetail[];
+      totalBed: number;
     }[] = [];
 
     gedungList.forEach((g) => {
@@ -96,12 +118,28 @@ export default function KonfigurasiRuanganClient({
         const savedR = savedG.ruanganList.find(
           (sr) => sr.idRuangan === r.idRuangan,
         );
-        if (savedR && savedR.jumlahBed !== r.jumlahBed) {
+        if (!savedR) return;
+
+        // Check if kamar count or any kamar's bed/name changed
+        const isCountChanged = savedR.kamarList.length !== r.kamarList.length;
+        const isKamarModified = r.kamarList.some((k) => {
+          const savedK = savedR.kamarList.find(
+            (sk) => sk.idKamar === k.idKamar,
+          );
+          if (!savedK) return true;
+          return (
+            savedK.jumlahBed !== k.jumlahBed ||
+            savedK.nomorKamar !== k.nomorKamar ||
+            savedK.kelas !== k.kelas
+          );
+        });
+
+        if (isCountChanged || isKamarModified || savedR.jumlahBed !== r.jumlahBed) {
           changes.push({
             idRuangan: r.idRuangan,
-            newJumlahBed: r.jumlahBed,
-            oldJumlahBed: savedR.jumlahBed,
             namaRuangan: r.namaRuangan,
+            kamarList: r.kamarList,
+            totalBed: r.jumlahBed,
           });
         }
       });
@@ -110,40 +148,43 @@ export default function KonfigurasiRuanganClient({
     return changes;
   }, [gedungList, savedGedungList]);
 
-  const hasUnsavedChanges = pendingBedChanges.length > 0;
+  const hasUnsavedChanges = pendingChanges.length > 0;
 
   async function handleSaveChanges() {
-    if (pendingBedChanges.length === 0) return;
+    if (pendingChanges.length === 0) return;
 
     setIsSaving(true);
     try {
       const results = await Promise.all(
-        pendingBedChanges.map((change) =>
-          updateBedCount(change.idRuangan, change.newJumlahBed),
+        pendingChanges.map((change) =>
+          updateRuanganKamarList(change.idRuangan, change.kamarList),
         ),
       );
 
       const allSuccess = results.every((res) => res.success);
       if (allSuccess) {
         toast.success(
-          `Berhasil menyimpan ${pendingBedChanges.length} perubahan kapasitas bed.`,
+          `Berhasil menyimpan perubahan pada ${pendingChanges.length} ruangan.`,
         );
         setSavedGedungList(gedungList);
       } else {
         const successCount = results.filter((r) => r.success).length;
         toast.error(
-          `Sebagian perubahan gagal disimpan (${successCount}/${pendingBedChanges.length} berhasil).`,
+          `Sebagian perubahan gagal disimpan (${successCount}/${pendingChanges.length} berhasil).`,
         );
         const updatedSaved = JSON.parse(
           JSON.stringify(savedGedungList),
         ) as GedungHierarkis[];
-        pendingBedChanges.forEach((change, idx) => {
+        pendingChanges.forEach((change, idx) => {
           if (results[idx].success) {
             updatedSaved.forEach((g) => {
               const r = g.ruanganList.find(
                 (rItem) => rItem.idRuangan === change.idRuangan,
               );
-              if (r) r.jumlahBed = change.newJumlahBed;
+              if (r) {
+                r.kamarList = JSON.parse(JSON.stringify(change.kamarList));
+                r.jumlahBed = change.totalBed;
+              }
             });
           }
         });
@@ -167,11 +208,25 @@ export default function KonfigurasiRuanganClient({
     () => gedungList.reduce((acc, g) => acc + g.ruanganList.length, 0),
     [gedungList],
   );
+  const totalKamar = useMemo(
+    () =>
+      gedungList.reduce(
+        (acc, g) =>
+          acc +
+          g.ruanganList.reduce(
+            (rAcc, r) => rAcc + (r.kamarList?.length || 0),
+            0,
+          ),
+        0,
+      ),
+    [gedungList],
+  );
   const totalBed = useMemo(
     () =>
       gedungList.reduce(
         (acc, g) =>
-          acc + g.ruanganList.reduce((rAcc, r) => rAcc + r.jumlahBed, 0),
+          acc +
+          g.ruanganList.reduce((rAcc, r) => rAcc + (r.jumlahBed || 0), 0),
         0,
       ),
     [gedungList],
@@ -179,7 +234,7 @@ export default function KonfigurasiRuanganClient({
   const avgBedPerRuangan =
     totalRuangan > 0 ? (totalBed / totalRuangan).toFixed(1) : '0';
 
-  // ---------- Search Filter ----------
+  // ---------- Search Filter (Matches Gedung, Ruangan, Kamar, Kelas) ----------
   const filteredGedungList = useMemo(() => {
     if (!searchQuery.trim()) return gedungList;
     const query = searchQuery.toLowerCase().trim();
@@ -190,7 +245,12 @@ export default function KonfigurasiRuanganClient({
         const matchingRuangan = g.ruanganList.filter(
           (r) =>
             r.namaRuangan.toLowerCase().includes(query) ||
-            r.kelas.toLowerCase().includes(query),
+            r.kelas.toLowerCase().includes(query) ||
+            r.kamarList.some(
+              (k) =>
+                k.nomorKamar.toLowerCase().includes(query) ||
+                (k.kelas && k.kelas.toLowerCase().includes(query)),
+            ),
         );
 
         if (matchesGedung) return g;
@@ -270,6 +330,7 @@ export default function KonfigurasiRuanganClient({
             idGedung: Date.now(),
             namaGedung: gedungNameInput.trim(),
             totalRuangan: 0,
+            totalKamar: 0,
             totalBed: 0,
             ruanganList: [],
           };
@@ -319,7 +380,20 @@ export default function KonfigurasiRuanganClient({
     setEditingRuangan(null);
     setRuanganNameInput('');
     setRuanganKelasInput(kelasList[0] || 'Kelas 1');
-    setRuanganBedInput(6);
+    setRuanganKamarListInput([
+      {
+        idKamar: `kamar-${Date.now()}-1`,
+        nomorKamar: 'Kamar 1',
+        jumlahBed: 2,
+        kelas: kelasList[0] || 'Kelas 1',
+      },
+      {
+        idKamar: `kamar-${Date.now()}-2`,
+        nomorKamar: 'Kamar 2',
+        jumlahBed: 2,
+        kelas: kelasList[0] || 'Kelas 1',
+      },
+    ]);
     setIsRuanganDialogOpen(true);
   }
 
@@ -328,7 +402,7 @@ export default function KonfigurasiRuanganClient({
     setEditingRuangan(ruangan);
     setRuanganNameInput(ruangan.namaRuangan);
     setRuanganKelasInput(ruangan.kelas);
-    setRuanganBedInput(ruangan.jumlahBed);
+    setRuanganKamarListInput(JSON.parse(JSON.stringify(ruangan.kamarList)));
     setIsRuanganDialogOpen(true);
   }
 
@@ -338,10 +412,15 @@ export default function KonfigurasiRuanganClient({
       return;
     }
 
-    if (ruanganBedInput < 1) {
-      toast.error('Jumlah bed minimal 1.');
+    if (ruanganKamarListInput.length === 0) {
+      toast.error('Ruangan harus memiliki minimal 1 kamar/pintu.');
       return;
     }
+
+    const computedBed = ruanganKamarListInput.reduce(
+      (acc, k) => acc + (k.jumlahBed || 0),
+      0,
+    );
 
     setIsSubmittingRuangan(true);
     try {
@@ -350,7 +429,7 @@ export default function KonfigurasiRuanganClient({
           editingRuangan.idRuangan,
           ruanganNameInput,
           ruanganKelasInput,
-          ruanganBedInput,
+          ruanganKamarListInput,
         );
         if (res.success) {
           toast.success(res.message);
@@ -363,7 +442,8 @@ export default function KonfigurasiRuanganClient({
                         ...r,
                         namaRuangan: ruanganNameInput.trim(),
                         kelas: ruanganKelasInput,
-                        jumlahBed: ruanganBedInput,
+                        jumlahBed: computedBed,
+                        kamarList: ruanganKamarListInput,
                       }
                     : r,
                 );
@@ -371,10 +451,15 @@ export default function KonfigurasiRuanganClient({
                   (acc, r) => acc + r.jumlahBed,
                   0,
                 );
+                const totalK = updatedList.reduce(
+                  (acc, r) => acc + r.kamarList.length,
+                  0,
+                );
                 return {
                   ...g,
                   ruanganList: updatedList,
                   totalBed: totalB,
+                  totalKamar: totalK,
                 };
               }
               return g;
@@ -390,7 +475,7 @@ export default function KonfigurasiRuanganClient({
           targetGedungId,
           ruanganNameInput,
           ruanganKelasInput,
-          ruanganBedInput,
+          ruanganKamarListInput,
         );
         if (res.success) {
           toast.success(res.message);
@@ -398,8 +483,9 @@ export default function KonfigurasiRuanganClient({
             idRuangan: Date.now(),
             namaRuangan: ruanganNameInput.trim(),
             kelas: ruanganKelasInput,
-            jumlahBed: ruanganBedInput,
+            jumlahBed: computedBed,
             gedungId: targetGedungId,
+            kamarList: ruanganKamarListInput,
           };
           const addFn = (prev: GedungHierarkis[]) =>
             prev.map((g) => {
@@ -408,7 +494,8 @@ export default function KonfigurasiRuanganClient({
                 return {
                   ...g,
                   totalRuangan: g.totalRuangan + 1,
-                  totalBed: g.totalBed + ruanganBedInput,
+                  totalKamar: g.totalKamar + ruanganKamarListInput.length,
+                  totalBed: g.totalBed + computedBed,
                   ruanganList: updatedList,
                 };
               }
@@ -428,32 +515,6 @@ export default function KonfigurasiRuanganClient({
     }
   }
 
-  function handleQuickAdjustBed(ruangan: RuanganDetail, delta: number) {
-    const nextCount = ruangan.jumlahBed + delta;
-    if (nextCount < 1) {
-      toast.error('Jumlah bed minimal 1.');
-      return;
-    }
-
-    setGedungList((prev) =>
-      prev.map((g) => {
-        if (g.idGedung === ruangan.gedungId) {
-          const updatedList = g.ruanganList.map((r) =>
-            r.idRuangan === ruangan.idRuangan
-              ? { ...r, jumlahBed: nextCount }
-              : r,
-          );
-          const totalB = updatedList.reduce(
-            (acc, r) => acc + r.jumlahBed,
-            0,
-          );
-          return { ...g, ruanganList: updatedList, totalBed: totalB };
-        }
-        return g;
-      }),
-    );
-  }
-
   async function handleConfirmDeleteRuangan() {
     if (!deletingRuanganTarget) return;
     setIsDeleting(true);
@@ -470,6 +531,10 @@ export default function KonfigurasiRuanganClient({
               return {
                 ...g,
                 totalRuangan: updatedList.length,
+                totalKamar: updatedList.reduce(
+                  (acc, r) => acc + r.kamarList.length,
+                  0,
+                ),
                 totalBed: updatedList.reduce((acc, r) => acc + r.jumlahBed, 0),
                 ruanganList: updatedList,
               };
@@ -489,12 +554,249 @@ export default function KonfigurasiRuanganClient({
     }
   }
 
+  // ---------- KAMAR ACTIONS (Quick Adjust Bed, Add, Edit, Delete) ----------
+  function handleQuickAdjustBed(
+    ruangan: RuanganDetail,
+    kamarId: string,
+    delta: number,
+  ) {
+    setGedungList((prev) =>
+      prev.map((g) => {
+        if (g.idGedung === ruangan.gedungId) {
+          const updatedRuanganList = g.ruanganList.map((r) => {
+            if (r.idRuangan === ruangan.idRuangan) {
+              const updatedKamarList = r.kamarList.map((k) => {
+                if (k.idKamar === kamarId) {
+                  const nextBed = k.jumlahBed + delta;
+                  if (nextBed < 1) {
+                    toast.error('Jumlah bed di kamar minimal 1.');
+                    return k;
+                  }
+                  return { ...k, jumlahBed: nextBed };
+                }
+                return k;
+              });
+              const totalB = updatedKamarList.reduce(
+                (acc, k) => acc + k.jumlahBed,
+                0,
+              );
+              return {
+                ...r,
+                kamarList: updatedKamarList,
+                jumlahBed: totalB,
+              };
+            }
+            return r;
+          });
+          const totalGedungBed = updatedRuanganList.reduce(
+            (acc, r) => acc + r.jumlahBed,
+            0,
+          );
+          return {
+            ...g,
+            ruanganList: updatedRuanganList,
+            totalBed: totalGedungBed,
+          };
+        }
+        return g;
+      }),
+    );
+  }
+
+  function openAddKamarModal(ruangan: RuanganDetail) {
+    setKamarParentRuangan(ruangan);
+    setEditingKamar(null);
+    setNomorKamarInput(`Kamar ${ruangan.kamarList.length + 1}`);
+    setKamarBedInput(2);
+    setKamarKelasInput(ruangan.kelas);
+    setIsKamarDialogOpen(true);
+  }
+
+  function openEditKamarModal(ruangan: RuanganDetail, kamar: KamarDetail) {
+    setKamarParentRuangan(ruangan);
+    setEditingKamar(kamar);
+    setNomorKamarInput(kamar.nomorKamar);
+    setKamarBedInput(kamar.jumlahBed);
+    setKamarKelasInput(kamar.kelas || ruangan.kelas);
+    setIsKamarDialogOpen(true);
+  }
+
+  async function handleSaveKamarModal() {
+    if (!kamarParentRuangan) return;
+    if (!nomorKamarInput.trim()) {
+      toast.error('Nomor pintu / nama kamar wajib diisi.');
+      return;
+    }
+    if (kamarBedInput < 1) {
+      toast.error('Jumlah bed minimal 1.');
+      return;
+    }
+
+    setIsSubmittingKamar(true);
+    try {
+      let updatedKamarList: KamarDetail[];
+
+      if (editingKamar) {
+        updatedKamarList = kamarParentRuangan.kamarList.map((k) =>
+          k.idKamar === editingKamar.idKamar
+            ? {
+                ...k,
+                nomorKamar: nomorKamarInput.trim(),
+                jumlahBed: kamarBedInput,
+                kelas: kamarKelasInput || kamarParentRuangan.kelas,
+              }
+            : k,
+        );
+      } else {
+        const newKamar: KamarDetail = {
+          idKamar: `kamar-${Date.now()}-${kamarParentRuangan.kamarList.length + 1}`,
+          nomorKamar: nomorKamarInput.trim(),
+          jumlahBed: kamarBedInput,
+          kelas: kamarKelasInput || kamarParentRuangan.kelas,
+        };
+        updatedKamarList = [...kamarParentRuangan.kamarList, newKamar];
+      }
+
+      // Persist to server
+      const res = await updateRuanganKamarList(
+        kamarParentRuangan.idRuangan,
+        updatedKamarList,
+      );
+      if (res.success) {
+        toast.success(
+          editingKamar
+            ? `Kamar "${nomorKamarInput.trim()}" berhasil diperbarui.`
+            : `Kamar "${nomorKamarInput.trim()}" berhasil ditambahkan.`,
+        );
+
+        const updateFn = (prev: GedungHierarkis[]) =>
+          prev.map((g) => {
+            if (g.idGedung === kamarParentRuangan.gedungId) {
+              const updatedRuangan = g.ruanganList.map((r) => {
+                if (r.idRuangan === kamarParentRuangan.idRuangan) {
+                  const totalB = updatedKamarList.reduce(
+                    (acc, k) => acc + k.jumlahBed,
+                    0,
+                  );
+                  return {
+                    ...r,
+                    kamarList: updatedKamarList,
+                    jumlahBed: totalB,
+                  };
+                }
+                return r;
+              });
+              const totalGedungB = updatedRuangan.reduce(
+                (acc, r) => acc + r.jumlahBed,
+                0,
+              );
+              const totalGedungK = updatedRuangan.reduce(
+                (acc, r) => acc + r.kamarList.length,
+                0,
+              );
+              return {
+                ...g,
+                ruanganList: updatedRuangan,
+                totalBed: totalGedungB,
+                totalKamar: totalGedungK,
+              };
+            }
+            return g;
+          });
+
+        setGedungList(updateFn);
+        setSavedGedungList(updateFn);
+        setIsKamarDialogOpen(false);
+      } else {
+        toast.error(res.message);
+      }
+    } catch {
+      toast.error('Gagal menyimpan konfigurasi kamar.');
+    } finally {
+      setIsSubmittingKamar(false);
+    }
+  }
+
+  async function handleConfirmDeleteKamar() {
+    if (!deletingKamarTarget) return;
+    const { ruangan, kamar } = deletingKamarTarget;
+
+    if (ruangan.kamarList.length <= 1) {
+      toast.error(
+        'Ruangan harus memiliki minimal 1 kamar. Tidak dapat menghapus kamar terakhir.',
+      );
+      setDeletingKamarTarget(null);
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const updatedKamarList = ruangan.kamarList.filter(
+        (k) => k.idKamar !== kamar.idKamar,
+      );
+      const res = await updateRuanganKamarList(
+        ruangan.idRuangan,
+        updatedKamarList,
+      );
+
+      if (res.success) {
+        toast.success(
+          `Kamar "${kamar.nomorKamar}" berhasil dihapus dari ${ruangan.namaRuangan}.`,
+        );
+        const updateFn = (prev: GedungHierarkis[]) =>
+          prev.map((g) => {
+            if (g.idGedung === ruangan.gedungId) {
+              const updatedRuangan = g.ruanganList.map((r) => {
+                if (r.idRuangan === ruangan.idRuangan) {
+                  const totalB = updatedKamarList.reduce(
+                    (acc, k) => acc + k.jumlahBed,
+                    0,
+                  );
+                  return {
+                    ...r,
+                    kamarList: updatedKamarList,
+                    jumlahBed: totalB,
+                  };
+                }
+                return r;
+              });
+              const totalGedungB = updatedRuangan.reduce(
+                (acc, r) => acc + r.jumlahBed,
+                0,
+              );
+              const totalGedungK = updatedRuangan.reduce(
+                (acc, r) => acc + r.kamarList.length,
+                0,
+              );
+              return {
+                ...g,
+                ruanganList: updatedRuangan,
+                totalBed: totalGedungB,
+                totalKamar: totalGedungK,
+              };
+            }
+            return g;
+          });
+
+        setGedungList(updateFn);
+        setSavedGedungList(updateFn);
+        setDeletingKamarTarget(null);
+      } else {
+        toast.error(res.message);
+      }
+    } catch {
+      toast.error('Gagal menghapus kamar.');
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
   return (
     <div className='flex flex-1 flex-col gap-6 p-4 sm:p-6 md:p-8 max-w-7xl mx-auto w-full min-w-0 overflow-x-hidden'>
       {/* 1. Header Hero Banner */}
       <KonfigurasiHeader
         hasUnsavedChanges={hasUnsavedChanges}
-        pendingCount={pendingBedChanges.length}
+        pendingCount={pendingChanges.length}
         isSaving={isSaving}
         onReset={handleResetChanges}
         onSave={handleSaveChanges}
@@ -505,6 +807,7 @@ export default function KonfigurasiRuanganClient({
       <KonfigurasiStats
         totalGedung={totalGedung}
         totalRuangan={totalRuangan}
+        totalKamar={totalKamar}
         totalBed={totalBed}
         avgBedPerRuangan={avgBedPerRuangan}
       />
@@ -515,7 +818,7 @@ export default function KonfigurasiRuanganClient({
           <Search className='w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground' />
           <Input
             type='text'
-            placeholder='Cari nama gedung, ruangan, atau kelas...'
+            placeholder='Cari nama gedung, ruangan, nomor pintu/kamar, atau kelas...'
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className='pl-9 h-9 text-xs bg-background'
@@ -527,7 +830,7 @@ export default function KonfigurasiRuanganClient({
             variant='outline'
             size='sm'
             onClick={expandAll}
-            className='h-8 gap-1 text-xs'
+            className='h-8 gap-1 text-xs cursor-pointer'
           >
             <ChevronDown className='w-3.5 h-3.5' /> Expand All
           </Button>
@@ -535,7 +838,7 @@ export default function KonfigurasiRuanganClient({
             variant='outline'
             size='sm'
             onClick={collapseAll}
-            className='h-8 gap-1 text-xs'
+            className='h-8 gap-1 text-xs cursor-pointer'
           >
             <ChevronUp className='w-3.5 h-3.5' /> Collapse All
           </Button>
@@ -554,11 +857,11 @@ export default function KonfigurasiRuanganClient({
                 <h3 className='font-bold text-base'>Gedung Tidak Ditemukan</h3>
                 <p className='text-xs text-muted-foreground max-w-xs'>
                   {searchQuery
-                    ? `Tidak ada gedung atau ruangan yang cocok dengan "${searchQuery}".`
+                    ? `Tidak ada gedung, ruangan, atau kamar yang cocok dengan "${searchQuery}".`
                     : 'Belum ada gedung yang terdaftar dalam sistem.'}
                 </p>
               </div>
-              <Button onClick={openAddGedungModal} className='gap-2 mt-2'>
+              <Button onClick={openAddGedungModal} className='gap-2 mt-2 cursor-pointer'>
                 <Plus className='w-4 h-4' /> Tambah Gedung Pertama
               </Button>
             </CardContent>
@@ -574,6 +877,11 @@ export default function KonfigurasiRuanganClient({
               onOpenAddRuangan={openAddRuanganModal}
               onOpenEditGedung={openEditGedungModal}
               onDeleteGedung={setDeletingGedungTarget}
+              onOpenAddKamar={openAddKamarModal}
+              onEditKamar={openEditKamarModal}
+              onDeleteKamar={(ruangan, kamar) =>
+                setDeletingKamarTarget({ ruangan, kamar })
+              }
               onQuickAdjustBed={handleQuickAdjustBed}
               onEditRuangan={openEditRuanganModal}
               onDeleteRuangan={setDeletingRuanganTarget}
@@ -585,7 +893,7 @@ export default function KonfigurasiRuanganClient({
       {/* Sticky Floating Save Bar when Unsaved Changes exist */}
       {hasUnsavedChanges && (
         <FloatingSaveBar
-          pendingCount={pendingBedChanges.length}
+          pendingCount={pendingChanges.length}
           isSaving={isSaving}
           onReset={handleResetChanges}
           onSave={handleSaveChanges}
@@ -593,6 +901,7 @@ export default function KonfigurasiRuanganClient({
       )}
 
       {/* Dialogs */}
+      {/* 1. Gedung Dialog */}
       <GedungDialog
         isOpen={isGedungDialogOpen}
         editingGedung={editingGedung}
@@ -603,21 +912,40 @@ export default function KonfigurasiRuanganClient({
         onSave={handleSaveGedung}
       />
 
+      {/* 2. Ruangan Dialog (with Kamar manager & generator) */}
       <RuanganDialog
         isOpen={isRuanganDialogOpen}
         editingRuangan={editingRuangan}
         ruanganNameInput={ruanganNameInput}
         ruanganKelasInput={ruanganKelasInput}
-        ruanganBedInput={ruanganBedInput}
+        kamarListInput={ruanganKamarListInput}
         kelasList={kelasList}
         isSubmitting={isSubmittingRuangan}
         onNameChange={setRuanganNameInput}
         onKelasChange={setRuanganKelasInput}
-        onBedChange={setRuanganBedInput}
+        onKamarListChange={setRuanganKamarListInput}
         onClose={() => setIsRuanganDialogOpen(false)}
         onSave={handleSaveRuangan}
       />
 
+      {/* 3. Kamar Quick Add/Edit Dialog */}
+      <KamarDialog
+        isOpen={isKamarDialogOpen}
+        parentRuangan={kamarParentRuangan}
+        editingKamar={editingKamar}
+        nomorKamarInput={nomorKamarInput}
+        kamarBedInput={kamarBedInput}
+        kamarKelasInput={kamarKelasInput}
+        kelasList={kelasList}
+        isSubmitting={isSubmittingKamar}
+        onNomorKamarChange={setNomorKamarInput}
+        onBedChange={setKamarBedInput}
+        onKelasChange={setKamarKelasInput}
+        onClose={() => setIsKamarDialogOpen(false)}
+        onSave={handleSaveKamarModal}
+      />
+
+      {/* 4. Delete Dialogs */}
       <DeleteGedungDialog
         gedung={deletingGedungTarget}
         isDeleting={isDeleting}
@@ -630,6 +958,13 @@ export default function KonfigurasiRuanganClient({
         isDeleting={isDeleting}
         onClose={() => setDeletingRuanganTarget(null)}
         onConfirm={handleConfirmDeleteRuangan}
+      />
+
+      <DeleteKamarDialog
+        kamarTarget={deletingKamarTarget}
+        isDeleting={isDeleting}
+        onClose={() => setDeletingKamarTarget(null)}
+        onConfirm={handleConfirmDeleteKamar}
       />
     </div>
   );

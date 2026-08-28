@@ -1,10 +1,30 @@
 'use client';
 
 import React from 'react';
-import type { GedungHierarkis, RuanganDetail } from '@/servers/tempat.service';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import type {
+  GedungHierarkis,
+  RuanganDetail,
+  KamarDetail,
+} from '@/servers/tempat.service';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Building, DoorOpen, Plus, Pencil, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import {
+  Building,
+  DoorOpen,
+  DoorClosed,
+  Bed,
+  Plus,
+  Pencil,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
+} from 'lucide-react';
 import { RuanganCard } from './RuanganCard';
 
 interface GedungCardProps {
@@ -15,7 +35,14 @@ interface GedungCardProps {
   onOpenAddRuangan: (gedungId: number) => void;
   onOpenEditGedung: (gedung: GedungHierarkis) => void;
   onDeleteGedung: (gedung: GedungHierarkis) => void;
-  onQuickAdjustBed: (ruangan: RuanganDetail, delta: number) => void;
+  onOpenAddKamar: (ruangan: RuanganDetail) => void;
+  onEditKamar: (ruangan: RuanganDetail, kamar: KamarDetail) => void;
+  onDeleteKamar: (ruangan: RuanganDetail, kamar: KamarDetail) => void;
+  onQuickAdjustBed: (
+    ruangan: RuanganDetail,
+    kamarId: string,
+    delta: number,
+  ) => void;
   onEditRuangan: (ruangan: RuanganDetail) => void;
   onDeleteRuangan: (ruangan: RuanganDetail) => void;
 }
@@ -28,28 +55,44 @@ export function GedungCard({
   onOpenAddRuangan,
   onOpenEditGedung,
   onDeleteGedung,
+  onOpenAddKamar,
+  onEditKamar,
+  onDeleteKamar,
   onQuickAdjustBed,
   onEditRuangan,
   onDeleteRuangan,
 }: GedungCardProps) {
+  const totalKamar = gedung.ruanganList.reduce(
+    (acc, r) => acc + (r.kamarList?.length || 0),
+    0,
+  );
+  const totalBed = gedung.ruanganList.reduce(
+    (acc, r) =>
+      acc +
+      (r.kamarList
+        ? r.kamarList.reduce((kAcc, k) => kAcc + (k.jumlahBed || 0), 0)
+        : r.jumlahBed),
+    0,
+  );
+
   return (
     <Card className='border shadow-sm rounded-2xl overflow-hidden transition-all duration-200'>
       {/* Gedung Parent Header */}
       <CardHeader className='bg-gradient-to-r from-muted/60 via-muted/30 to-background py-4 px-5 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-3 select-none'>
         <div
-          className='flex items-center gap-3 cursor-pointer group flex-1'
+          className='flex items-center gap-3 cursor-pointer group flex-1 min-w-0'
           onClick={() => onToggleExpand(gedung.idGedung)}
         >
-          <div className='p-2 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 group-hover:scale-105 transition-transform'>
+          <div className='p-2.5 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 group-hover:scale-105 transition-transform shrink-0'>
             <Building className='w-5 h-5' />
           </div>
-          <div>
-            <CardTitle className='text-base font-bold text-foreground flex items-center gap-2 group-hover:text-blue-600 transition-colors'>
+          <div className='min-w-0'>
+            <CardTitle className='text-base font-bold text-foreground flex items-center gap-2 group-hover:text-blue-600 transition-colors truncate'>
               {gedung.namaGedung}
               <Button
                 variant='ghost'
                 size='icon'
-                className='h-6 w-6 rounded-full'
+                className='h-6 w-6 rounded-full shrink-0'
                 title={isExpanded ? 'Sembunyikan ruangan' : 'Tampilkan ruangan'}
               >
                 {isExpanded ? (
@@ -59,16 +102,27 @@ export function GedungCard({
                 )}
               </Button>
             </CardTitle>
-            <CardDescription className='text-xs flex items-center gap-2 pt-0.5'>
-              <span>{gedung.ruanganList.length} Ruangan</span>
+            <CardDescription className='text-xs flex items-center gap-2 pt-0.5 font-medium'>
+              <span className='flex items-center gap-1'>
+                <DoorOpen className='w-3.5 h-3.5 text-blue-600' />
+                <strong>{gedung.ruanganList.length}</strong> Ruangan
+              </span>
               <span>·</span>
-              <span>{gedung.totalBed} Total Kapasitas Bed</span>
+              <span className='flex items-center gap-1'>
+                <DoorClosed className='w-3.5 h-3.5 text-emerald-600' />
+                <strong>{totalKamar}</strong> Kamar/Pintu
+              </span>
+              <span>·</span>
+              <span className='flex items-center gap-1'>
+                <Bed className='w-3.5 h-3.5 text-purple-600' />
+                <strong>{totalBed}</strong> Total Bed
+              </span>
             </CardDescription>
           </div>
         </div>
 
         {/* Gedung Action Buttons */}
-        <div className='flex items-center gap-2 shrink-0'>
+        <div className='flex items-center gap-2 shrink-0 self-end sm:self-auto'>
           <Button
             variant='outline'
             size='sm'
@@ -100,7 +154,7 @@ export function GedungCard({
 
       {/* Gedung Children: Ruangan List */}
       {isExpanded && (
-        <CardContent className='p-4 sm:p-5 bg-card space-y-3 animate-in fade-in duration-200'>
+        <CardContent className='p-4 sm:p-5 bg-muted/10 space-y-4 animate-in fade-in duration-200'>
           {gedung.ruanganList.length === 0 ? (
             <div className='text-center py-6 border border-dashed rounded-xl space-y-2 bg-muted/20'>
               <DoorOpen className='w-6 h-6 text-muted-foreground mx-auto' />
@@ -117,29 +171,20 @@ export function GedungCard({
               </Button>
             </div>
           ) : (
-            <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5'>
-              {gedung.ruanganList.map((ruangan) => {
-                const savedG = savedGedungList.find(
-                  (sg) => sg.idGedung === ruangan.gedungId,
-                );
-                const savedR = savedG?.ruanganList.find(
-                  (sr) => sr.idRuangan === ruangan.idRuangan,
-                );
-                const isBedModified = savedR
-                  ? savedR.jumlahBed !== ruangan.jumlahBed
-                  : false;
-
-                return (
-                  <RuanganCard
-                    key={ruangan.idRuangan}
-                    ruangan={ruangan}
-                    isBedModified={isBedModified}
-                    onQuickAdjustBed={onQuickAdjustBed}
-                    onEditRuangan={onEditRuangan}
-                    onDeleteRuangan={onDeleteRuangan}
-                  />
-                );
-              })}
+            <div className='space-y-3.5'>
+              {gedung.ruanganList.map((ruangan) => (
+                <RuanganCard
+                  key={ruangan.idRuangan}
+                  ruangan={ruangan}
+                  savedGedungList={savedGedungList}
+                  onOpenAddKamar={onOpenAddKamar}
+                  onEditKamar={onEditKamar}
+                  onDeleteKamar={onDeleteKamar}
+                  onQuickAdjustBed={onQuickAdjustBed}
+                  onEditRuangan={onEditRuangan}
+                  onDeleteRuangan={onDeleteRuangan}
+                />
+              ))}
             </div>
           )}
         </CardContent>

@@ -46,6 +46,8 @@ export default function PatientTable({
   totalBedCapacity = 6,
   ruangan = '',
   gedung = '',
+  kamar = '',
+  kamarId = '',
   searchQuery = '',
   revisionContext,
 }: PatientTableProps) {
@@ -79,6 +81,14 @@ export default function PatientTable({
 
   const gedungOptions = gedungList.map((g) => g.namaGedung);
 
+  const currentRuanganObj = gedungList
+    .flatMap((g) => g.ruanganList)
+    .find((r) => r.namaRuangan.toLowerCase() === ruangan.toLowerCase());
+  const roomKamarOptions =
+    currentRuanganObj?.kamarList && currentRuanganObj.kamarList.length > 0
+      ? currentRuanganObj.kamarList.map((k) => k.nomorKamar)
+      : ['Kamar 1'];
+
   function startInlineAdd(bedLabel: string) {
     setInlineAddBedKey(bedLabel);
     setInlineAddDraft({
@@ -86,7 +96,7 @@ export default function PatientTable({
       no_rm: '',
       diet: '',
       kelas: kelasOptions[0] || 'Kelas 1',
-      gedung: gedung,
+      gedung: kamar || roomKamarOptions[0] || gedung,
       ruangan: ruangan,
       bed: bedLabel,
       status_pasien: 'AKTIF',
@@ -353,6 +363,8 @@ export default function PatientTable({
                         inlineAddDraft={inlineAddDraft}
                         ruangan={ruangan}
                         gedung={gedung}
+                        kamar={kamar}
+                        kamarOptions={roomKamarOptions}
                         kelasOptions={kelasOptions}
                         statusOptions={STATUS_OPTIONS}
                         isSavingInline={isSavingInline}
@@ -371,6 +383,7 @@ export default function PatientTable({
                       defaultBedLabel={defaultBedLabel}
                       ruangan={ruangan}
                       gedung={gedung}
+                      kamar={kamar}
                       onStartInlineAdd={startInlineAdd}
                     />
                   );

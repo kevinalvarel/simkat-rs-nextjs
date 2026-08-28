@@ -19,6 +19,8 @@ export function InlineAddRow({
   inlineAddDraft,
   ruangan,
   gedung,
+  kamar,
+  kamarOptions,
   kelasOptions,
   statusOptions,
   isSavingInline,
@@ -121,9 +123,31 @@ export function InlineAddRow({
         />
       </TableCell>
 
-      {/* 8. Gedung */}
-      <TableCell className='p-1.5 text-xs text-muted-foreground font-medium'>
-        {inlineAddDraft.gedung || gedung || '-'}
+      {/* 8. Nomor Kamar */}
+      <TableCell className='p-1.5 min-w-[110px]'>
+        {kamarOptions && kamarOptions.length > 0 ? (
+          <Select
+            value={inlineAddDraft.gedung || kamar || kamarOptions[0] || 'Kamar 1'}
+            onValueChange={(val) => {
+              if (val) onUpdateDraft('gedung', val);
+            }}
+          >
+            <SelectTrigger className='h-8 text-xs bg-background'>
+              <SelectValue placeholder='Kamar' />
+            </SelectTrigger>
+            <SelectContent>
+              {kamarOptions.map((k) => (
+                <SelectItem key={k} value={k}>
+                  {k}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <span className='text-xs text-muted-foreground font-medium'>
+            {kamar || inlineAddDraft.gedung || 'Kamar 1'}
+          </span>
+        )}
       </TableCell>
 
       {/* 9. Status Pasien */}
