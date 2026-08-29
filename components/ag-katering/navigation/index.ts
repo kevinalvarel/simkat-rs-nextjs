@@ -46,6 +46,14 @@ export const routeDataProduksi = {
           title: 'Tabulasi Rekapitulasi',
           url: '/dashboard/ag-katering/tabulasi',
         },
+        {
+          title: 'Invoice',
+          url: '/dashboard/ag-katering/invoice',
+        },
+        {
+          title: 'Kwitansi',
+          url: '/dashboard/ag-katering/kwitansi',
+        },
       ],
     },
   ],
@@ -95,6 +103,14 @@ export const routeDataSupervisor = {
           title: 'Tabulasi Rekapitulasi',
           url: '/dashboard/ag-katering/tabulasi',
         },
+        {
+          title: 'Invoice',
+          url: '/dashboard/ag-katering/invoice',
+        },
+        {
+          title: 'Kwitansi',
+          url: '/dashboard/ag-katering/kwitansi',
+        },
       ],
     },
     {
@@ -118,12 +134,16 @@ export const routeDataSupervisor = {
           url: '/dashboard/ag-katering/admin/konfigurasi-ruangan',
         },
         {
+          title: 'Konfigurasi Pengguna',
+          url: '/dashboard/ag-katering/admin/tambah-pengguna',
+        },
+        {
           title: 'Konfigurasi Menu',
           url: '/dashboard/ag-katering/admin/konfigurasi-menu',
         },
         {
-          title: 'Konfigurasi Pengguna',
-          url: '/dashboard/ag-katering/admin/tambah-pengguna',
+          title: 'Konfigurasi Siklus Menu',
+          url: '/dashboard/ag-katering/admin/konfigurasi-siklus-menu',
         },
       ],
     },

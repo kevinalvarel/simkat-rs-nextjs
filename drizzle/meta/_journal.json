@@ -8,6 +8,13 @@
       "when": 1786249488861,
       "tag": "0000_wild_jack_power",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1787925821335,
+      "tag": "0001_gray_exiles",
+      "breakpoints": true
     }
   ]
 }

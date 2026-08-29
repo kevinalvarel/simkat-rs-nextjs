@@ -1,6 +1,4 @@
 'use client';
-
-import React from 'react';
 import {
   Table,
   TableBody,
@@ -43,7 +41,6 @@ export default function PemorsianTableSection({
       {selectedCount > 0 && (
         <div className='flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-primary/10 border border-primary/20 rounded-xl px-4 py-2.5 shadow-2xs animate-in fade-in slide-in-from-top-2 duration-200'>
           <div className='flex items-center gap-2 text-xs sm:text-sm text-foreground font-medium'>
-            <CheckSquare className='w-4 h-4 text-primary' />
             <span>
               <strong>{selectedCount}</strong> dari {patients.length} pasien
               terpilih

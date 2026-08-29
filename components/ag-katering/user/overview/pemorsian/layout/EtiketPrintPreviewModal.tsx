@@ -63,16 +63,15 @@ export default function EtiketPrintPreviewModal({
           padding: 0 !important;
         }
         .etiket-card-print {
-          display: flex !important;
-          flex-direction: column !important;
-          justify-content: space-between !important;
+          display: block !important;
+          position: relative !important;
           width: 100mm !important;
           height: 50mm !important;
           max-width: 100mm !important;
           max-height: 50mm !important;
           min-width: 100mm !important;
           min-height: 50mm !important;
-          padding: 2.5mm 3.5mm !important;
+          padding: 0 !important;
           margin: 0 !important;
           border: 1.5px solid #000000 !important;
           border-radius: 2px !important;
@@ -86,19 +85,19 @@ export default function EtiketPrintPreviewModal({
           box-shadow: none !important;
           overflow: hidden !important;
         }
+        .etiket-card-print * {
+          outline: none !important;
+          box-shadow: none !important;
+        }
         .etiket-card-print h2 {
-          font-size: 10.5pt !important;
+          font-size: 10pt !important;
           margin: 0 !important;
           line-height: 1.1 !important;
         }
-        .etiket-card-print hr {
-          border-top: 1.5px solid #000000 !important;
-          margin: 1.5mm 0 !important;
-        }
         .etiket-card-print span,
         .etiket-card-print div {
-          font-size: 8.5pt !important;
-          line-height: 1.25 !important;
+          font-size: 8pt !important;
+          line-height: 1.2 !important;
         }
       }
     `,
