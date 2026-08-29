@@ -36,6 +36,7 @@ export type DietMappingRecord = typeof dietMappingTable.$inferSelect;
 export type UnmappedDietItem = {
   diet_rs_raw: string;
   jumlah_pasien: number;
+  kelas_list: string[];
   mapping_id: number | null;
   status_mapping: string;
   bentuk_makanan: string | null;
@@ -72,7 +73,11 @@ export async function getUnmappedDietItems(): Promise<UnmappedDietItem[]> {
 
     // 2. Get distinct diet strings from active (approved) patients
     const allPatients = await db
-      .select({ id: pasienTable.id, diet: pasienTable.diet })
+      .select({
+        id: pasienTable.id,
+        diet: pasienTable.diet,
+        kelas: pasienTable.kelas,
+      })
       .from(pasienTable)
       .where(
         and(
@@ -89,12 +94,20 @@ export async function getUnmappedDietItems(): Promise<UnmappedDietItem[]> {
       return [];
     }
 
-    // Count occurrences per diet_rs_raw
+    // Count occurrences and collect patient classes per diet_rs_raw
     const countMap = new Map<string, number>();
+    const kelasMap = new Map<string, Set<string>>();
     for (const p of validPatients) {
       const key = (p.diet || '').trim();
       if (!key) continue;
       countMap.set(key, (countMap.get(key) ?? 0) + 1);
+
+      if (p.kelas) {
+        if (!kelasMap.has(key)) {
+          kelasMap.set(key, new Set<string>());
+        }
+        kelasMap.get(key)!.add(p.kelas.trim());
+      }
     }
 
     const uniqueDiets = Array.from(countMap.keys());
@@ -102,7 +115,7 @@ export async function getUnmappedDietItems(): Promise<UnmappedDietItem[]> {
       return [];
     }
 
-    // 2. Check existing mappings for these diet strings
+    // 3. Check existing mappings for these diet strings
     const existingMappings = await db
       .select()
       .from(dietMappingTable)
@@ -118,7 +131,7 @@ export async function getUnmappedDietItems(): Promise<UnmappedDietItem[]> {
       mappingByRaw.set(m.diet_rs_raw, m);
     }
 
-    // 3. Build result — only include UNMAPPED and PARTIAL
+    // 4. Build result — only include UNMAPPED and PARTIAL
     const results: UnmappedDietItem[] = [];
 
     for (const rawDiet of uniqueDiets) {
@@ -128,9 +141,12 @@ export async function getUnmappedDietItems(): Promise<UnmappedDietItem[]> {
       // Skip fully MAPPED ones
       if (statusMapping === 'MAPPED') continue;
 
+      const kelasList = Array.from(kelasMap.get(rawDiet) || []).sort();
+
       results.push({
         diet_rs_raw: rawDiet,
         jumlah_pasien: countMap.get(rawDiet) ?? 0,
+        kelas_list: kelasList,
         mapping_id: existing?.id ?? null,
         status_mapping: statusMapping,
         bentuk_makanan: existing?.bentuk_makanan ?? null,

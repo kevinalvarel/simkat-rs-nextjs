@@ -6,17 +6,18 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
   CalendarDays,
+  CalendarCheck2,
   Plus,
   Search,
   Copy,
   Download,
   RotateCcw,
   RefreshCw,
-  Filter,
   ShieldCheck,
-  Sparkles,
-  ChevronRight,
-  Layers,
+  Trash2,
+  PlusCircle,
+  Settings2,
+  Loader2,
 } from 'lucide-react';
 import {
   Dialog,
@@ -26,42 +27,74 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import type { SiklusMenuItem } from '@/servers/siklus-menu.service';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import type {
+  SiklusMenuItem,
+  MasterSiklusItem,
+} from '@/servers/siklus-menu.service';
+import {
+  deleteAllItemSiklusMenu,
   getSiklusMenuList,
-  resetSiklusToDefault,
+  getMasterSiklusList,
+  applyStartDayRotation,
 } from '@/servers/siklus-menu.service';
 import SiklusStats from './SiklusStats';
 import SiklusMenuMatrixTable from './SiklusMenuMatrixTable';
 import SiklusItemDialog from './SiklusItemDialog';
 import SiklusSlotEditorDialog from './SiklusSlotEditorDialog';
 import DuplicateSiklusDialog from './DuplicateSiklusDialog';
+import DeleteCycleDialog from './DeleteCycleDialog';
+import TambahSiklusDialog from './TambahSiklusDialog';
+import KelolaSiklusDialog from './KelolaSiklusDialog';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 
+const HARI_ROTASI_OPTIONS = [
+  'SENIN',
+  'SELASA',
+  'RABU',
+  'KAMIS',
+  'JUMAT',
+  'SABTU',
+  'MINGGU',
+] as const;
+
+
 interface KonfigurasiSiklusMenuClientProps {
   initialItems: SiklusMenuItem[];
-  availableCycles: number[];
+  initialMasterSiklus: MasterSiklusItem[];
   dietOptions: Array<{ kode: string; label: string; kategori: string }>;
 }
 
-const CYCLE_PRESETS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-
 export default function KonfigurasiSiklusMenuClient({
   initialItems,
-  availableCycles,
+  initialMasterSiklus,
   dietOptions,
 }: KonfigurasiSiklusMenuClientProps) {
-  const [activeSiklus, setActiveSiklus] = useState<number>(1);
+  const [masterSiklusList, setMasterSiklusList] =
+    useState<MasterSiklusItem[]>(initialMasterSiklus);
+
+  const initialCycleNum =
+    initialMasterSiklus.length > 0 ? initialMasterSiklus[0].nomor_siklus : 1;
+  const [activeSiklus, setActiveSiklus] = useState<number>(initialCycleNum);
   const [items, setItems] = useState<SiklusMenuItem[]>(initialItems);
-  const [cyclesList, setCyclesList] = useState<number[]>(
-    Array.from(new Set([...CYCLE_PRESETS, ...availableCycles])).sort((a, b) => a - b)
-  );
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedJenisFilter, setSelectedJenisFilter] = useState<string>('ALL');
 
   // Dialog States
+  const [isTambahSiklusOpen, setIsTambahSiklusOpen] = useState(false);
+  const [isKelolaSiklusOpen, setIsKelolaSiklusOpen] = useState(false);
+  const [isDuplicateOpen, setIsDuplicateOpen] = useState(false);
+  const [isDeleteCycleOpen, setIsDeleteCycleOpen] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+
   const [isItemDialogOpen, setIsItemDialogOpen] = useState(false);
   const [itemToEdit, setItemToEdit] = useState<SiklusMenuItem | null>(null);
   const [defaultSlotForAdd, setDefaultSlotForAdd] = useState<{
@@ -80,10 +113,75 @@ export default function KonfigurasiSiklusMenuClient({
     existingItems: SiklusMenuItem[];
   } | null>(null);
 
-  const [isDuplicateOpen, setIsDuplicateOpen] = useState(false);
-  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isResetting, setIsResetting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isApplyingRotation, setIsApplyingRotation] = useState(false);
+
+  // Active Cycle metadata object
+  const activeCycleObj = useMemo(() => {
+    return (
+      masterSiklusList.find((c) => c.nomor_siklus === activeSiklus) || {
+        id: activeSiklus,
+        nomor_siklus: activeSiklus,
+        nama_siklus: `Siklus ${activeSiklus}`,
+        hari: null,
+        deskripsi: null,
+        is_active: true,
+        created_at: new Date(),
+        updated_at: new Date(),
+      }
+    );
+  }, [masterSiklusList, activeSiklus]);
+
+  // Current starting day for Cycle 1
+  const currentStartDay = useMemo(() => {
+    return (
+      masterSiklusList.find((c) => c.nomor_siklus === 1)?.hari || 'SENIN'
+    );
+  }, [masterSiklusList]);
+
+  // Refresh master cycles list from server
+  async function refreshMasterCycles(targetToSelect?: number) {
+    try {
+      const freshCycles = await getMasterSiklusList();
+      setMasterSiklusList(freshCycles);
+      if (
+        targetToSelect &&
+        freshCycles.some((c) => c.nomor_siklus === targetToSelect)
+      ) {
+        setActiveSiklus(targetToSelect);
+        await refreshData(targetToSelect);
+      } else if (
+        freshCycles.length > 0 &&
+        !freshCycles.some((c) => c.nomor_siklus === activeSiklus)
+      ) {
+        const nextCycle = freshCycles[0].nomor_siklus;
+        setActiveSiklus(nextCycle);
+        await refreshData(nextCycle);
+      }
+    } catch (err) {
+      console.error('Gagal mengambil daftar master siklus:', err);
+    }
+  }
+
+  // Handle setting the starting day for Cycle 1
+  async function handleApplyStartDay(newStartDay: string) {
+    setIsApplyingRotation(true);
+    try {
+      const res = await applyStartDayRotation(newStartDay);
+      if (res.success) {
+        toast.success(res.message);
+        await refreshMasterCycles();
+      } else {
+        toast.error(res.message);
+      }
+    } catch (err) {
+      console.error('Gagal mengatur hari rotasi siklus:', err);
+      toast.error('Gagal mengatur jadwal hari rotasi siklus.');
+    } finally {
+      setIsApplyingRotation(false);
+    }
+  }
 
   // Refresh items for active cycle
   async function refreshData(siklusNumber: number = activeSiklus) {
@@ -105,13 +203,31 @@ export default function KonfigurasiSiklusMenuClient({
     await refreshData(siklusNumber);
   }
 
+  async function handleDeleteAllItemSiklusMenu(siklusNumber: number) {
+    setIsDeleting(true);
+    try {
+      await deleteAllItemSiklusMenu(siklusNumber);
+      toast.success('Seluruh hidangan pada siklus berhasil dikosongkan.');
+      await refreshData(siklusNumber);
+    } catch (err) {
+      console.error('Gagal mengosongkan siklus menu:', err);
+      toast.error('Gagal mengosongkan siklus menu.');
+    } finally {
+      setIsDeleting(false);
+      setIsDeleteConfirmOpen(false);
+    }
+  }
+
   // Filter items based on search and jenis makanan
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
       // Filter jenis
       if (selectedJenisFilter !== 'ALL') {
         if (selectedJenisFilter === 'SARING') {
-          if (item.jenis_makanan !== 'SARING' && item.waktu_makan !== 'SARING_SIANG') {
+          if (
+            item.jenis_makanan !== 'SARING' &&
+            item.waktu_makan !== 'SARING_SIANG'
+          ) {
             return false;
           }
         } else if (item.jenis_makanan !== selectedJenisFilter) {
@@ -123,7 +239,9 @@ export default function KonfigurasiSiklusMenuClient({
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const matchNama = item.nama_makanan.toLowerCase().includes(q);
-        const matchKategori = (item.kategori_menu || '').toLowerCase().includes(q);
+        const matchKategori = (item.kategori_menu || '')
+          .toLowerCase()
+          .includes(q);
         const matchKelas = item.kelas.toLowerCase().includes(q);
         const matchCatatan = (item.catatan || '').toLowerCase().includes(q);
         return matchNama || matchKategori || matchKelas || matchCatatan;
@@ -164,31 +282,13 @@ export default function KonfigurasiSiklusMenuClient({
     setIsSlotDialogOpen(true);
   }
 
-  // Reset current cycle to default hospital reference
-  async function handleResetToDefault() {
-    setIsResetting(true);
-    try {
-      const res = await resetSiklusToDefault(activeSiklus);
-      if (res.success) {
-        toast.success(res.message);
-        await refreshData(activeSiklus);
-        setIsResetConfirmOpen(false);
-      } else {
-        toast.error(res.message);
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error('Gagal me-reset siklus.');
-    } finally {
-      setIsResetting(false);
-    }
-  }
-
   // Export current cycle to Excel (matching format)
   function handleExportExcel() {
     try {
       const rows = items.map((item) => ({
         'Siklus Ke': item.siklus_ke,
+        'Nama Siklus': activeCycleObj.nama_siklus,
+        'Hari Rotasi': activeCycleObj.hari || '-',
         Kelas: item.kelas,
         'Jenis Makanan': item.jenis_makanan,
         'Waktu Makan': item.waktu_makan,
@@ -200,15 +300,25 @@ export default function KonfigurasiSiklusMenuClient({
 
       const worksheet = XLSX.utils.json_to_sheet(rows);
       const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, `Siklus ${activeSiklus}`);
+      XLSX.utils.book_append_sheet(
+        workbook,
+        worksheet,
+        `Siklus ${activeSiklus}`,
+      );
 
       XLSX.writeFile(workbook, `Siklus_Menu_${activeSiklus}_Rumah_Sakit.xlsx`);
-      toast.success(`Matriks Siklus #${activeSiklus} berhasil diunduh dalam format Excel.`);
+      toast.success(
+        `Matriks Siklus #${activeSiklus} berhasil diunduh dalam format Excel.`,
+      );
     } catch (err) {
       console.error('Error exporting excel:', err);
       toast.error('Gagal mengekspor file Excel.');
     }
   }
+
+  const availableNumbers = useMemo(() => {
+    return masterSiklusList.map((c) => c.nomor_siklus);
+  }, [masterSiklusList]);
 
   return (
     <div className='p-6 space-y-6 max-w-7xl mx-auto'>
@@ -228,7 +338,9 @@ export default function KonfigurasiSiklusMenuClient({
             </Badge>
           </div>
           <p className='text-xs sm:text-sm text-muted-foreground'>
-            Kelola matriks hidangan per siklus menu (1–10 hari), tingkatan kelas, waktu makan (Pagi, Siang, Sore, Saring Siang), dan tag diet pasien.
+            Kelola matriks hidangan per siklus menu, penentuan hari rotasi,
+            tingkatan kelas, waktu makan (Pagi, Siang, Sore, Saring Siang), dan
+            tag diet pasien secara dinamis.
           </p>
         </div>
 
@@ -240,7 +352,9 @@ export default function KonfigurasiSiklusMenuClient({
             disabled={isRefreshing}
             className='gap-1.5 text-xs'
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <RefreshCw
+              className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`}
+            />
             Refresh
           </Button>
 
@@ -265,68 +379,150 @@ export default function KonfigurasiSiklusMenuClient({
           </Button>
 
           <Button
-            onClick={() => {
-              setItemToEdit(null);
-              setDefaultSlotForAdd({
-                siklus_ke: activeSiklus,
-                kelas: 'Semua Kelas',
-                jenis_makanan: 'HEWANI',
-                waktu_makan: 'PAGI',
-              });
-              setIsItemDialogOpen(true);
-            }}
+            variant='outline'
             size='sm'
-            className='gap-1.5 text-xs bg-primary hover:bg-primary/90 text-primary-foreground'
+            onClick={() => setIsDeleteCycleOpen(true)}
+            className='gap-1.5 text-xs text-destructive hover:text-destructive hover:bg-destructive/10'
           >
-            <Plus className='w-4 h-4' />
-            Tambah Menu
+            <Trash2 className='w-3.5 h-3.5' />
+            Hapus Siklus
           </Button>
         </div>
       </div>
 
-      {/* Cycle Selector Bar */}
-      <div className='bg-card p-2 rounded-2xl border shadow-xs space-y-2'>
-        <div className='flex items-center justify-between px-2 pt-1'>
-          <span className='text-xs font-bold text-foreground flex items-center gap-1.5'>
-            <CalendarDays className='w-4 h-4 text-primary' />
-            Pilih Siklus Menu:
-          </span>
-          <div className='flex items-center gap-2'>
+      {/* Cycle Selector & Rotation Settings Bar */}
+      <div className='bg-card p-3.5 rounded-2xl border shadow-xs space-y-3'>
+        <div className='flex items-center justify-between px-1 flex-wrap gap-2.5'>
+          {/* Active Cycle Info */}
+          <div className='flex items-center gap-2 flex-wrap'>
+            <span className='text-xs font-bold text-foreground flex items-center gap-1.5'>
+              <CalendarDays className='w-4 h-4 text-primary' />
+              Pilih Siklus Menu:
+            </span>
+
+            {activeCycleObj.hari && (
+              <Badge
+                variant='secondary'
+                className='text-[11px] font-mono font-bold bg-primary/10 text-primary border border-primary/20 gap-1 px-2 py-0.5'
+              >
+                📅 Hari: {activeCycleObj.hari}
+              </Badge>
+            )}
+
+            {activeCycleObj.deskripsi && (
+              <span className='text-[11px] text-muted-foreground italic hidden sm:inline'>
+                — {activeCycleObj.deskripsi}
+              </span>
+            )}
+          </div>
+
+          {/* Rotation Schedule Configuration & Action buttons */}
+          <div className='flex items-center gap-2 flex-wrap'>
+            {/* Start Day of Cycle 1 Selector */}
+            <div className='flex items-center gap-1.5 bg-muted/60 px-2.5 py-1 rounded-xl border border-border/80'>
+              <span className='text-[11px] font-semibold text-muted-foreground whitespace-nowrap flex items-center gap-1'>
+                <CalendarCheck2 className='w-3.5 h-3.5 text-primary' />
+                Siklus #1 Mulai:
+              </span>
+              <Select
+                value={currentStartDay}
+                onValueChange={(val) => val && handleApplyStartDay(val)}
+                disabled={isApplyingRotation}
+              >
+
+                <SelectTrigger className='h-7 w-[105px] text-xs bg-background font-bold border-primary/30'>
+                  {isApplyingRotation ? (
+                    <Loader2 className='w-3 h-3 animate-spin text-primary mx-auto' />
+                  ) : (
+                    <SelectValue />
+                  )}
+                </SelectTrigger>
+                <SelectContent>
+                  {HARI_ROTASI_OPTIONS.map((hari) => (
+                    <SelectItem
+                      key={hari}
+                      value={hari}
+                      className='text-xs font-semibold'
+                    >
+                      {hari}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+
+              </Select>
+            </div>
+
             <Button
               variant='ghost'
               size='xs'
-              onClick={() => setIsResetConfirmOpen(true)}
+              onClick={() => setIsKelolaSiklusOpen(true)}
               className='text-[11px] text-muted-foreground hover:text-foreground gap-1'
+              title='Ubah nama, hari, atau deskripsi siklus ini'
             >
-              <RotateCcw className='w-3 h-3' /> Reset ke Standar RS
+              <Settings2 className='w-3.5 h-3.5 text-primary' /> Pengaturan
+              Siklus #{activeSiklus}
+            </Button>
+
+            <Button
+              variant='ghost'
+              size='xs'
+              onClick={() => setIsDeleteConfirmOpen(true)}
+              className='text-[11px] text-muted-foreground hover:text-rose-600 gap-1'
+              title='Kosongkan seluruh menu dalam siklus ini'
+            >
+              <Trash2 className='w-3 h-3 text-rose-500' /> Kosongkan Menu
             </Button>
           </div>
         </div>
 
-        {/* Cycle Tabs */}
+        {/* Dynamic Cycle Tabs + Tambah Siklus Button */}
         <div className='flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none'>
-          {cyclesList.map((num) => {
+          {masterSiklusList.map((cycle) => {
+            const num = cycle.nomor_siklus;
             const isActive = activeSiklus === num;
             return (
               <button
                 key={num}
                 type='button'
                 onClick={() => handleSelectCycle(num)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer border ${
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer border ${
                   isActive
                     ? 'bg-primary text-primary-foreground border-primary shadow-xs scale-102'
                     : 'bg-muted/40 text-muted-foreground border-border hover:bg-muted hover:text-foreground'
                 }`}
               >
-                <span>Siklus {num}</span>
+                <span>{cycle.nama_siklus}</span>
+                {cycle.hari && (
+                  <span
+                    className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold tracking-wide transition-colors ${
+                      isActive
+                        ? 'bg-primary-foreground/20 text-primary-foreground'
+                        : 'bg-muted-foreground/15 text-foreground/80'
+                    }`}
+                  >
+                    {cycle.hari}
+                  </span>
+                )}
                 {isActive && (
-                  <span className='w-2 h-2 rounded-full bg-primary-foreground animate-pulse' />
+                  <span className='w-1.5 h-1.5 rounded-full bg-primary-foreground animate-pulse' />
                 )}
               </button>
             );
           })}
+
+          {/* Quick Add Cycle Button */}
+          <Button
+            type='button'
+            variant='outline'
+            size='sm'
+            onClick={() => setIsTambahSiklusOpen(true)}
+            className='h-8 px-3 rounded-xl text-xs font-semibold gap-1.5 border-dashed border-primary/50 text-primary hover:bg-primary/10 shrink-0'
+          >
+            <PlusCircle className='w-3.5 h-3.5' /> Tambah Siklus
+          </Button>
         </div>
       </div>
+
 
       {/* Stats Cards */}
       <SiklusStats items={items} activeSiklus={activeSiklus} />
@@ -381,6 +577,51 @@ export default function KonfigurasiSiklusMenuClient({
         onRefresh={() => refreshData(activeSiklus)}
       />
 
+      {/* Tambah Siklus Baru Dialog */}
+      <TambahSiklusDialog
+        open={isTambahSiklusOpen}
+        onOpenChange={setIsTambahSiklusOpen}
+        existingCycles={masterSiklusList}
+        onSuccess={async (newCycleNum) => {
+          await refreshMasterCycles(newCycleNum);
+        }}
+      />
+
+      {/* Kelola Siklus Dialog */}
+      <KelolaSiklusDialog
+        open={isKelolaSiklusOpen}
+        onOpenChange={setIsKelolaSiklusOpen}
+        cycle={activeCycleObj}
+        onSuccessUpdate={async () => {
+          await refreshMasterCycles();
+        }}
+        onSuccessDelete={async (deletedNum) => {
+          await refreshMasterCycles();
+        }}
+      />
+
+      {/* Hapus Siklus Dialog */}
+      <DeleteCycleDialog
+        open={isDeleteCycleOpen}
+        onOpenChange={setIsDeleteCycleOpen}
+        currentSiklus={activeSiklus}
+        availableCycles={masterSiklusList}
+        onSuccess={async (deletedCycleNum) => {
+          await refreshMasterCycles();
+        }}
+      />
+
+      {/* Duplicate Cycle Dialog */}
+      <DuplicateSiklusDialog
+        open={isDuplicateOpen}
+        onOpenChange={setIsDuplicateOpen}
+        currentSiklus={activeSiklus}
+        availableSiklusList={availableNumbers}
+        onSuccess={async (targetSiklus) => {
+          await refreshMasterCycles(targetSiklus);
+        }}
+      />
+
       {/* Single Item Create / Edit Dialog */}
       <SiklusItemDialog
         open={isItemDialogOpen}
@@ -388,6 +629,7 @@ export default function KonfigurasiSiklusMenuClient({
         itemToEdit={itemToEdit}
         defaultSlot={defaultSlotForAdd}
         dietOptions={dietOptions}
+        availableCycles={masterSiklusList}
         onSuccess={() => refreshData(activeSiklus)}
       />
 
@@ -399,51 +641,39 @@ export default function KonfigurasiSiklusMenuClient({
         onSuccess={() => refreshData(activeSiklus)}
       />
 
-      {/* Duplicate Cycle Dialog */}
-      <DuplicateSiklusDialog
-        open={isDuplicateOpen}
-        onOpenChange={setIsDuplicateOpen}
-        currentSiklus={activeSiklus}
-        availableSiklusList={cyclesList}
-        onSuccess={(targetSiklus) => {
-          if (!cyclesList.includes(targetSiklus)) {
-            setCyclesList((prev) => [...prev, targetSiklus].sort((a, b) => a - b));
-          }
-          handleSelectCycle(targetSiklus);
-        }}
-      />
-
       {/* Reset Confirmation Dialog */}
-      <Dialog open={isResetConfirmOpen} onOpenChange={setIsResetConfirmOpen}>
+      <Dialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
         <DialogContent className='sm:max-w-md p-6'>
           <DialogHeader className='gap-2'>
             <div className='p-3 rounded-full bg-amber-500/10 text-amber-600 w-fit'>
               <RotateCcw className='w-6 h-6' />
             </div>
             <DialogTitle className='text-base font-bold'>
-              Reset Siklus #{activeSiklus} ke Standar RS?
+              Kosongkan Menu {activeCycleObj.nama_siklus}?
             </DialogTitle>
             <DialogDescription className='text-xs text-muted-foreground'>
-              Tindakan ini akan mengembalikan seluruh hidangan pada Siklus #{activeSiklus} ke susunan menu referensi standar rumah sakit (seperti pada tabel standar). Perubahan kustom sebelumnya akan ditimpa.
+              Tindakan ini akan menghapus seluruh hidangan yang terdaftar pada{' '}
+              <strong>{activeCycleObj.nama_siklus}</strong> tanpa menghapus
+              nomor siklus dari sistem. Apakah Anda yakin ingin melanjutkan?
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className='gap-2 pt-2 border-t'>
             <Button
               variant='outline'
               size='sm'
-              onClick={() => setIsResetConfirmOpen(false)}
-              disabled={isResetting}
+              onClick={() => setIsDeleteConfirmOpen(false)}
+              disabled={isDeleting}
             >
               Batal
             </Button>
             <Button
               variant='default'
               size='sm'
-              onClick={handleResetToDefault}
-              disabled={isResetting}
-              className='bg-amber-600 hover:bg-amber-700 text-white'
+              onClick={() => handleDeleteAllItemSiklusMenu(activeSiklus)}
+              disabled={isDeleting}
+              className='bg-destructive hover:bg-destructive/90 text-white'
             >
-              {isResetting ? 'Mengatur ulang...' : 'Ya, Reset Siklus'}
+              {isDeleting ? 'Mengosongkan...' : 'Ya, Kosongkan Menu'}
             </Button>
           </DialogFooter>
         </DialogContent>

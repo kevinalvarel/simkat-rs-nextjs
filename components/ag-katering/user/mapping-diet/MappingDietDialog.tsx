@@ -194,15 +194,31 @@ export default function MappingDietDialog({
             <p className='font-mono text-sm font-bold text-foreground bg-background px-3 py-2 rounded-lg border'>
               {item.diet_rs_raw}
             </p>
-            <div className='flex items-center gap-1.5 text-xs text-muted-foreground'>
-              <Users className='w-3.5 h-3.5' />
-              <span>
-                Mempengaruhi{' '}
-                <strong className='text-foreground'>
-                  {item.jumlah_pasien} pasien
-                </strong>{' '}
-                aktif
-              </span>
+            <div className='flex items-center justify-between gap-2 text-xs text-muted-foreground flex-wrap'>
+              <div className='flex items-center gap-1.5'>
+                <Users className='w-3.5 h-3.5' />
+                <span>
+                  Mempengaruhi{' '}
+                  <strong className='text-foreground'>
+                    {item.jumlah_pasien} pasien
+                  </strong>{' '}
+                  aktif
+                </span>
+              </div>
+              {item.kelas_list && item.kelas_list.length > 0 && (
+                <div className='flex items-center gap-1 flex-wrap'>
+                  <span className='text-[10px] text-muted-foreground'>Kelas:</span>
+                  {item.kelas_list.map((k) => (
+                    <Badge
+                      key={k}
+                      variant='outline'
+                      className='text-[10px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
+                    >
+                      {k}
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 

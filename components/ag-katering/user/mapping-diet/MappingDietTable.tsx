@@ -151,21 +151,24 @@ export default function MappingDietTable({
                   title='Pilih semua item'
                 />
               </TableHead>
-              <TableHead className='min-w-[220px] text-xs font-semibold'>
+              <TableHead className='min-w-[200px] text-xs font-semibold'>
                 Diet RS Raw (Free Text)
               </TableHead>
-              <TableHead className='w-[110px] text-xs font-semibold text-center'>
-                <span className='flex items-center gap-1'>
+              <TableHead className='w-[130px] text-xs font-semibold'>
+                Kelas Pasien
+              </TableHead>
+              <TableHead className='w-[100px] text-xs font-semibold text-center'>
+                <span className='flex items-center justify-center gap-1'>
                   <Users className='w-3.5 h-3.5' /> Pasien
                 </span>
               </TableHead>
-              <TableHead className='w-[130px] text-xs font-semibold'>
+              <TableHead className='w-[120px] text-xs font-semibold'>
                 Status Mapping
               </TableHead>
-              <TableHead className='min-w-[240px] text-xs font-semibold'>
+              <TableHead className='min-w-[220px] text-xs font-semibold'>
                 Preview Mapping
               </TableHead>
-              <TableHead className='w-[100px] text-xs font-semibold text-right'>
+              <TableHead className='w-[90px] text-xs font-semibold text-right'>
                 Aksi
               </TableHead>
             </TableRow>
@@ -201,12 +204,30 @@ export default function MappingDietTable({
                     </span>
                   </TableCell>
 
-                  {/* Jumlah Pasien */}
+                  {/* Kelas Pasien */}
                   <TableCell className='align-middle py-3.5'>
-                    <span className='inline-flex items-center gap-1 text-xs font-bold text-foreground'>
+                    <div className='flex flex-wrap gap-1 max-w-[150px]'>
+                      {item.kelas_list && item.kelas_list.length > 0 ? (
+                        item.kelas_list.map((k) => (
+                          <span
+                            key={k}
+                            className='inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20'
+                          >
+                            {k}
+                          </span>
+                        ))
+                      ) : (
+                        <span className='text-[10px] text-muted-foreground'>-</span>
+                      )}
+                    </div>
+                  </TableCell>
+
+                  {/* Jumlah Pasien */}
+                  <TableCell className='align-middle py-3.5 text-center'>
+                    <span className='inline-flex items-center justify-center gap-1 text-xs font-bold text-foreground'>
                       <Users className='w-3.5 h-3.5 text-muted-foreground' />
                       {item.jumlah_pasien}
-                      <span className='font-normal text-muted-foreground'>
+                      <span className='font-normal text-muted-foreground text-[11px]'>
                         pasien
                       </span>
                     </span>

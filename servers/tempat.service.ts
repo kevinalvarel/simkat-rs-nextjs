@@ -53,7 +53,7 @@ export type MutationResult = {
 };
 
 // Standard fallback default kelas options
-const DEFAULT_KELAS_LIST = ['Kelas 1', 'Kelas 2', 'Kelas 3', 'VIP', 'VVIP'];
+const DEFAULT_KELAS_LIST = ['Kelas 1', 'Kelas 2', 'Kelas 3', 'VIP'];
 
 /**
  * Helper to normalize raw JSON kamar list or produce safe fallback
@@ -316,7 +316,11 @@ export async function createRuangan(
     return { success: false, message: 'Nama ruangan tidak boleh kosong.' };
   }
 
-  let finalKamarList: { nomorKamar: string; jumlahBed: number; kelas: string }[];
+  let finalKamarList: {
+    nomorKamar: string;
+    jumlahBed: number;
+    kelas: string;
+  }[];
   let totalBed: number;
 
   if (Array.isArray(kamarListOrBedCount) && kamarListOrBedCount.length > 0) {
@@ -523,4 +527,3 @@ export async function updateRuanganKamarList(
     return { success: false, message: 'Gagal memperbarui konfigurasi kamar.' };
   }
 }
-

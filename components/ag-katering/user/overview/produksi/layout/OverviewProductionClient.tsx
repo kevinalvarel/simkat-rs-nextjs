@@ -64,6 +64,12 @@ export default function OverviewProductionClient({
           currentTime={currentTime}
           cutoffTime={data.cutoffTime}
           tanggalProduksi={data.tanggalProduksi}
+          siklusKe={data.siklusKe}
+          namaSiklus={data.namaSiklus}
+          hari={data.hari}
+          tanggalFormatted={data.tanggalFormatted}
+          totalPasien={data.totalPasien}
+          totalPorsi={data.totalPorsi}
         />
 
         {/* Right Side: Mapped Diet Distribution Cards Grid */}

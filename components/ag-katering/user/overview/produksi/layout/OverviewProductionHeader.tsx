@@ -18,8 +18,8 @@ export default function OverviewProductionHeader({
           Dashboard Pemantauan Live - Produksi
         </h1>
         <p className='text-xs sm:text-sm text-muted-foreground'>
-          Layar monitoring real-time akumulasi porsi menu & diet aktif pasien
-          berdasarkan hasil mapping.
+          Layar monitoring real-time akumulasi porsi hidangan dari Siklus Menu
+          aktif berdasarkan diet & kelas pasien.
         </p>
       </div>
 

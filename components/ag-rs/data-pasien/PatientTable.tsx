@@ -30,7 +30,7 @@ const STATUS_OPTIONS = [
   'PULANG',
 ];
 
-const DEFAULT_KELAS_OPTIONS = ['Kelas 1', 'Kelas 2', 'Kelas 3', 'VIP', 'VVIP'];
+const DEFAULT_KELAS_OPTIONS = ['Kelas 1', 'Kelas 2', 'Kelas 3', 'VIP'];
 
 export default function PatientTable({
   patients,
@@ -290,9 +290,7 @@ export default function PatientTable({
     return null;
   }
 
-  const activePatients = patients.filter(
-    (p) => p.status_pasien !== 'PULANG',
-  );
+  const activePatients = patients.filter((p) => p.status_pasien !== 'PULANG');
 
   const targetCapacity = Math.max(
     activePatients.length,
@@ -329,7 +327,10 @@ export default function PatientTable({
       <div className='flex items-center gap-2 text-xs text-muted-foreground bg-muted/40 p-2.5 px-4 rounded-lg border border-border/50'>
         <span className='text-amber-500 text-sm'>💡</span>
         <span>
-          <strong>Tips Cepat:</strong> Klik sel bed kosong untuk <strong>Tambah Pasien Inline</strong> (otomatis tersimpan saat berpindah baris) · Klik sel pasien terdaftar untuk edit langsung · Klik kanan untuk aksi cepat.
+          <strong>Tips Cepat:</strong> Klik sel bed kosong untuk{' '}
+          <strong>Tambah Pasien Inline</strong> (otomatis tersimpan saat
+          berpindah baris) · Klik sel pasien terdaftar untuk edit langsung ·
+          Klik kanan untuk aksi cepat.
         </span>
       </div>
 

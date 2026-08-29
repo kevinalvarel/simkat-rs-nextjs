@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -24,7 +24,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Save, UtensilsCrossed, Loader2, Tag, Plus, X } from 'lucide-react';
-import type { SiklusMenuItem } from '@/servers/siklus-menu.service';
+import type {
+  SiklusMenuItem,
+  MasterSiklusItem,
+} from '@/servers/siklus-menu.service';
 import {
   createSiklusMenuItem,
   updateSiklusMenuItem,
@@ -42,6 +45,7 @@ interface SiklusItemDialogProps {
     waktu_makan?: string;
   } | null;
   dietOptions?: Array<{ kode: string; label: string; kategori: string }>;
+  availableCycles?: MasterSiklusItem[] | number[];
   onSuccess: () => void;
 }
 
@@ -65,7 +69,6 @@ const KELAS_OPTIONS = [
   { value: 'I', label: 'Kelas I' },
   { value: 'II-III', label: 'Kelas II - III' },
   { value: 'VIP', label: 'Kelas VIP' },
-  { value: 'VVIP', label: 'Kelas VVIP' },
 ];
 
 const JENIS_MAKANAN_OPTIONS = [
@@ -104,10 +107,27 @@ export default function SiklusItemDialog({
   itemToEdit,
   defaultSlot,
   dietOptions = [],
+  availableCycles = [],
   onSuccess,
 }: SiklusItemDialogProps) {
   const isEdit = Boolean(itemToEdit);
   const [customTagInput, setCustomTagInput] = useState('');
+
+  const cycleOptions = useMemo<{ value: number; label: string }[]>(() => {
+    if (availableCycles && availableCycles.length > 0) {
+      return availableCycles.map((c) => {
+        if (typeof c === 'number') {
+          return { value: c, label: `Siklus ${c}` };
+        }
+        return { value: c.nomor_siklus, label: c.nama_siklus };
+      });
+    }
+    return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((num) => ({
+      value: num,
+      label: `Siklus ${num}`,
+    }));
+  }, [availableCycles]);
+
 
   const {
     control,
@@ -244,12 +264,26 @@ export default function SiklusItemDialog({
               <Label className='text-xs font-semibold'>
                 Siklus Ke- <span className='text-rose-500'>*</span>
               </Label>
-              <Input
-                type='number'
-                {...register('siklus_ke', { valueAsNumber: true })}
-                min={1}
-                max={31}
-                className='h-9 text-xs font-mono font-bold'
+              <Controller
+                name='siklus_ke'
+                control={control}
+                render={({ field }) => (
+                  <Select
+                    value={String(field.value || 1)}
+                    onValueChange={(val) => val && field.onChange(Number(val))}
+                  >
+                    <SelectTrigger className='w-full h-9 text-xs bg-background font-medium'>
+                      <SelectValue placeholder='Pilih siklus...' />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {cycleOptions.map((opt) => (
+                        <SelectItem key={opt.value} value={String(opt.value)}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               />
               {errors.siklus_ke && (
                 <p className='text-[11px] text-destructive'>
@@ -257,6 +291,7 @@ export default function SiklusItemDialog({
                 </p>
               )}
             </div>
+
 
             <div className='space-y-1.5'>
               <Label className='text-xs font-semibold'>

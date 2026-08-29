@@ -15,6 +15,13 @@
       "when": 1787925821335,
       "tag": "0001_gray_exiles",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787984237205,
+      "tag": "0002_slow_magma",
+      "breakpoints": true
     }
   ]
 }

@@ -56,13 +56,19 @@ interface SiklusMenuMatrixTableProps {
 }
 
 const JENIS_BADGE_STYLE: Record<string, string> = {
-  HEWANI: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 border-indigo-300',
-  NABATI: 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300 border-teal-300',
-  SAYUR: 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300 border-green-300',
-  SARING: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-300',
+  HEWANI:
+    'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 border-indigo-300',
+  NABATI:
+    'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300 border-teal-300',
+  SAYUR:
+    'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300 border-green-300',
+  SARING:
+    'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-300',
   BUAH: 'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300 border-orange-300',
-  SNACK: 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border-purple-300',
-  EXTRA: 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border-rose-300',
+  SNACK:
+    'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border-purple-300',
+  EXTRA:
+    'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border-rose-300',
 };
 
 interface MatrixRowDefinition {
@@ -74,6 +80,7 @@ interface MatrixRowDefinition {
 
 // Preset standard hospital rows layout (matching reference image)
 const STANDARD_ROWS: MatrixRowDefinition[] = [
+  { id: 'VIP-HEWANI', kelas: 'VIP', jenis_makanan: 'HEWANI' },
   { id: 'I-HEWANI', kelas: 'I', jenis_makanan: 'HEWANI' },
   { id: 'II-III-HEWANI', kelas: 'II-III', jenis_makanan: 'HEWANI' },
   { id: 'SEMUA-NABATI', kelas: 'Semua Kelas', jenis_makanan: 'NABATI' },
@@ -120,7 +127,7 @@ export default function SiklusMenuMatrixTable({
 
   // Items dedicated to SARING (SIANG)
   const saringSiangItems = items.filter(
-    (i) => i.waktu_makan === 'SARING_SIANG' || i.jenis_makanan === 'SARING'
+    (i) => i.waktu_makan === 'SARING_SIANG' || i.jenis_makanan === 'SARING',
   );
 
   async function handleDeleteConfirm() {
@@ -144,7 +151,11 @@ export default function SiklusMenuMatrixTable({
   }
 
   // Helper to get items for a cell
-  function getCellDishes(kelas: string, jenis_makanan: string, waktu_makan: string) {
+  function getCellDishes(
+    kelas: string,
+    jenis_makanan: string,
+    waktu_makan: string,
+  ) {
     return items.filter((i) => {
       if (i.waktu_makan !== waktu_makan) return false;
       if (i.jenis_makanan !== jenis_makanan) return false;
@@ -170,9 +181,10 @@ export default function SiklusMenuMatrixTable({
     jenis_makanan: string,
     waktu_makan: string,
     customItems?: SiklusMenuItem[],
-    isSaringColumn?: boolean
+    isSaringColumn?: boolean,
   ) {
-    const dishes = customItems || getCellDishes(kelas, jenis_makanan, waktu_makan);
+    const dishes =
+      customItems || getCellDishes(kelas, jenis_makanan, waktu_makan);
 
     return (
       <div className='group/slot min-h-[90px] p-2 flex flex-col justify-between rounded-lg transition-colors hover:bg-muted/40 relative'>
@@ -189,7 +201,9 @@ export default function SiklusMenuMatrixTable({
                 className='text-xs text-foreground bg-background border border-border/80 rounded-md p-1.5 shadow-2xs group/item hover:border-primary/50 transition-all flex items-start justify-between gap-1.5'
               >
                 <div className='leading-tight'>
-                  <span className='font-medium text-foreground'>{dish.nama_makanan}</span>
+                  <span className='font-medium text-foreground'>
+                    {dish.nama_makanan}
+                  </span>
                   {dish.kategori_menu && (
                     <span className='ml-1 font-bold text-primary text-[11px]'>
                       ({dish.kategori_menu})
@@ -348,7 +362,9 @@ export default function SiklusMenuMatrixTable({
                         variant='secondary'
                         className='text-xs font-bold px-2.5 py-1 uppercase tracking-wide'
                       >
-                        {row.kelas === 'Semua Kelas' ? 'I, II-III' : `Kelas ${row.kelas}`}
+                        {row.kelas === 'Semua Kelas'
+                          ? 'I, II-III'
+                          : `Kelas ${row.kelas}`}
                       </Badge>
                     </TableCell>
 
@@ -388,7 +404,7 @@ export default function SiklusMenuMatrixTable({
                           'SARING',
                           'SARING_SIANG',
                           saringSiangItems,
-                          true
+                          true,
                         )}
                       </TableCell>
                     )}
@@ -417,7 +433,8 @@ export default function SiklusMenuMatrixTable({
               Apakah Anda yakin ingin menghapus hidangan{' '}
               <strong className='text-foreground'>
                 &quot;{itemToDelete?.nama_makanan}&quot;
-                {itemToDelete?.kategori_menu && ` (${itemToDelete.kategori_menu})`}
+                {itemToDelete?.kategori_menu &&
+                  ` (${itemToDelete.kategori_menu})`}
               </strong>{' '}
               dari Siklus #{itemToDelete?.siklus_ke}?
             </DialogDescription>

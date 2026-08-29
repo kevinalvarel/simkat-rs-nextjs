@@ -29,14 +29,6 @@ interface KamarCardProps {
 
 export function renderKelasBadge(kelas: string) {
   const normalized = kelas.toUpperCase();
-  if (normalized.includes('VVIP')) {
-    return (
-      <Badge className='bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30 font-extrabold text-[10px] py-0 px-1.5 gap-1'>
-        <Sparkles className='w-2.5 h-2.5 text-amber-500' />
-        {kelas}
-      </Badge>
-    );
-  }
   if (normalized.includes('VIP')) {
     return (
       <Badge className='bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/30 font-bold text-[10px] py-0 px-1.5'>
@@ -81,7 +73,10 @@ export function KamarCard({
   onDeleteKamar,
 }: KamarCardProps) {
   // Generate visual bed badges (up to 8, rest as +N)
-  const bedTokens = Array.from({ length: Math.min(kamar.jumlahBed, 6) }, (_, i) => i + 1);
+  const bedTokens = Array.from(
+    { length: Math.min(kamar.jumlahBed, 6) },
+    (_, i) => i + 1,
+  );
   const remainingBeds = kamar.jumlahBed - bedTokens.length;
 
   return (

@@ -38,14 +38,6 @@ interface RuanganCardProps {
 
 export function renderKelasBadge(kelas: string) {
   const normalized = (kelas || '').toUpperCase();
-  if (normalized.includes('VVIP')) {
-    return (
-      <Badge className='bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30 font-extrabold gap-1 text-xs'>
-        <Sparkles className='w-3 h-3 text-amber-500' />
-        {kelas}
-      </Badge>
-    );
-  }
   if (normalized.includes('VIP')) {
     return (
       <Badge className='bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/30 font-bold text-xs'>
@@ -94,7 +86,9 @@ export function RuanganCard({
   const [isExpanded, setIsExpanded] = useState(true);
 
   // Find saved state of this ruangan to detect modified kamar/beds
-  const savedGedung = savedGedungList.find((g) => g.idGedung === ruangan.gedungId);
+  const savedGedung = savedGedungList.find(
+    (g) => g.idGedung === ruangan.gedungId,
+  );
   const savedRuangan = savedGedung?.ruanganList.find(
     (r) => r.idRuangan === ruangan.idRuangan,
   );
@@ -108,7 +102,10 @@ export function RuanganCard({
   });
 
   const totalKamar = ruangan.kamarList.length;
-  const totalBed = ruangan.kamarList.reduce((acc, k) => acc + (k.jumlahBed || 0), 0);
+  const totalBed = ruangan.kamarList.reduce(
+    (acc, k) => acc + (k.jumlahBed || 0),
+    0,
+  );
 
   return (
     <div

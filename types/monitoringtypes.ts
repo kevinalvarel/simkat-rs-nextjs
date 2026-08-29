@@ -1,6 +1,22 @@
+export type MenuCategoryGroup =
+  | 'POKOK'
+  | 'HEWANI'
+  | 'NABATI'
+  | 'SAYUR'
+  | 'SARING'
+  | 'EXTRA'
+  | 'BUAH'
+  | 'SNACK'
+  | 'NPO'
+  | 'LAINNYA';
+
 export interface MonitoringCardData {
-  code: string; // e.g. BN, TKTP, PUTEL, BL, RG, DM, NPO, UNMAPPED
-  name: string; // Display name (e.g. Biasa Nasi, Tinggi Kalori Tinggi Protein, Putih Telur)
+  code: string; // Unique dish key or identifier
+  name: string; // Display name (e.g. "Ayam Bumbu Kecap", "Nasi Putih", "Sayur Bayam")
+  category?: MenuCategoryGroup | string; // e.g. "HEWANI", "NABATI", "SAYUR", "POKOK", "EXTRA", "BUAH", "SNACK", "NPO"
+  kelas?: string; // e.g. "Semua Kelas", "VIP", "Kelas 1", "Kelas 2 - 3"
+  dietTag?: string; // e.g. "Biasa", "RG", "DM", "TKTP"
+  catatan?: string;
   baseline: number; // Count before revision
   active: number; // Current count (baseline + change)
   change: number; // Net change (+1, -1, 0, etc.)
@@ -14,6 +30,16 @@ export interface MonitoringSummary {
   tanggalProduksi: string;
   statusBatch: string;
   cutoffTime: string;
+
+  // Cycle & Day Info
+  siklusKe: number;
+  namaSiklus: string;
+  hari: string;
+  tanggalFormatted: string;
+  deskripsiSiklus?: string;
+  totalPasien: number;
+  totalPorsi: number;
+
   cards: MonitoringCardData[];
   lastUpdated: string;
 }
