@@ -217,6 +217,8 @@ export async function updateWaktuMakanConfig(
     try {
       revalidatePath('/dashboard/ag-katering/status-snapshot');
       revalidatePath('/dashboard/ag-katering/overview');
+      revalidatePath('/dashboard/ag-katering/overview/produksi');
+      revalidatePath('/dashboard/ag-katering/overview/pemorsian');
     } catch {
       // Ignore if called in render context
     }
@@ -326,6 +328,8 @@ export async function triggerManualSnapshot(
       try {
         revalidatePath('/dashboard/ag-katering/status-snapshot');
         revalidatePath('/dashboard/ag-katering/overview');
+        revalidatePath('/dashboard/ag-katering/overview/produksi');
+        revalidatePath('/dashboard/ag-katering/overview/pemorsian');
       } catch {
         // Ignore if called in render context
       }

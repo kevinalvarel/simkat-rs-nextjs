@@ -14,6 +14,7 @@ import {
   updateWaktuMakanConfig,
   triggerManualSnapshot,
 } from '@/servers/snapshot.service';
+import { broadcastProductionUpdate } from '@/lib/realtime-sync';
 import {
   Card,
   CardContent,
@@ -106,6 +107,7 @@ export default function CutoffConfigCard({
       if (res.success) {
         toast.success(res.message);
         setEditingConfig(null);
+        broadcastProductionUpdate('SNAPSHOT_TRIGGERED');
         if (onSnapshotTriggered) onSnapshotTriggered();
       } else {
         toast.error(res.message);
@@ -130,6 +132,7 @@ export default function CutoffConfigCard({
       if (res.success) {
         toast.success(res.message);
         setTriggeringTarget(null);
+        broadcastProductionUpdate('SNAPSHOT_TRIGGERED');
         if (onSnapshotTriggered) onSnapshotTriggered();
       } else {
         toast.error(res.message);

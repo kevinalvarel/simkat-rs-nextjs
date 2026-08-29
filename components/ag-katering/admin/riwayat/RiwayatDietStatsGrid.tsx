@@ -3,7 +3,7 @@
 import React from 'react';
 import type { RiwayatDietStats } from '@/servers/riwayat-diet.service';
 import { Card, CardContent } from '@/components/ui/card';
-import { History, Users, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { History, Users, Utensils, AlertTriangle } from 'lucide-react';
 
 interface RiwayatDietStatsGridProps {
   stats: RiwayatDietStats;
@@ -23,7 +23,9 @@ export function RiwayatDietStatsGrid({ stats }: RiwayatDietStatsGridProps) {
               <span className='text-2xl font-bold tracking-tight text-foreground'>
                 {stats.totalRiwayat}
               </span>
-              <span className='text-xs text-muted-foreground'>Transaksi</span>
+              <span className='text-xs text-primary font-semibold'>
+                ({stats.hariIniCount} Hari Ini)
+              </span>
             </div>
           </div>
           <div className='p-3 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'>
@@ -37,14 +39,14 @@ export function RiwayatDietStatsGrid({ stats }: RiwayatDietStatsGridProps) {
         <CardContent className='p-4 sm:p-5 flex items-center justify-between'>
           <div className='space-y-1'>
             <p className='text-xs font-medium text-muted-foreground uppercase tracking-wider'>
-              Staf Gizi-RS Terdaftar
+              Staf Gizi-RS Pencatat
             </p>
             <div className='flex items-baseline gap-2'>
               <span className='text-2xl font-bold tracking-tight text-foreground'>
                 {stats.giziRsCount}
               </span>
               <span className='text-xs text-emerald-600 dark:text-emerald-400 font-medium'>
-                Nama & Email Active
+                Akun Terdaftar
               </span>
             </div>
           </div>
@@ -54,22 +56,24 @@ export function RiwayatDietStatsGrid({ stats }: RiwayatDietStatsGridProps) {
         </CardContent>
       </Card>
 
-      {/* 3. Disetujui & Selesai */}
+      {/* 3. Modifikasi Diet & Emergent */}
       <Card className='border border-border/70 bg-card/80 backdrop-blur-sm hover:shadow-md transition-all duration-200'>
         <CardContent className='p-4 sm:p-5 flex items-center justify-between'>
           <div className='space-y-1'>
             <p className='text-xs font-medium text-muted-foreground uppercase tracking-wider'>
-              Status Disetujui
+              Modifikasi Diet
             </p>
             <div className='flex items-baseline gap-2'>
               <span className='text-2xl font-bold tracking-tight text-foreground'>
-                {stats.approvedCount}
+                {stats.dietChangeCount}
               </span>
-              <span className='text-xs text-muted-foreground'>Terverifikasi</span>
+              <span className='text-xs text-muted-foreground'>
+                Perubahan Menu
+              </span>
             </div>
           </div>
           <div className='p-3 rounded-xl bg-violet-500/10 text-violet-600 dark:text-violet-400 border border-violet-500/20'>
-            <CheckCircle2 className='w-5 h-5' />
+            <Utensils className='w-5 h-5' />
           </div>
         </CardContent>
       </Card>
@@ -79,14 +83,14 @@ export function RiwayatDietStatsGrid({ stats }: RiwayatDietStatsGridProps) {
         <CardContent className='p-4 sm:p-5 flex items-center justify-between'>
           <div className='space-y-1'>
             <p className='text-xs font-medium text-muted-foreground uppercase tracking-wider'>
-              NPO & Pasien Baru
+              NPO & Instruksi Khusus
             </p>
             <div className='flex items-baseline gap-2'>
               <span className='text-2xl font-bold tracking-tight text-foreground'>
                 {stats.npoEmergentCount}
               </span>
               <span className='text-xs text-amber-600 dark:text-amber-400 font-medium'>
-                Instruksi Khusus
+                Puasa / Emergent
               </span>
             </div>
           </div>
@@ -98,3 +102,4 @@ export function RiwayatDietStatsGrid({ stats }: RiwayatDietStatsGridProps) {
     </div>
   );
 }
+

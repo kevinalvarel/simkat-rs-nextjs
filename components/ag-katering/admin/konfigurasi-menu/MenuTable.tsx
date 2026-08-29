@@ -18,6 +18,9 @@ import {
   XCircle,
   Utensils,
   AlertTriangle,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import {
   Dialog,
@@ -34,8 +37,14 @@ import {
 } from '@/servers/konfigurasi-menu.service';
 import { toast } from 'sonner';
 
+export type MenuSortField = 'kategori' | 'kode' | 'label' | 'status' | 'id';
+export type MenuSortOrder = 'asc' | 'desc';
+
 interface MenuTableProps {
   items: KategoriMenuItem[];
+  sortBy?: MenuSortField;
+  sortOrder?: MenuSortOrder;
+  onSort?: (field: MenuSortField) => void;
   onEdit: (item: KategoriMenuItem) => void;
   onRefresh: () => void;
 }
@@ -63,6 +72,9 @@ const CATEGORY_BADGE_STYLE: Record<string, string> = {
 
 export default function MenuTable({
   items,
+  sortBy,
+  sortOrder = 'asc',
+  onSort,
   onEdit,
   onRefresh,
 }: MenuTableProps) {
@@ -70,6 +82,20 @@ export default function MenuTable({
     null,
   );
   const [isDeleting, setIsDeleting] = useState(false);
+
+  function renderSortIcon(field: MenuSortField) {
+    if (!onSort) return null;
+    if (sortBy !== field) {
+      return (
+        <ArrowUpDown className='w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0' />
+      );
+    }
+    return sortOrder === 'asc' ? (
+      <ArrowUp className='w-3.5 h-3.5 text-primary shrink-0' />
+    ) : (
+      <ArrowDown className='w-3.5 h-3.5 text-primary shrink-0' />
+    );
+  }
 
   async function handleToggleStatus(item: KategoriMenuItem) {
     try {
@@ -132,16 +158,49 @@ export default function MenuTable({
               <TableHead className='w-12 text-center text-xs font-semibold'>
                 No.
               </TableHead>
-              <TableHead className='text-xs font-semibold'>Kategori</TableHead>
-              <TableHead className='text-xs font-semibold'>Kode Item</TableHead>
-              <TableHead className='text-xs font-semibold'>
-                Nama / Label Item
+              <TableHead>
+                <button
+                  type='button'
+                  onClick={() => onSort?.('kategori')}
+                  className='group flex items-center gap-1.5 text-xs font-semibold text-foreground cursor-pointer select-none hover:text-primary transition-colors'
+                  title='Klik untuk mengurutkan Kategori'
+                >
+                  <span>Kategori</span>
+                  {renderSortIcon('kategori')}
+                </button>
               </TableHead>
-              <TableHead className='text-center text-xs font-semibold'>
-                Urutan
+              <TableHead>
+                <button
+                  type='button'
+                  onClick={() => onSort?.('kode')}
+                  className='group flex items-center gap-1.5 text-xs font-semibold text-foreground cursor-pointer select-none hover:text-primary transition-colors'
+                  title='Klik untuk mengurutkan Kode Item'
+                >
+                  <span>Kode Item</span>
+                  {renderSortIcon('kode')}
+                </button>
               </TableHead>
-              <TableHead className='text-center text-xs font-semibold'>
-                Status
+              <TableHead>
+                <button
+                  type='button'
+                  onClick={() => onSort?.('label')}
+                  className='group flex items-center gap-1.5 text-xs font-semibold text-foreground cursor-pointer select-none hover:text-primary transition-colors'
+                  title='Klik untuk mengurutkan Nama Item'
+                >
+                  <span>Nama / Label Item</span>
+                  {renderSortIcon('label')}
+                </button>
+              </TableHead>
+              <TableHead className='text-center'>
+                <button
+                  type='button'
+                  onClick={() => onSort?.('status')}
+                  className='group inline-flex items-center gap-1.5 text-xs font-semibold text-foreground cursor-pointer select-none hover:text-primary transition-colors mx-auto'
+                  title='Klik untuk mengurutkan Status'
+                >
+                  <span>Status</span>
+                  {renderSortIcon('status')}
+                </button>
               </TableHead>
               <TableHead className='text-right text-xs font-semibold pr-6'>
                 Aksi
@@ -174,9 +233,6 @@ export default function MenuTable({
                   </TableCell>
                   <TableCell className='text-xs font-semibold text-foreground'>
                     {item.label_item}
-                  </TableCell>
-                  <TableCell className='text-center text-xs font-mono text-muted-foreground'>
-                    {item.urutan}
                   </TableCell>
                   <TableCell className='text-center'>
                     <button

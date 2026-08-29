@@ -5,17 +5,20 @@ import type {
   RiwayatDietItem,
   RiwayatDietStats,
   GiziRsUser,
+  SimplePatientOption,
 } from '@/servers/riwayat-diet.service';
 import {
   getRiwayatDietPasienList,
   getRiwayatDietStats,
 } from '@/servers/riwayat-diet.service';
 import { toast } from 'sonner';
+import { LayoutList, GitCommit, ShieldCheck } from 'lucide-react';
 
 import { RiwayatDietHeader } from './RiwayatDietHeader';
 import { RiwayatDietStatsGrid } from './RiwayatDietStatsGrid';
 import { RiwayatDietFilterBar } from './RiwayatDietFilterBar';
 import { RiwayatDietTable } from './RiwayatDietTable';
+import { RiwayatDietTimeline } from './RiwayatDietTimeline';
 import { RiwayatDietDetailModal } from './RiwayatDietDetailModal';
 import { LogDietChangeModal } from './LogDietChangeModal';
 
@@ -23,19 +26,25 @@ interface RiwayatDietClientProps {
   initialItems: RiwayatDietItem[];
   initialStats: RiwayatDietStats;
   giziRsUsers: GiziRsUser[];
+  patients?: SimplePatientOption[];
 }
 
 export default function RiwayatDietClient({
   initialItems,
   initialStats,
   giziRsUsers,
+  patients = [],
 }: RiwayatDietClientProps) {
   const [items, setItems] = useState<RiwayatDietItem[]>(initialItems);
   const [stats, setStats] = useState<RiwayatDietStats>(initialStats);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // View Mode: 'TABLE' | 'TIMELINE'
+  const [viewMode, setViewMode] = useState<'TABLE' | 'TIMELINE'>('TABLE');
+
   // Filter States
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedDateRange, setSelectedDateRange] = useState('ALL');
   const [selectedStaffEmail, setSelectedStaffEmail] = useState('ALL');
   const [selectedWaktuMakan, setSelectedWaktuMakan] = useState('ALL');
   const [selectedJenisPerubahan, setSelectedJenisPerubahan] = useState('ALL');
@@ -47,8 +56,24 @@ export default function RiwayatDietClient({
 
   // Filtered dataset
   const filteredItems = useMemo(() => {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const now = new Date().getTime();
+    const sevenDaysAgo = now - 7 * 24 * 60 * 60 * 1000;
+    const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
+
     return items.filter((item) => {
-      // 1. Search Query
+      // 1. Date Range Filter
+      if (selectedDateRange === 'TODAY') {
+        if (item.requested_at.slice(0, 10) !== todayStr) return false;
+      } else if (selectedDateRange === 'WEEK') {
+        const itemTime = new Date(item.requested_at).getTime();
+        if (itemTime < sevenDaysAgo) return false;
+      } else if (selectedDateRange === 'MONTH') {
+        const itemTime = new Date(item.requested_at).getTime();
+        if (itemTime < thirtyDaysAgo) return false;
+      }
+
+      // 2. Search Query
       const q = searchQuery.toLowerCase().trim();
       const matchesSearch =
         !q ||
@@ -57,31 +82,39 @@ export default function RiwayatDietClient({
         item.gizi_rs_name.toLowerCase().includes(q) ||
         item.gizi_rs_email.toLowerCase().includes(q) ||
         item.ruangan.toLowerCase().includes(q) ||
-        (item.data_baru?.diet && item.data_baru.diet.toLowerCase().includes(q));
+        (item.data_baru?.diet && item.data_baru.diet.toLowerCase().includes(q)) ||
+        (item.data_lama?.diet && item.data_lama.diet.toLowerCase().includes(q));
 
-      // 2. Staff Email Filter
+      // 3. Staff Email Filter
       const matchesStaff =
         selectedStaffEmail === 'ALL' ||
         item.gizi_rs_email.toLowerCase() === selectedStaffEmail.toLowerCase();
 
-      // 3. Waktu Makan Filter
+      // 4. Waktu Makan Filter
       const matchesWaktu =
         selectedWaktuMakan === 'ALL' || item.waktu_makan === selectedWaktuMakan;
 
-      // 4. Jenis Perubahan Filter
+      // 5. Jenis Perubahan Filter
       const matchesJenis =
         selectedJenisPerubahan === 'ALL' ||
         item.jenis_perubahan === selectedJenisPerubahan;
 
-      // 5. Status Filter
+      // 6. Status Filter
       const matchesStatus =
         selectedStatus === 'ALL' || item.status === selectedStatus;
 
-      return matchesSearch && matchesStaff && matchesWaktu && matchesJenis && matchesStatus;
+      return (
+        matchesSearch &&
+        matchesStaff &&
+        matchesWaktu &&
+        matchesJenis &&
+        matchesStatus
+      );
     });
   }, [
     items,
     searchQuery,
+    selectedDateRange,
     selectedStaffEmail,
     selectedWaktuMakan,
     selectedJenisPerubahan,
@@ -112,6 +145,7 @@ export default function RiwayatDietClient({
   // Reset Filters handler
   function handleResetFilters() {
     setSearchQuery('');
+    setSelectedDateRange('ALL');
     setSelectedStaffEmail('ALL');
     setSelectedWaktuMakan('ALL');
     setSelectedJenisPerubahan('ALL');
@@ -168,13 +202,15 @@ export default function RiwayatDietClient({
     link.setAttribute('href', encodedUri);
     link.setAttribute(
       'download',
-      `Riwayat_Diet_Pasien_GiziRS_${new Date().toISOString().slice(0, 10)}.csv`
+      `Riwayat_Diet_Pasien_GiziRS_${new Date().toISOString().slice(0, 10)}.csv`,
     );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
 
-    toast.success(`Berhasil mengekspor ${filteredItems.length} baris riwayat ke CSV.`);
+    toast.success(
+      `Berhasil mengekspor ${filteredItems.length} baris riwayat ke CSV.`,
+    );
   }
 
   // Handle new item added
@@ -202,11 +238,13 @@ export default function RiwayatDietClient({
       <RiwayatDietFilterBar
         giziRsUsers={giziRsUsers}
         searchQuery={searchQuery}
+        selectedDateRange={selectedDateRange}
         selectedStaffEmail={selectedStaffEmail}
         selectedWaktuMakan={selectedWaktuMakan}
         selectedJenisPerubahan={selectedJenisPerubahan}
         selectedStatus={selectedStatus}
         onSearchChange={setSearchQuery}
+        onDateRangeChange={setSelectedDateRange}
         onStaffEmailChange={setSelectedStaffEmail}
         onWaktuMakanChange={setSelectedWaktuMakan}
         onJenisPerubahanChange={setSelectedJenisPerubahan}
@@ -214,25 +252,76 @@ export default function RiwayatDietClient({
         onResetFilters={handleResetFilters}
       />
 
-      {/* 4. Main History Table */}
-      <RiwayatDietTable
-        items={filteredItems}
-        onSelectDetail={(item) => setDetailItem(item)}
-      />
+      {/* 4. View Switcher & Result Count Banner */}
+      <div className='flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-muted/40 p-3 rounded-2xl border border-border/60'>
+        <div className='flex items-center gap-2 text-xs text-muted-foreground'>
+          <span className='font-semibold text-foreground flex items-center gap-1.5'>
+            <ShieldCheck className='w-4 h-4 text-primary' />
+            Histori Terpantau:
+          </span>
+          <span>
+            Menampilkan <strong className='text-foreground'>{filteredItems.length}</strong> dari{' '}
+            {items.length} riwayat perubahan
+          </span>
+        </div>
 
-      {/* 5. Detail Audit Modal */}
+        {/* View Mode Toggle Button Group */}
+        <div className='flex items-center gap-1 bg-background p-1 rounded-xl border border-border/80 shadow-2xs self-start sm:self-auto'>
+          <button
+            type='button'
+            onClick={() => setViewMode('TABLE')}
+            className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all ${
+              viewMode === 'TABLE'
+                ? 'bg-primary text-primary-foreground shadow-xs'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+            }`}
+          >
+            <LayoutList className='w-3.5 h-3.5' />
+            Tabel Audit
+          </button>
+          <button
+            type='button'
+            onClick={() => setViewMode('TIMELINE')}
+            className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-all ${
+              viewMode === 'TIMELINE'
+                ? 'bg-primary text-primary-foreground shadow-xs'
+                : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+            }`}
+          >
+            <GitCommit className='w-3.5 h-3.5' />
+            Timeline Tracker
+          </button>
+        </div>
+      </div>
+
+      {/* 5. Main Content: Table or Timeline View */}
+      {viewMode === 'TABLE' ? (
+        <RiwayatDietTable
+          items={filteredItems}
+          onSelectDetail={(item) => setDetailItem(item)}
+        />
+      ) : (
+        <RiwayatDietTimeline
+          items={filteredItems}
+          onSelectDetail={(item) => setDetailItem(item)}
+        />
+      )}
+
+      {/* 6. Detail Audit Modal */}
       <RiwayatDietDetailModal
         item={detailItem}
         onClose={() => setDetailItem(null)}
       />
 
-      {/* 6. Modal Log Perubahan Diet Baru */}
+      {/* 7. Modal Log Perubahan Diet Baru */}
       <LogDietChangeModal
         isOpen={isAddModalOpen}
         giziRsUsers={giziRsUsers}
+        patients={patients}
         onClose={() => setIsAddModalOpen(false)}
         onSuccess={handleItemCreated}
       />
     </div>
   );
 }
+

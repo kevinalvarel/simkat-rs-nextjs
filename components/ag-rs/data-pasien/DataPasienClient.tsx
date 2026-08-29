@@ -16,7 +16,7 @@ import type { DataPasienClientProps } from '@/types/data-pasien';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-
+import { broadcastProductionUpdate } from '@/lib/realtime-sync';
 import PatientToolbar from './ui/PatientToolbar';
 import PatientTable from './PatientTable';
 import PatientFormDialog from './ui/PatientFormDialog';
@@ -155,6 +155,7 @@ export default function DataPasienClient({
 
     // 1. Instantly update frontend UI
     setPatientList((prev) => [...prev, optimisticPatient]);
+    broadcastProductionUpdate('PATIENT_UPDATED');
 
     toast.success(
       isRevisiMode
@@ -168,12 +169,15 @@ export default function DataPasienClient({
       if (!res.success) {
         // Rollback on failure
         setPatientList((prev) => prev.filter((p) => p.id !== tempId));
+        broadcastProductionUpdate('PATIENT_UPDATED');
         toast.error(res.message || 'Gagal menyimpan pasien.');
       } else {
         router.refresh();
+        broadcastProductionUpdate('PATIENT_UPDATED');
       }
     } catch {
       setPatientList((prev) => prev.filter((p) => p.id !== tempId));
+      broadcastProductionUpdate('PATIENT_UPDATED');
       toast.error('Gagal menyimpan pasien ke database.');
     }
   };
@@ -191,6 +195,7 @@ export default function DataPasienClient({
     setPatientList((prev) =>
       prev.map((p) => (p.id === patient.id ? { ...p, [field]: value } : p)),
     );
+    broadcastProductionUpdate('PATIENT_UPDATED');
 
     toast.success(
       isRevisiMode
@@ -212,9 +217,11 @@ export default function DataPasienClient({
             p.id === patient.id ? { ...p, [field]: previousValue } : p,
           ),
         );
+        broadcastProductionUpdate('PATIENT_UPDATED');
         toast.error(res.message || 'Gagal memperbarui data.');
       } else {
         router.refresh();
+        broadcastProductionUpdate('PATIENT_UPDATED');
       }
     } catch {
       setPatientList((prev) =>
@@ -222,6 +229,7 @@ export default function DataPasienClient({
           p.id === patient.id ? { ...p, [field]: previousValue } : p,
         ),
       );
+      broadcastProductionUpdate('PATIENT_UPDATED');
       toast.error('Gagal memperbarui data di database.');
     }
   };
@@ -240,6 +248,7 @@ export default function DataPasienClient({
       setPatientList((prev) =>
         prev.map((p) => (p.id === patientId ? { ...p, ...data } : p)),
       );
+      broadcastProductionUpdate('PATIENT_UPDATED');
 
       toast.success(
         isRevisiMode
@@ -254,14 +263,17 @@ export default function DataPasienClient({
           setPatientList((prev) =>
             prev.map((p) => (p.id === patientId ? previousPatient : p)),
           );
+          broadcastProductionUpdate('PATIENT_UPDATED');
           toast.error(res.message || 'Gagal memperbarui data.');
         } else {
           router.refresh();
+          broadcastProductionUpdate('PATIENT_UPDATED');
         }
       } catch {
         setPatientList((prev) =>
           prev.map((p) => (p.id === patientId ? previousPatient : p)),
         );
+        broadcastProductionUpdate('PATIENT_UPDATED');
         toast.error('Gagal memperbarui data di database.');
       }
     } else {
@@ -276,6 +288,7 @@ export default function DataPasienClient({
 
     // 1. Instantly remove from frontend UI
     setPatientList((prev) => prev.filter((p) => p.id !== patientId));
+    broadcastProductionUpdate('PATIENT_UPDATED');
     toast.success(`Pasien ${previousPatient.nama_pasien} berhasil dihapus.`);
 
     // 2. Background DB sync
@@ -284,12 +297,15 @@ export default function DataPasienClient({
       if (!res.success) {
         // Rollback
         setPatientList((prev) => [...prev, previousPatient]);
+        broadcastProductionUpdate('PATIENT_UPDATED');
         toast.error(res.message || 'Gagal menghapus pasien.');
       } else {
         router.refresh();
+        broadcastProductionUpdate('PATIENT_UPDATED');
       }
     } catch {
       setPatientList((prev) => [...prev, previousPatient]);
+      broadcastProductionUpdate('PATIENT_UPDATED');
       toast.error('Gagal menghapus pasien di database.');
     }
   };
@@ -320,6 +336,7 @@ export default function DataPasienClient({
         ),
       );
     }
+    broadcastProductionUpdate('PATIENT_UPDATED');
 
     toast.success(
       isRevisiMode
@@ -345,9 +362,11 @@ export default function DataPasienClient({
           }
           return prev.map((p) => (p.id === patientId ? previousPatient : p));
         });
+        broadcastProductionUpdate('PATIENT_UPDATED');
         toast.error(res.message || 'Gagal memindahkan pasien.');
       } else {
         router.refresh();
+        broadcastProductionUpdate('PATIENT_UPDATED');
       }
     } catch {
       setPatientList((prev) => {
@@ -356,6 +375,7 @@ export default function DataPasienClient({
         }
         return prev.map((p) => (p.id === patientId ? previousPatient : p));
       });
+      broadcastProductionUpdate('PATIENT_UPDATED');
       toast.error('Gagal memindahkan pasien di database.');
     }
   };

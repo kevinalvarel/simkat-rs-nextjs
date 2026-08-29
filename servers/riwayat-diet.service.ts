@@ -1,6 +1,6 @@
 'use server';
 
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, asc, ne } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/drizzle';
 import { user } from '@/db/auth-schema';
@@ -21,6 +21,19 @@ export interface GiziRsUser {
   email: string;
   role: string;
   createdAt?: Date | string;
+}
+
+export interface SimplePatientOption {
+  id: number;
+  nama_pasien: string;
+  no_rm: string;
+  diet: string;
+  ruangan: string;
+  bed: string;
+  kelas: string;
+  gedung: string;
+  is_npo: boolean;
+  status_pasien: string;
 }
 
 export interface RiwayatDietItem {
@@ -55,9 +68,42 @@ export interface RiwayatDietItem {
 
 export interface RiwayatDietStats {
   totalRiwayat: number;
+  hariIniCount: number;
   giziRsCount: number;
-  approvedCount: number;
+  dietChangeCount: number;
   npoEmergentCount: number;
+  roomTransferCount: number;
+  approvedCount: number;
+  pendingCount: number;
+}
+
+/**
+ * Fetch active patients for quick selection in manual tracker modal
+ */
+export async function getActivePatientsForRiwayat(): Promise<SimplePatientOption[]> {
+  try {
+    const list = await db
+      .select({
+        id: pasienTable.id,
+        nama_pasien: pasienTable.nama_pasien,
+        no_rm: pasienTable.no_rm,
+        diet: pasienTable.diet,
+        ruangan: pasienTable.ruangan,
+        bed: pasienTable.bed,
+        kelas: pasienTable.kelas,
+        gedung: pasienTable.gedung,
+        is_npo: pasienTable.is_npo,
+        status_pasien: pasienTable.status_pasien,
+      })
+      .from(pasienTable)
+      .where(ne(pasienTable.status_pasien, 'PULANG'))
+      .orderBy(asc(pasienTable.nama_pasien));
+
+    return list;
+  } catch (err) {
+    console.error('Error fetching active patients for riwayat:', err);
+    return [];
+  }
 }
 
 /**
@@ -184,12 +230,12 @@ export async function getRiwayatDietPasienList(
         return {
           id: r.id,
           pasien_id: r.pasien_id,
-          no_rm: r.no_rm || 'RM-UNKNOWN',
-          nama_pasien: r.nama_pasien || 'Pasien Tanpa Nama',
-          gedung: r.gedung || '',
-          ruangan: r.ruangan || '',
-          bed: r.bed || '',
-          kelas: r.kelas || '',
+          no_rm: r.no_rm || (dataBaruObj?.no_rm ?? dataLamaObj?.no_rm ?? 'RM-UNKNOWN'),
+          nama_pasien: r.nama_pasien || (dataBaruObj?.nama_pasien ?? dataLamaObj?.nama_pasien ?? 'Pasien Tanpa Nama'),
+          gedung: r.gedung || (dataBaruObj?.gedung ?? dataLamaObj?.gedung ?? ''),
+          ruangan: r.ruangan || (dataBaruObj?.ruangan ?? dataLamaObj?.ruangan ?? ''),
+          bed: r.bed || (dataBaruObj?.bed ?? dataLamaObj?.bed ?? ''),
+          kelas: r.kelas || (dataBaruObj?.kelas ?? dataLamaObj?.kelas ?? ''),
           batch_id: r.batch_id,
           batch_code: r.batch_code || 'BATCH-LOCKED',
           waktu_makan: (r.waktu_makan as WaktuMakanType) || 'PAGI',
@@ -236,18 +282,27 @@ export async function getRiwayatDietStats(
   const data = items || (await getRiwayatDietPasienList());
   const giziRsUsers = await getGiziRsUsers();
 
+  const todayStr = new Date().toISOString().slice(0, 10);
   const totalRiwayat = data.length;
+  const hariIniCount = data.filter((i) => i.requested_at.slice(0, 10) === todayStr).length;
   const giziRsCount = giziRsUsers.length;
-  const approvedCount = data.filter((i) => i.status === 'APPROVED' || i.status === 'SELESAI').length;
+  const dietChangeCount = data.filter((i) => i.jenis_perubahan === 'DIET_CHANGE').length;
   const npoEmergentCount = data.filter(
-    (i) => i.jenis_perubahan === 'NEW_PATIENT' || i.jenis_perubahan === 'NPO'
+    (i) => i.jenis_perubahan === 'NEW_PATIENT' || i.jenis_perubahan === 'NPO' || i.jenis_perubahan === 'DISCHARGE'
   ).length;
+  const roomTransferCount = data.filter((i) => i.jenis_perubahan === 'ROOM_TRANSFER').length;
+  const approvedCount = data.filter((i) => i.status === 'APPROVED' || i.status === 'SELESAI').length;
+  const pendingCount = data.filter((i) => i.status === 'PENDING').length;
 
   return {
     totalRiwayat,
+    hariIniCount,
     giziRsCount,
-    approvedCount,
+    dietChangeCount,
     npoEmergentCount,
+    roomTransferCount,
+    approvedCount,
+    pendingCount,
   };
 }
 
@@ -282,7 +337,22 @@ export async function createRiwayatDietLog(data: {
       review_notes: 'Tercatat otomatis dalam Riwayat Perubahan Diet RS oleh ' + data.gizi_rs_name,
     });
 
+    // Also update patient diet in pasienTable if patient exists and diet changed
+    if (data.data_baru?.diet && data.pasien_id) {
+      await db
+        .update(pasienTable)
+        .set({
+          diet: data.data_baru.diet,
+          updated_at: new Date(),
+        })
+        .where(eq(pasienTable.id, data.pasien_id));
+    }
+
     revalidatePath('/dashboard/ag-katering/admin/riwayat');
+    revalidatePath('/dashboard/ag-rs/data-pasien');
+    revalidatePath('/dashboard/ag-katering/overview/pemorsian');
+    revalidatePath('/dashboard/ag-katering/overview/produksi');
+
     return {
       success: true,
       message: `Riwayat perubahan diet berhasil dicatat oleh ${data.gizi_rs_name}.`,

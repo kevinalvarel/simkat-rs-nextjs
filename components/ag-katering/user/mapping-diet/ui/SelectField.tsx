@@ -117,22 +117,6 @@ export function SelectField({
             )}
           </SelectContent>
         </Select>
-
-        {/* Clear X button inside input when value selected */}
-        {hasValue && allowClear && (
-          <button
-            type='button'
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onChange('');
-            }}
-            className='absolute right-7 top-1/2 -translate-y-1/2 p-1 rounded-full text-muted-foreground hover:text-rose-600 hover:bg-rose-500/10 transition-colors z-10 cursor-pointer'
-            title='Batal Pilih / Clear'
-          >
-            <X className='w-3 h-3' />
-          </button>
-        )}
       </div>
 
       {error && <p className='text-[11px] text-destructive'>{error}</p>}

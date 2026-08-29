@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import type { GiziRsUser } from '@/servers/riwayat-diet.service';
+import type { GiziRsUser, SimplePatientOption } from '@/servers/riwayat-diet.service';
 import { createRiwayatDietLog } from '@/servers/riwayat-diet.service';
 import type { WaktuMakanType, JenisPerubahanType } from '@/servers/revisi-snapshot.service';
 import {
@@ -23,11 +23,12 @@ import {
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { PlusCircle, UserCheck, ShieldCheck, Mail } from 'lucide-react';
+import { PlusCircle, UserCheck, ShieldCheck, Mail, Search, User } from 'lucide-react';
 
 interface LogDietChangeModalProps {
   isOpen: boolean;
   giziRsUsers: GiziRsUser[];
+  patients?: SimplePatientOption[];
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -35,13 +36,20 @@ interface LogDietChangeModalProps {
 export function LogDietChangeModal({
   isOpen,
   giziRsUsers,
+  patients = [],
   onClose,
   onSuccess,
 }: LogDietChangeModalProps) {
-  // Form State
+  // Staff State
   const [selectedStaffEmail, setSelectedStaffEmail] = useState<string>(
     giziRsUsers[0]?.email || 'rizky.gizi@rs-sehat.id'
   );
+
+  // Patient selection mode: 'EXISTING' | 'MANUAL'
+  const [patientMode, setPatientMode] = useState<'EXISTING' | 'MANUAL'>('EXISTING');
+  const [selectedPatientId, setSelectedPatientId] = useState<string>('');
+
+  // Form State
   const [namaPasien, setNamaPasien] = useState('');
   const [noRm, setNoRm] = useState('');
   const [ruangan, setRuangan] = useState('Melati 1');
@@ -54,10 +62,25 @@ export function LogDietChangeModal({
   const [alasan, setAlasan] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const activeStaff = giziRsUsers.find((u) => u.email === selectedStaffEmail) || giziRsUsers[0] || {
-    name: 'Ahmad Rizky, S.Gz',
-    email: 'rizky.gizi@rs-sehat.id',
-  };
+  const activeStaff =
+    giziRsUsers.find((u) => u.email === selectedStaffEmail) ||
+    giziRsUsers[0] || {
+      name: 'Ahmad Rizky, S.Gz',
+      email: 'rizky.gizi@rs-sehat.id',
+    };
+
+  function handleSelectPatient(patientIdStr: string) {
+    setSelectedPatientId(patientIdStr);
+    const p = patients.find((pat) => pat.id.toString() === patientIdStr);
+    if (p) {
+      setNamaPasien(p.nama_pasien);
+      setNoRm(p.no_rm);
+      setRuangan(p.ruangan);
+      setBed(p.bed);
+      setKelas(p.kelas);
+      setDietLama(p.diet || 'Diet Biasa');
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -69,12 +92,13 @@ export function LogDietChangeModal({
 
     setIsSubmitting(true);
     try {
+      const pId = selectedPatientId ? parseInt(selectedPatientId, 10) : Math.floor(Math.random() * 100) + 1;
       const res = await createRiwayatDietLog({
-        pasien_id: Math.floor(Math.random() * 100) + 1,
+        pasien_id: pId,
         waktu_makan: waktuMakan,
         jenis_perubahan: jenisPerubahan,
-        data_lama: { diet: dietLama, ruangan, bed, kelas },
-        data_baru: { diet: dietBaru, ruangan, bed, kelas },
+        data_lama: { diet: dietLama, ruangan, bed, kelas, nama_pasien: namaPasien, no_rm: noRm },
+        data_baru: { diet: dietBaru, ruangan, bed, kelas, nama_pasien: namaPasien, no_rm: noRm },
         alasan: alasan.trim(),
         gizi_rs_name: activeStaff.name,
         gizi_rs_email: activeStaff.email,
@@ -89,6 +113,7 @@ export function LogDietChangeModal({
         setNoRm('');
         setDietBaru('');
         setAlasan('');
+        setSelectedPatientId('');
       } else {
         toast.error(res.message);
       }
@@ -124,7 +149,11 @@ export function LogDietChangeModal({
               </Label>
               <Select
                 value={selectedStaffEmail}
-                onValueChange={(val) => setSelectedStaffEmail(val || giziRsUsers[0]?.email || 'rizky.gizi@rs-sehat.id')}
+                onValueChange={(val) =>
+                  setSelectedStaffEmail(
+                    val || giziRsUsers[0]?.email || 'rizky.gizi@rs-sehat.id',
+                  )
+                }
               >
                 <SelectTrigger className='h-11 bg-background text-xs font-medium border-border/80'>
                   <SelectValue placeholder='Pilih Staf Gizi-RS' />
@@ -148,7 +177,70 @@ export function LogDietChangeModal({
               </div>
             </div>
 
-            {/* 2. Patient Info */}
+            {/* 2. Patient Source Mode */}
+            {patients.length > 0 && (
+              <div className='space-y-2 bg-muted/40 p-3 rounded-xl border border-border/60'>
+                <div className='flex items-center justify-between'>
+                  <Label className='text-xs font-semibold text-foreground flex items-center gap-1.5'>
+                    <Search className='w-3.5 h-3.5 text-muted-foreground' /> Pilih dari Daftar Pasien Aktif
+                  </Label>
+                  <div className='flex gap-1'>
+                    <button
+                      type='button'
+                      onClick={() => setPatientMode('EXISTING')}
+                      className={`text-[11px] px-2.5 py-1 rounded-lg font-medium transition-colors ${
+                        patientMode === 'EXISTING'
+                          ? 'bg-primary text-primary-foreground font-semibold'
+                          : 'bg-background hover:bg-muted text-muted-foreground'
+                      }`}
+                    >
+                      Pilih Pasien
+                    </button>
+                    <button
+                      type='button'
+                      onClick={() => {
+                        setPatientMode('MANUAL');
+                        setSelectedPatientId('');
+                      }}
+                      className={`text-[11px] px-2.5 py-1 rounded-lg font-medium transition-colors ${
+                        patientMode === 'MANUAL'
+                          ? 'bg-primary text-primary-foreground font-semibold'
+                          : 'bg-background hover:bg-muted text-muted-foreground'
+                      }`}
+                    >
+                      Input Manual
+                    </button>
+                  </div>
+                </div>
+
+                {patientMode === 'EXISTING' && (
+                  <Select
+                    value={selectedPatientId}
+                    onValueChange={(val) => handleSelectPatient(val || '')}
+                  >
+                    <SelectTrigger className='h-10 bg-background text-xs'>
+                      <SelectValue placeholder='-- Cari / Pilih Pasien Aktif --' />
+                    </SelectTrigger>
+                    <SelectContent className='max-h-60'>
+                      {patients.map((p) => (
+                        <SelectItem key={p.id} value={p.id.toString()} className='text-xs py-1.5'>
+                          <div className='flex items-center gap-2'>
+                            <User className='w-3.5 h-3.5 text-muted-foreground' />
+                            <span className='font-bold text-foreground'>{p.nama_pasien}</span>
+                            <span className='text-muted-foreground font-mono text-[11px]'>({p.no_rm})</span>
+                            <span className='text-[10px] bg-secondary/80 px-1.5 py-0.5 rounded'>
+                              {p.ruangan} - {p.bed}
+                            </span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            )}
+
+            {/* 3. Patient Info Inputs */}
             <div className='grid grid-cols-1 sm:grid-cols-2 gap-3'>
               <div className='space-y-1.5'>
                 <Label className='text-xs font-medium'>Nama Pasien *</Label>
@@ -171,7 +263,7 @@ export function LogDietChangeModal({
               </div>
             </div>
 
-            {/* 3. Location info */}
+            {/* 4. Location info */}
             <div className='grid grid-cols-3 gap-2.5'>
               <div className='space-y-1.5'>
                 <Label className='text-xs font-medium'>Ruangan</Label>
@@ -199,7 +291,7 @@ export function LogDietChangeModal({
               </div>
             </div>
 
-            {/* 4. Meal time & Change type */}
+            {/* 5. Meal time & Change type */}
             <div className='grid grid-cols-1 sm:grid-cols-2 gap-3'>
               <div className='space-y-1.5'>
                 <Label className='text-xs font-medium'>Waktu Makan *</Label>
@@ -238,7 +330,7 @@ export function LogDietChangeModal({
               </div>
             </div>
 
-            {/* 5. Diet Before & Diet After */}
+            {/* 6. Diet Before & Diet After */}
             <div className='grid grid-cols-1 sm:grid-cols-2 gap-3'>
               <div className='space-y-1.5'>
                 <Label className='text-xs font-medium'>Diet Sebelum (Lama)</Label>
@@ -261,7 +353,7 @@ export function LogDietChangeModal({
               </div>
             </div>
 
-            {/* 6. Clinical Reason */}
+            {/* 7. Clinical Reason */}
             <div className='space-y-1.5'>
               <Label className='text-xs font-medium'>Alasan Klinis / Keterangan Dokter DPJP *</Label>
               <textarea
@@ -298,3 +390,4 @@ export function LogDietChangeModal({
     </Dialog>
   );
 }
+

@@ -125,7 +125,7 @@ export default function OverviewDietCard({ card }: OverviewDietCardProps) {
 
   return (
     <Card
-      className={`transition-all duration-300 border hover:shadow-md flex flex-col justify-between overflow-hidden rounded-xl ${styles.bg} ${
+      className={`transition-all duration-300 border hover:shadow-md flex flex-col justify-between overflow-hidden rounded-xl animate-in fade-in zoom-in-95 duration-200 ${styles.bg} ${
         change !== 0 ? 'ring-1 ring-primary/15' : ''
       }`}
     >

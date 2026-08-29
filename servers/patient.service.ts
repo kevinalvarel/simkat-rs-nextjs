@@ -69,6 +69,21 @@ type MutationResult = {
   message: string;
 };
 
+import { auth } from '@/lib/auth';
+import { headers } from 'next/headers';
+
+async function getActorString(fallback = 'Ahli Gizi RS') {
+  try {
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    });
+    if (session?.user?.name && session?.user?.email) {
+      return `${session.user.name} (${session.user.email})`;
+    }
+  } catch (_) {}
+  return fallback;
+}
+
 export async function createPatient(
   data: PatientFormValues,
   revisionContext?: RevisionContext,
@@ -85,6 +100,9 @@ export async function createPatient(
 
   try {
     const isRevisi = Boolean(revisionContext?.isRevisiMode);
+    const actor = await getActorString(
+      revisionContext?.requestedBy || 'Ahli Gizi RS',
+    );
 
     const [inserted] = await db
       .insert(pasienTable)
@@ -102,8 +120,8 @@ export async function createPatient(
       })
       .returning();
 
-    // If in Mode Revisi, record into otorisasiPerubahanDietTable
-    if (isRevisi && inserted) {
+    // Record into otorisasiPerubahanDietTable (Tracker)
+    if (inserted) {
       await db.insert(otorisasiPerubahanDietTable).values({
         pasien_id: inserted.id,
         batch_id: revisionContext?.batchId || null,
@@ -112,18 +130,28 @@ export async function createPatient(
         data_baru: JSON.stringify(parsed.data),
         alasan:
           revisionContext?.alasan ||
-          'Pasien baru ditambahkan pasca-snapshot (Emergent)',
-        status: 'PENDING',
-        requested_by: revisionContext?.requestedBy || 'Ahli Gizi RS',
+          (isRevisi
+            ? 'Pasien baru ditambahkan pasca-snapshot (Emergent)'
+            : 'Pendaftaran pasien baru oleh Ahli Gizi RS'),
+        status: isRevisi ? 'PENDING' : 'APPROVED',
+        requested_by: actor,
+        requested_at: new Date(),
+        reviewed_by: isRevisi ? null : 'Sistem Terverifikasi',
+        reviewed_at: isRevisi ? null : new Date(),
+        review_notes: isRevisi ? null : 'Pasien baru terdaftar oleh ' + actor,
       });
 
-      revalidatePath('/dashboard/ag-katering/admin/otorisasi-perubahan-diet');
-      revalidatePath('/dashboard/ag-katering/revisi-post-snapshot');
-      revalidatePath('/dashboard/ag-katering/overview/pemorsian');
+      if (isRevisi) {
+        revalidatePath('/dashboard/ag-katering/admin/otorisasi-perubahan-diet');
+        revalidatePath('/dashboard/ag-katering/revisi-post-snapshot');
+      }
     }
 
     revalidatePath('/dashboard/ag-rs/data-pasien');
+    revalidatePath('/dashboard/ag-katering/admin/riwayat');
     revalidatePath('/dashboard/ag-katering/overview');
+    revalidatePath('/dashboard/ag-katering/overview/produksi');
+    revalidatePath('/dashboard/ag-katering/overview/pemorsian');
     revalidatePath('/dashboard/ag-katering/mapping-diet');
     return {
       success: true,
@@ -159,6 +187,9 @@ export async function updatePatient(
       .where(eq(pasienTable.id, id));
 
     const isRevisi = Boolean(revisionContext?.isRevisiMode);
+    const actor = await getActorString(
+      revisionContext?.requestedBy || 'Ahli Gizi RS',
+    );
 
     if (isRevisi && oldPatient) {
       let jenisPerubahan:
@@ -189,7 +220,7 @@ export async function updatePatient(
           revisionContext?.alasan ||
           'Perubahan data pasien pada mode revisi pasca-snapshot',
         status: 'PENDING',
-        requested_by: revisionContext?.requestedBy || 'Ahli Gizi RS',
+        requested_by: actor,
       });
 
       revalidatePath('/dashboard/ag-katering/admin/otorisasi-perubahan-diet');
@@ -202,7 +233,51 @@ export async function updatePatient(
       };
     }
 
-    // Normal mode (non-revisi): Update immediately
+    // Normal mode (non-revisi): Check if diet or significant field changed to log in Tracker
+    if (oldPatient) {
+      const hasDietChange = oldPatient.diet !== parsed.data.diet;
+      const hasRoomChange =
+        oldPatient.ruangan !== parsed.data.ruangan ||
+        oldPatient.bed !== parsed.data.bed;
+      const hasNpoChange = oldPatient.is_npo !== parsed.data.is_npo;
+      const hasStatusChange =
+        oldPatient.status_pasien !== parsed.data.status_pasien;
+
+      if (hasDietChange || hasRoomChange || hasNpoChange || hasStatusChange) {
+        let jenis: 'DIET_CHANGE' | 'ROOM_TRANSFER' | 'DISCHARGE' | 'NPO' =
+          'DIET_CHANGE';
+        let alasan = `Perubahan diet: ${oldPatient.diet} ➔ ${parsed.data.diet}`;
+
+        if (parsed.data.is_npo || parsed.data.status_pasien === 'NPO') {
+          jenis = 'NPO';
+          alasan = 'Instruksi Pasien Puasa / NPO';
+        } else if (parsed.data.status_pasien === 'PULANG') {
+          jenis = 'DISCHARGE';
+          alasan = 'Pasien Pulang / Selesai Rawat';
+        } else if (hasRoomChange) {
+          jenis = 'ROOM_TRANSFER';
+          alasan = `Pindah ruangan dari ${oldPatient.ruangan || '-'} (${oldPatient.bed || '-'}) ke ${parsed.data.ruangan} (${parsed.data.bed})`;
+        }
+
+        await db.insert(otorisasiPerubahanDietTable).values({
+          pasien_id: id,
+          batch_id: null,
+          waktu_makan: 'PAGI',
+          jenis_perubahan: jenis,
+          data_lama: JSON.stringify(oldPatient),
+          data_baru: JSON.stringify(parsed.data),
+          alasan: alasan,
+          status: 'APPROVED',
+          requested_by: actor,
+          requested_at: new Date(),
+          reviewed_by: 'Sistem Terverifikasi',
+          reviewed_at: new Date(),
+          review_notes: 'Pembaruan data pasien oleh ' + actor,
+        });
+      }
+    }
+
+    // Update patient record in database
     await db
       .update(pasienTable)
       .set({
@@ -220,7 +295,10 @@ export async function updatePatient(
       .where(eq(pasienTable.id, id));
 
     revalidatePath('/dashboard/ag-rs/data-pasien');
+    revalidatePath('/dashboard/ag-katering/admin/riwayat');
     revalidatePath('/dashboard/ag-katering/overview');
+    revalidatePath('/dashboard/ag-katering/overview/produksi');
+    revalidatePath('/dashboard/ag-katering/overview/pemorsian');
     return {
       success: true,
       message: 'Data pasien berhasil diperbarui.',
@@ -243,6 +321,9 @@ export async function updatePatientField(
       .where(eq(pasienTable.id, id));
 
     const isRevisi = Boolean(revisionContext?.isRevisiMode);
+    const actor = await getActorString(
+      revisionContext?.requestedBy || 'Ahli Gizi RS',
+    );
 
     if (isRevisi && oldPatient) {
       let jenisPerubahan:
@@ -270,17 +351,53 @@ export async function updatePatientField(
           revisionContext?.alasan ||
           `Revisi ${Object.keys(fields).join(', ')} pasca-snapshot`,
         status: 'PENDING',
-        requested_by: revisionContext?.requestedBy || 'Ahli Gizi RS',
+        requested_by: actor,
       });
 
       revalidatePath('/dashboard/ag-katering/admin/otorisasi-perubahan-diet');
       revalidatePath('/dashboard/ag-katering/revisi-post-snapshot');
       revalidatePath('/dashboard/ag-katering/overview/pemorsian');
+      revalidatePath('/dashboard/ag-katering/overview/produksi');
       return {
         success: true,
         message:
           'Perubahan diajukan ke Otorisasi Supervisor (Menunggu Persetujuan).',
       };
+    }
+
+    // Normal mode: check if diet or significant field changed
+    if (oldPatient && (fields.diet || fields.is_npo !== undefined || fields.ruangan || fields.status_pasien)) {
+      let jenis: 'DIET_CHANGE' | 'ROOM_TRANSFER' | 'DISCHARGE' | 'NPO' = 'DIET_CHANGE';
+      let alasan = `Pembaruan kolom: ${Object.keys(fields).join(', ')}`;
+
+      if (fields.is_npo || fields.status_pasien === 'NPO') {
+        jenis = 'NPO';
+        alasan = 'Instruksi Pasien Puasa / NPO';
+      } else if (fields.status_pasien === 'PULANG') {
+        jenis = 'DISCHARGE';
+        alasan = 'Pasien Pulang / Selesai Rawat';
+      } else if (fields.ruangan || fields.bed) {
+        jenis = 'ROOM_TRANSFER';
+        alasan = `Pindah ruangan ke ${fields.ruangan || oldPatient.ruangan} (${fields.bed || oldPatient.bed})`;
+      } else if (fields.diet) {
+        alasan = `Perubahan diet: ${oldPatient.diet} ➔ ${fields.diet}`;
+      }
+
+      await db.insert(otorisasiPerubahanDietTable).values({
+        pasien_id: id,
+        batch_id: null,
+        waktu_makan: 'PAGI',
+        jenis_perubahan: jenis,
+        data_lama: JSON.stringify(oldPatient),
+        data_baru: JSON.stringify({ ...oldPatient, ...fields }),
+        alasan: alasan,
+        status: 'APPROVED',
+        requested_by: actor,
+        requested_at: new Date(),
+        reviewed_by: 'Sistem Terverifikasi',
+        reviewed_at: new Date(),
+        review_notes: 'Pembaruan data pasien oleh ' + actor,
+      });
     }
 
     // Normal mode (non-revisi): Update immediately
@@ -293,7 +410,10 @@ export async function updatePatientField(
       .where(eq(pasienTable.id, id));
 
     revalidatePath('/dashboard/ag-rs/data-pasien');
+    revalidatePath('/dashboard/ag-katering/admin/riwayat');
     revalidatePath('/dashboard/ag-katering/overview');
+    revalidatePath('/dashboard/ag-katering/overview/produksi');
+    revalidatePath('/dashboard/ag-katering/overview/pemorsian');
     return {
       success: true,
       message: 'Berhasil diperbarui.',
@@ -315,6 +435,9 @@ export async function deletePatient(
       .where(eq(pasienTable.id, id));
 
     const isRevisi = Boolean(revisionContext?.isRevisiMode);
+    const actor = await getActorString(
+      revisionContext?.requestedBy || 'Ahli Gizi RS',
+    );
 
     if (isRevisi && oldPatient) {
       await db.insert(otorisasiPerubahanDietTable).values({
@@ -326,12 +449,13 @@ export async function deletePatient(
         data_baru: JSON.stringify({ ...oldPatient, status_pasien: 'PULANG' }),
         alasan: revisionContext?.alasan || 'Pasien dipulangkan pasca-snapshot',
         status: 'PENDING',
-        requested_by: revisionContext?.requestedBy || 'Ahli Gizi RS',
+        requested_by: actor,
       });
 
       revalidatePath('/dashboard/ag-katering/admin/otorisasi-perubahan-diet');
       revalidatePath('/dashboard/ag-katering/revisi-post-snapshot');
       revalidatePath('/dashboard/ag-katering/overview/pemorsian');
+      revalidatePath('/dashboard/ag-katering/overview/produksi');
       return {
         success: true,
         message:
@@ -339,11 +463,32 @@ export async function deletePatient(
       };
     }
 
+    if (oldPatient) {
+      await db.insert(otorisasiPerubahanDietTable).values({
+        pasien_id: id,
+        batch_id: null,
+        waktu_makan: 'PAGI',
+        jenis_perubahan: 'DISCHARGE',
+        data_lama: JSON.stringify(oldPatient),
+        data_baru: JSON.stringify({ ...oldPatient, status_pasien: 'PULANG' }),
+        alasan: 'Pasien dipulangkan / dihapus dari rawat inap',
+        status: 'APPROVED',
+        requested_by: actor,
+        requested_at: new Date(),
+        reviewed_by: 'Sistem Terverifikasi',
+        reviewed_at: new Date(),
+        review_notes: 'Pasien dipulangkan oleh ' + actor,
+      });
+    }
+
     // Normal mode: Delete from database
     await db.delete(pasienTable).where(eq(pasienTable.id, id));
 
     revalidatePath('/dashboard/ag-rs/data-pasien');
+    revalidatePath('/dashboard/ag-katering/admin/riwayat');
     revalidatePath('/dashboard/ag-katering/overview');
+    revalidatePath('/dashboard/ag-katering/overview/produksi');
+    revalidatePath('/dashboard/ag-katering/overview/pemorsian');
     return { success: true, message: 'Pasien berhasil dihapus.' };
   } catch (error) {
     console.error('Error deleting patient:', error);

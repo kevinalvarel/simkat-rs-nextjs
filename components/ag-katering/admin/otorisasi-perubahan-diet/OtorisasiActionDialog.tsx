@@ -22,6 +22,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { approveRevisiDiet, rejectRevisiDiet } from '@/servers/otorisasi-diet.service';
+import { broadcastProductionUpdate } from '@/lib/realtime-sync';
 import { toast } from 'sonner';
 
 interface OtorisasiActionDialogProps {
@@ -57,6 +58,7 @@ export default function OtorisasiActionDialog({
       const res = await approveRevisiDiet(item.id, reviewNotes, 'Admin Head Gizi');
       if (res.success) {
         toast.success(res.message);
+        broadcastProductionUpdate('REVISION_APPROVED');
         onSuccess();
         onOpenChange(false);
       } else {
@@ -81,6 +83,7 @@ export default function OtorisasiActionDialog({
       const res = await rejectRevisiDiet(item.id, reviewNotes, 'Admin Head Gizi');
       if (res.success) {
         toast.success(res.message);
+        broadcastProductionUpdate('REVISION_APPROVED');
         onSuccess();
         onOpenChange(false);
       } else {

@@ -10,7 +10,7 @@ export interface KategoriMenuItem {
   nama_kategori: string;
   kode_item: string;
   label_item: string;
-  urutan: number;
+  urutan?: number;
   is_active: boolean;
 }
 
@@ -30,14 +30,14 @@ export type CreateKategoriMenuPayload = {
 export type UpdateKategoriMenuPayload = Partial<CreateKategoriMenuPayload>;
 
 /**
- * Fetch all kategori menu items ordered by nama_kategori & urutan ascending
+ * Fetch all kategori menu items ordered by nama_kategori & kode_item ascending
  */
 export async function getKategoriMenuAll(): Promise<KategoriMenuItem[]> {
   try {
     const dbResults = await db
       .select()
       .from(kategoriMenuTable)
-      .orderBy(asc(kategoriMenuTable.nama_kategori), asc(kategoriMenuTable.urutan));
+      .orderBy(asc(kategoriMenuTable.nama_kategori), asc(kategoriMenuTable.kode_item));
 
     if (dbResults && dbResults.length > 0) {
       return dbResults.map((item) => ({

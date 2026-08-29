@@ -44,7 +44,14 @@ const CATEGORY_OPTIONS = [
   { value: 'SAYUR', label: '🥦 SAYUR (Sayur Mayur)' },
   { value: 'BUAH', label: '🍊 BUAH (Buah Segar)' },
   { value: 'SNACK', label: '🍪 SNACK (Makanan Selingan)' },
+  { value: 'DIIT', label: '🩺 DIIT (Diet Khusus)' },
+  { value: 'BENTUK_MAKANAN', label: '🍚 BENTUK_MAKANAN (Bentuk Makanan)' },
   { value: 'EXTRA', label: '🥛 EXTRA (Extra Makanan)' },
+];
+
+const STATUS_OPTIONS = [
+  { value: 'true', label: '🟢 Aktif (Tampil di Mapping)' },
+  { value: 'false', label: '🔴 Non-Aktif (Disembunyikan)' },
 ];
 
 const MenuSchema = z.object({
@@ -54,7 +61,6 @@ const MenuSchema = z.object({
     .min(1, 'Kode item wajib diisi.')
     .max(15, 'Maksimal 15 karakter.'),
   label_item: z.string().min(2, 'Label item minimal 2 karakter.'),
-  urutan: z.number().min(0, 'Urutan minimal 0.'),
   is_active: z.boolean(),
 });
 
@@ -80,7 +86,6 @@ export default function MenuFormDialog({
       nama_kategori: 'KARBO',
       kode_item: '',
       label_item: '',
-      urutan: 1,
       is_active: true,
     },
   });
@@ -92,7 +97,6 @@ export default function MenuFormDialog({
           nama_kategori: itemToEdit.nama_kategori,
           kode_item: itemToEdit.kode_item,
           label_item: itemToEdit.label_item,
-          urutan: itemToEdit.urutan,
           is_active: itemToEdit.is_active,
         });
       } else {
@@ -100,7 +104,6 @@ export default function MenuFormDialog({
           nama_kategori: 'KARBO',
           kode_item: '',
           label_item: '',
-          urutan: 1,
           is_active: true,
         });
       }
@@ -163,7 +166,10 @@ export default function MenuFormDialog({
                   onValueChange={(val) => val && field.onChange(val)}
                 >
                   <SelectTrigger className='w-full h-9 text-xs bg-background'>
-                    <SelectValue placeholder='Pilih kategori menu...' />
+                    <SelectValue placeholder='Pilih kategori menu...'>
+                      {CATEGORY_OPTIONS.find((opt) => opt.value === field.value)
+                        ?.label || field.value}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {CATEGORY_OPTIONS.map((opt) => (
@@ -182,38 +188,21 @@ export default function MenuFormDialog({
             )}
           </div>
 
-          {/* Kode Item & Urutan */}
-          <div className='grid grid-cols-2 gap-3'>
-            <div className='space-y-1.5'>
-              <Label className='text-xs font-semibold'>
-                Kode Item <span className='text-rose-500'>*</span>
-              </Label>
-              <Input
-                {...register('kode_item')}
-                placeholder='mis. AYM-G, BN'
-                className='h-9 text-xs font-mono font-bold uppercase'
-              />
-              {errors.kode_item && (
-                <p className='text-[11px] text-destructive'>
-                  {errors.kode_item.message}
-                </p>
-              )}
-            </div>
-
-            <div className='space-y-1.5'>
-              <Label className='text-xs font-semibold'>Urutan Tampil</Label>
-              <Input
-                type='number'
-                {...register('urutan', { valueAsNumber: true })}
-                placeholder='1'
-                className='h-9 text-xs font-mono'
-              />
-              {errors.urutan && (
-                <p className='text-[11px] text-destructive'>
-                  {errors.urutan.message}
-                </p>
-              )}
-            </div>
+          {/* Kode Item */}
+          <div className='space-y-1.5'>
+            <Label className='text-xs font-semibold'>
+              Kode Item <span className='text-rose-500'>*</span>
+            </Label>
+            <Input
+              {...register('kode_item')}
+              placeholder='mis. AYM-G, BN'
+              className='h-9 text-xs font-mono font-bold uppercase'
+            />
+            {errors.kode_item && (
+              <p className='text-[11px] text-destructive'>
+                {errors.kode_item.message}
+              </p>
+            )}
           </div>
 
           {/* Label Item */}
@@ -245,15 +234,18 @@ export default function MenuFormDialog({
                   onValueChange={(val) => field.onChange(val === 'true')}
                 >
                   <SelectTrigger className='w-full h-9 text-xs bg-background'>
-                    <SelectValue placeholder='Pilih status...' />
+                    <SelectValue placeholder='Pilih status...'>
+                      {STATUS_OPTIONS.find(
+                        (opt) => opt.value === (field.value ? 'true' : 'false'),
+                      )?.label}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value='true'>
-                      🟢 Aktif (Tampil di Mapping)
-                    </SelectItem>
-                    <SelectItem value='false'>
-                      🔴 Non-Aktif (Disembunyikan)
-                    </SelectItem>
+                    {STATUS_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               )}

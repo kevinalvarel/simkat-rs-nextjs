@@ -18,6 +18,8 @@ export type JenisPerubahanType =
 export type StatusRevisiType = 'PENDING' | 'APPROVED' | 'REJECTED' | 'SELESAI';
 
 export interface DataDietDetail {
+  nama_pasien?: string;
+  no_rm?: string;
   diet?: string;
   gedung?: string;
   ruangan?: string;
@@ -221,6 +223,8 @@ export async function updateStatusRevisi(
 
       revalidatePath('/dashboard/ag-katering/revisi-post-snapshot');
       revalidatePath('/dashboard/ag-katering/overview');
+      revalidatePath('/dashboard/ag-katering/overview/produksi');
+      revalidatePath('/dashboard/ag-katering/overview/pemorsian');
       return {
         success: true,
         message: `Status revisi #${id} berhasil diperbarui menjadi ${status}.`,
@@ -269,6 +273,8 @@ export async function createRevisiPostSnapshot(data: {
 
     revalidatePath('/dashboard/ag-katering/revisi-post-snapshot');
     revalidatePath('/dashboard/ag-katering/overview');
+    revalidatePath('/dashboard/ag-katering/overview/produksi');
+    revalidatePath('/dashboard/ag-katering/overview/pemorsian');
     return {
       success: true,
       message: 'Revisi post-snapshot berhasil ditambahkan.',

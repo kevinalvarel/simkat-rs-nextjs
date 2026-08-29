@@ -435,15 +435,12 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
     }
 
     // Process each active patient
+    // Process each active patient
     for (const p of activePatients) {
       const rawDiet = (p.diet || '').trim();
-      const isNpo =
-        p.is_npo ||
-        p.status_pasien === 'NPO' ||
-        rawDiet.toLowerCase() === 'npo' ||
-        rawDiet.toLowerCase() === 'puasa';
 
-      if (isNpo) {
+      // Explicit medical status flag from patient record
+      if (p.is_npo || p.status_pasien === 'NPO') {
         addLiveDish({
           code: 'NPO',
           name: 'Puasa / NPO',
@@ -453,21 +450,46 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
         continue;
       }
 
+      if (!rawDiet) continue;
+
       // Lookup in master diet mapping
       const mapped = mappingByRaw.get(rawDiet.toLowerCase());
+
+      // STRICT RULE: If not mapped or status is not MAPPED, do NOT generate production dishes
+      if (!mapped || mapped.status_mapping !== 'MAPPED') {
+        continue;
+      }
+
       const pKelas = p.kelas || 'Kelas 1';
 
-      const bentukCodes = extractCodes(mapped?.bentuk_makanan);
-      const kategoriCodes = extractCodes(mapped?.kategori_diet);
-      const extraCodes = extractCodes(mapped?.extra);
-      const buahCodes = extractCodes(mapped?.buah);
-      const snackCodes = extractCodes(mapped?.snack);
+      const bentukCodes = extractCodes(mapped.bentuk_makanan);
+      const kategoriCodes = extractCodes(mapped.kategori_diet);
+      const extraCodes = extractCodes(mapped.extra);
+      const buahCodes = extractCodes(mapped.buah);
+      const snackCodes = extractCodes(mapped.snack);
+
+      // Check if mapped to NPO / Puasa
+      const isNpoMapped =
+        bentukCodes.some((c) => c.toUpperCase() === 'NPO' || c.toUpperCase() === 'PUASA') ||
+        kategoriCodes.some((c) => c.toUpperCase() === 'NPO' || c.toUpperCase() === 'PUASA');
+
+      if (isNpoMapped) {
+        addLiveDish({
+          code: 'NPO',
+          name: 'Puasa / NPO',
+          category: 'NPO',
+          dietTag: 'NPO',
+        });
+        continue;
+      }
 
       // A. Makanan Pokok / Bentuk Makanan (e.g. BN -> Nasi Biasa, BL/TIM -> Nasi Tim, SAR -> Bubur Saring, CAIR -> Cair)
       if (bentukCodes.length > 0) {
         for (const code of bentukCodes) {
           const upperCode = code.toUpperCase();
-          let stapleName = 'Nasi Biasa (Standar)';
+          if (upperCode === 'NPO' || upperCode === 'PUASA') continue;
+
+          let stapleName = 'Nasi Biasa';
           if (upperCode === 'BN' || upperCode === 'BIASA') stapleName = 'Nasi Biasa';
           else if (upperCode === 'BL' || upperCode === 'LUNAK') stapleName = 'Nasi Tim / Lunak';
           else if (upperCode === 'TIM' || upperCode === 'TM') stapleName = 'Nasi Tim';
@@ -484,14 +506,6 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
             kelas: pKelas,
           });
         }
-      } else {
-        // Default standard staple if unmapped
-        addLiveDish({
-          code: 'BN',
-          name: 'Nasi Biasa (Standar)',
-          category: 'POKOK',
-          kelas: pKelas,
-        });
       }
 
       // B. Main dishes from active menu cycle (HEWANI, NABATI, SAYUR, etc.)
@@ -692,12 +706,8 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
 
       for (const sd of snapshotDetails) {
         const rawDiet = (sd.diet_rs_raw || '').trim();
-        const isNpo =
-          sd.status_saat_snapshot === 'NPO' ||
-          rawDiet.toLowerCase() === 'npo' ||
-          rawDiet.toLowerCase() === 'puasa';
 
-        if (isNpo) {
+        if (sd.status_saat_snapshot === 'NPO') {
           addSnapshotDish({
             code: 'NPO',
             name: 'Puasa / NPO',
@@ -715,9 +725,9 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
         let snackCodes = extractCodes(sd.snack);
 
         // Fallback to mapping by raw text if parsed columns are empty
-        if (!sd.bentuk_makanan && !sd.kategori_diet) {
+        if (!sd.bentuk_makanan && !sd.kategori_diet && rawDiet) {
           const mapped = mappingByRaw.get(rawDiet.toLowerCase());
-          if (mapped) {
+          if (mapped && mapped.status_mapping === 'MAPPED') {
             bentukCodes = extractCodes(mapped.bentuk_makanan);
             kategoriCodes = extractCodes(mapped.kategori_diet);
             extraCodes = extractCodes(mapped.extra);
@@ -726,11 +736,38 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
           }
         }
 
+        // If not mapped, do not add snapshot dishes
+        if (
+          bentukCodes.length === 0 &&
+          kategoriCodes.length === 0 &&
+          extraCodes.length === 0 &&
+          buahCodes.length === 0 &&
+          snackCodes.length === 0
+        ) {
+          continue;
+        }
+
+        const isNpoMapped =
+          bentukCodes.some((c) => c.toUpperCase() === 'NPO' || c.toUpperCase() === 'PUASA') ||
+          kategoriCodes.some((c) => c.toUpperCase() === 'NPO' || c.toUpperCase() === 'PUASA');
+
+        if (isNpoMapped) {
+          addSnapshotDish({
+            code: 'NPO',
+            name: 'Puasa / NPO',
+            category: 'NPO',
+            dietTag: 'NPO',
+          });
+          continue;
+        }
+
         // Staple
         if (bentukCodes.length > 0) {
           for (const code of bentukCodes) {
             const upperCode = code.toUpperCase();
-            let stapleName = 'Nasi Biasa (Standar)';
+            if (upperCode === 'NPO' || upperCode === 'PUASA') continue;
+
+            let stapleName = 'Nasi Biasa';
             if (upperCode === 'BN' || upperCode === 'BIASA') stapleName = 'Nasi Biasa';
             else if (upperCode === 'BL' || upperCode === 'LUNAK') stapleName = 'Nasi Tim / Lunak';
             else if (upperCode === 'TIM' || upperCode === 'TM') stapleName = 'Nasi Tim';
@@ -747,13 +784,6 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
               kelas: pKelas,
             });
           }
-        } else {
-          addSnapshotDish({
-            code: 'BN',
-            name: 'Nasi Biasa (Standar)',
-            category: 'POKOK',
-            kelas: pKelas,
-          });
         }
 
         // Main dishes from cycle

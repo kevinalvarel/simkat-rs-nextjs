@@ -5,17 +5,25 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   Plus,
   Search,
   UtensilsCrossed,
   ShieldCheck,
   RefreshCw,
   Filter,
+  ArrowUpDown,
 } from 'lucide-react';
 import type { KategoriMenuItem } from '@/servers/konfigurasi-menu.service';
 import { getKategoriMenuAll } from '@/servers/konfigurasi-menu.service';
 import MenuStats from './MenuStats';
-import MenuTable from './MenuTable';
+import MenuTable, { MenuSortField, MenuSortOrder } from './MenuTable';
 import MenuFormDialog from './MenuFormDialog';
 
 interface KonfigurasiMenuClientProps {
@@ -30,7 +38,22 @@ const CATEGORY_TABS: Array<{ id: string; label: string; icon: string }> = [
   { id: 'SAYUR', label: 'Sayur', icon: '🥦' },
   { id: 'BUAH', label: 'Buah', icon: '🍊' },
   { id: 'SNACK', label: 'Snack', icon: '🍪' },
+  { id: 'DIIT', label: 'Diet Khusus', icon: '🩺' },
+  { id: 'BENTUK_MAKANAN', label: 'Bentuk Makanan', icon: '🍚' },
   { id: 'EXTRA', label: 'Extra', icon: '🥛' },
+];
+
+const SORT_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'kategori-asc', label: 'Kategori (A - Z)' },
+  { value: 'kategori-desc', label: 'Kategori (Z - A)' },
+  { value: 'kode-asc', label: 'Kode Item (A - Z)' },
+  { value: 'kode-desc', label: 'Kode Item (Z - A)' },
+  { value: 'label-asc', label: 'Nama Menu (A - Z)' },
+  { value: 'label-desc', label: 'Nama Menu (Z - A)' },
+  { value: 'status-asc', label: 'Status (Aktif Terlebih Dahulu)' },
+  { value: 'status-desc', label: 'Status (Non-Aktif Terlebih Dahulu)' },
+  { value: 'id-desc', label: 'Terbaru Ditambahkan' },
+  { value: 'id-asc', label: 'Terlama Ditambahkan' },
 ];
 
 export default function KonfigurasiMenuClient({
@@ -39,6 +62,10 @@ export default function KonfigurasiMenuClient({
   const [items, setItems] = useState<KategoriMenuItem[]>(initialItems);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+
+  // Sorting state
+  const [sortBy, setSortBy] = useState<MenuSortField>('kategori');
+  const [sortOrder, setSortOrder] = useState<MenuSortOrder>('asc');
 
   // Form Dialog state
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -58,9 +85,9 @@ export default function KonfigurasiMenuClient({
     }
   }
 
-  // Filter items by search & selected category
-  const filteredItems = useMemo(() => {
-    return items.filter((item) => {
+  // Filter & Sort items
+  const filteredAndSortedItems = useMemo(() => {
+    const filtered = items.filter((item) => {
       // Category filter
       if (
         selectedCategory !== 'ALL' &&
@@ -78,7 +105,38 @@ export default function KonfigurasiMenuClient({
       }
       return true;
     });
-  }, [items, selectedCategory, searchQuery]);
+
+    return [...filtered].sort((a, b) => {
+      let comparison = 0;
+      if (sortBy === 'kategori') {
+        comparison = a.nama_kategori.localeCompare(b.nama_kategori);
+        if (comparison === 0) {
+          comparison = a.kode_item.localeCompare(b.kode_item);
+        }
+      } else if (sortBy === 'kode') {
+        comparison = a.kode_item.localeCompare(b.kode_item);
+      } else if (sortBy === 'label') {
+        comparison = a.label_item.localeCompare(b.label_item);
+      } else if (sortBy === 'status') {
+        const valA = a.is_active ? 1 : 0;
+        const valB = b.is_active ? 1 : 0;
+        comparison = valB - valA; // active first by default for asc
+      } else if (sortBy === 'id') {
+        comparison = a.id - b.id;
+      }
+
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+  }, [items, selectedCategory, searchQuery, sortBy, sortOrder]);
+
+  function handleSort(field: MenuSortField) {
+    if (sortBy === field) {
+      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy(field);
+      setSortOrder('asc');
+    }
+  }
 
   function handleOpenAdd() {
     setItemToEdit(null);
@@ -176,8 +234,8 @@ export default function KonfigurasiMenuClient({
           </div>
         </div>
 
-        {/* Toolbar Search & Results count */}
-        <div className='flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-muted/40 p-3 rounded-xl border'>
+        {/* Toolbar Search, Sort By & Results count */}
+        <div className='flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-muted/40 p-3 rounded-xl border'>
           <div className='relative flex-1 max-w-md'>
             <Search className='absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground' />
             <Input
@@ -188,22 +246,63 @@ export default function KonfigurasiMenuClient({
             />
           </div>
 
-          <div className='flex items-center gap-2 text-xs text-muted-foreground'>
-            <Filter className='w-3.5 h-3.5' />
-            <span>
-              Menampilkan{' '}
-              <strong className='text-foreground'>
-                {filteredItems.length}
-              </strong>{' '}
-              dari <strong className='text-foreground'>{items.length}</strong>{' '}
-              item menu
-            </span>
+          <div className='flex flex-wrap items-center justify-between md:justify-end gap-3'>
+            {/* Sort Dropdown */}
+            <div className='flex items-center gap-1.5'>
+              <ArrowUpDown className='w-3.5 h-3.5 text-muted-foreground shrink-0' />
+              <span className='text-xs text-muted-foreground whitespace-nowrap hidden sm:inline'>
+                Urutkan:
+              </span>
+              <Select
+                value={`${sortBy}-${sortOrder}`}
+                onValueChange={(val) => {
+                  if (val) {
+                    const [field, order] = val.split('-');
+                    setSortBy(field as MenuSortField);
+                    setSortOrder(order as MenuSortOrder);
+                  }
+                }}
+              >
+                <SelectTrigger className='h-9 text-xs bg-background min-w-[200px]'>
+                  <SelectValue placeholder='Urutkan berdasarkan...'>
+                    {
+                      SORT_OPTIONS.find(
+                        (opt) => opt.value === `${sortBy}-${sortOrder}`,
+                      )?.label
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {SORT_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Results count badge */}
+            <div className='flex items-center gap-1.5 text-xs text-muted-foreground pl-2 md:border-l border-border/60'>
+              <Filter className='w-3.5 h-3.5' />
+              <span>
+                Menampilkan{' '}
+                <strong className='text-foreground'>
+                  {filteredAndSortedItems.length}
+                </strong>{' '}
+                dari <strong className='text-foreground'>{items.length}</strong>{' '}
+                item
+              </span>
+            </div>
           </div>
         </div>
 
         {/* Master Menu Table */}
         <MenuTable
-          items={filteredItems}
+          items={filteredAndSortedItems}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          onSort={handleSort}
           onEdit={handleOpenEdit}
           onRefresh={refreshData}
         />

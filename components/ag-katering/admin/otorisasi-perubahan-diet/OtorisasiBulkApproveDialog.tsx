@@ -12,6 +12,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { CheckCircle2, ShieldAlert } from 'lucide-react';
 import { bulkApproveRevisiDiet } from '@/servers/otorisasi-diet.service';
+import { broadcastProductionUpdate } from '@/lib/realtime-sync';
 import { toast } from 'sonner';
 
 interface OtorisasiBulkApproveDialogProps {
@@ -44,6 +45,7 @@ export default function OtorisasiBulkApproveDialog({
       );
       if (res.success) {
         toast.success(res.message);
+        broadcastProductionUpdate('REVISION_APPROVED');
         onSuccess();
         onOpenChange(false);
       } else {

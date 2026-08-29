@@ -12,7 +12,6 @@ import { useRouter } from 'next/navigation';
 import MappingDietStats from './MappingDietStats';
 import MappingDietFilterBar from './MappingDietFilterBar';
 import MappingDietTable from './MappingDietTable';
-import MappingDietDialog from './MappingDietDialog';
 import MappingDietBulkDialog from './MappingDietBulkDialog';
 
 interface MappingDietClientProps {
@@ -36,9 +35,7 @@ export default function MappingDietClient({
   // Selection state
   const [selectedRaws, setSelectedRaws] = useState<string[]>([]);
 
-  // Dialog state
-  const [activeItem, setActiveItem] = useState<UnmappedDietItem | null>(null);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  // Bulk Dialog state
   const [isBulkOpen, setIsBulkOpen] = useState(false);
 
   function handleRefresh() {
@@ -85,11 +82,6 @@ export default function MappingDietClient({
     } else {
       setSelectedRaws((prev) => Array.from(new Set([...prev, ...allRaws])));
     }
-  }
-
-  function handleOpenDialog(item: UnmappedDietItem) {
-    setActiveItem(item);
-    setIsDialogOpen(true);
   }
 
   return (
@@ -195,22 +187,11 @@ export default function MappingDietClient({
       {/* ── 6. Main Table ─────────────────────────────────────────────────── */}
       <MappingDietTable
         items={filteredItems}
+        options={options}
         selectedRaws={selectedRaws}
         onToggleSelect={handleToggleSelect}
         onToggleSelectAll={handleToggleSelectAll}
-        onOpenDialog={handleOpenDialog}
-      />
-
-      {/* ── Dialogs ───────────────────────────────────────────────────────── */}
-      <MappingDietDialog
-        item={activeItem}
-        options={options}
-        open={isDialogOpen}
-        onOpenChange={setIsDialogOpen}
-        onSuccess={() => {
-          setSelectedRaws([]);
-          handleRefresh();
-        }}
+        onRefresh={handleRefresh}
       />
 
       <MappingDietBulkDialog

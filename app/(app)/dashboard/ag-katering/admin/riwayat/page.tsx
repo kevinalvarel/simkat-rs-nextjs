@@ -4,19 +4,21 @@ import {
   getRiwayatDietPasienList,
   getRiwayatDietStats,
   getGiziRsUsers,
+  getActivePatientsForRiwayat,
 } from '@/servers/riwayat-diet.service';
 import RiwayatDietClient from '@/components/ag-katering/admin/riwayat/RiwayatDietClient';
 
 export const metadata: Metadata = {
-  title: 'Riwayat Perubahan Diet Pasien - Gizi-RS',
+  title: 'Tracker Perubahan Diet Pasien - Ahli Gizi RS',
   description:
-    'Halaman audit log dan riwayat transaksi perubahan diet pasien oleh staf Ahli Gizi Rumah Sakit (gizi-rs) dengan tampilan nama dan email terdaftar.',
+    'Modul pemantauan dan audit log histori perubahan diet pasien oleh Staf Ahli Gizi Rumah Sakit secara real-time dan terintegrasi.',
 };
 
 export default async function RiwayatDietPasienPage() {
-  const [items, giziRsUsers] = await Promise.all([
+  const [items, giziRsUsers, patients] = await Promise.all([
     getRiwayatDietPasienList(),
     getGiziRsUsers(),
+    getActivePatientsForRiwayat(),
   ]);
 
   const stats = await getRiwayatDietStats(items);
@@ -26,6 +28,8 @@ export default async function RiwayatDietPasienPage() {
       initialItems={items}
       initialStats={stats}
       giziRsUsers={giziRsUsers}
+      patients={patients}
     />
   );
 }
+

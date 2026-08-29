@@ -41,6 +41,8 @@ export type UnmappedDietItem = {
   status_mapping: string;
   bentuk_makanan: string | null;
   kategori_diet: string | null;
+  nabati?: string | null;
+  sayur?: string | null;
   extra: string | null;
   buah: string | null;
   snack: string | null;
@@ -143,6 +145,18 @@ export async function getUnmappedDietItems(): Promise<UnmappedDietItem[]> {
 
       const kelasList = Array.from(kelasMap.get(rawDiet) || []).sort();
 
+      let nabati: string | null = null;
+      let sayur: string | null = null;
+      if (existing?.extra) {
+        const parts = existing.extra.split(',').map((s) => s.trim());
+        if (parts.length >= 2) {
+          nabati = parts[0];
+          sayur = parts[1];
+        } else if (parts.length === 1 && parts[0]) {
+          nabati = parts[0];
+        }
+      }
+
       results.push({
         diet_rs_raw: rawDiet,
         jumlah_pasien: countMap.get(rawDiet) ?? 0,
@@ -151,6 +165,8 @@ export async function getUnmappedDietItems(): Promise<UnmappedDietItem[]> {
         status_mapping: statusMapping,
         bentuk_makanan: existing?.bentuk_makanan ?? null,
         kategori_diet: existing?.kategori_diet ?? null,
+        nabati,
+        sayur,
         extra: existing?.extra ?? null,
         buah: existing?.buah ?? null,
         snack: existing?.snack ?? null,
@@ -224,11 +240,13 @@ export async function getMappingDietStats(
 
 export type SaveMappingPayload = {
   diet_rs_raw: string;
-  bentuk_makanan: string;
-  kategori_diet: string;
-  extra?: string;
-  buah?: string;
-  snack?: string;
+  bentuk_makanan?: string | null;
+  kategori_diet?: string | null;
+  nabati?: string | null;
+  sayur?: string | null;
+  extra?: string | null;
+  buah?: string | null;
+  snack?: string | null;
   mapped_by?: string;
 };
 
@@ -241,12 +259,23 @@ export async function saveDietMapping(
   if (!payload.diet_rs_raw?.trim()) {
     return { success: false, message: 'Diet RS Raw tidak boleh kosong.' };
   }
-  if (!payload.bentuk_makanan?.trim() || !payload.kategori_diet?.trim()) {
-    return {
-      success: false,
-      message: 'Karbohidrat dan Lauk Hewani wajib diisi.',
-    };
-  }
+
+  const extraCombined =
+    payload.extra !== undefined
+      ? payload.extra
+      : [payload.nabati, payload.sayur].filter(Boolean).join(', ') || null;
+
+  const isMapped = Boolean(
+    payload.bentuk_makanan?.trim() && payload.kategori_diet?.trim(),
+  );
+  const isPartial = Boolean(
+    payload.bentuk_makanan?.trim() ||
+      payload.kategori_diet?.trim() ||
+      extraCombined?.trim() ||
+      payload.buah?.trim() ||
+      payload.snack?.trim(),
+  );
+  const status_mapping = isMapped ? 'MAPPED' : isPartial ? 'PARTIAL' : 'UNMAPPED';
 
   try {
     const existing = await db
@@ -258,12 +287,12 @@ export async function saveDietMapping(
       await db
         .update(dietMappingTable)
         .set({
-          bentuk_makanan: payload.bentuk_makanan,
-          kategori_diet: payload.kategori_diet,
-          extra: payload.extra || null,
+          bentuk_makanan: payload.bentuk_makanan || null,
+          kategori_diet: payload.kategori_diet || null,
+          extra: extraCombined,
           buah: payload.buah || null,
           snack: payload.snack || null,
-          status_mapping: 'MAPPED',
+          status_mapping: status_mapping,
           updated_by: payload.mapped_by || 'Admin Gizi',
           updated_at: new Date(),
           is_active: true,
@@ -272,12 +301,12 @@ export async function saveDietMapping(
     } else {
       await db.insert(dietMappingTable).values({
         diet_rs_raw: payload.diet_rs_raw.trim(),
-        bentuk_makanan: payload.bentuk_makanan,
-        kategori_diet: payload.kategori_diet,
-        extra: payload.extra || null,
+        bentuk_makanan: payload.bentuk_makanan || null,
+        kategori_diet: payload.kategori_diet || null,
+        extra: extraCombined,
         buah: payload.buah || null,
         snack: payload.snack || null,
-        status_mapping: 'MAPPED',
+        status_mapping: status_mapping,
         created_by: payload.mapped_by || 'Admin Gizi',
         updated_by: payload.mapped_by || 'Admin Gizi',
         is_active: true,
@@ -286,6 +315,8 @@ export async function saveDietMapping(
 
     revalidatePath('/dashboard/ag-katering/mapping-diet');
     revalidatePath('/dashboard/ag-katering/overview');
+    revalidatePath('/dashboard/ag-katering/overview/produksi');
+    revalidatePath('/dashboard/ag-katering/overview/pemorsian');
     return {
       success: true,
       message: `Mapping diet untuk "${payload.diet_rs_raw}" berhasil disimpan.`,
@@ -315,6 +346,8 @@ export async function bulkSaveDietMapping(
 
   revalidatePath('/dashboard/ag-katering/mapping-diet');
   revalidatePath('/dashboard/ag-katering/overview');
+  revalidatePath('/dashboard/ag-katering/overview/produksi');
+  revalidatePath('/dashboard/ag-katering/overview/pemorsian');
   return {
     success: true,
     message: `${successCount} dari ${dietRawList.length} mapping berhasil disimpan.`,
