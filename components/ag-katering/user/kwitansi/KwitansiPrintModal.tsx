@@ -12,7 +12,10 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Printer, FileText, CheckCircle2 } from 'lucide-react';
-import type { KwitansiPatientItem, KwitansiSummaryData } from '@/types/kwitansitypes';
+import type {
+  KwitansiPatientItem,
+  KwitansiSummaryData,
+} from '@/types/kwitansitypes';
 
 interface KwitansiPrintModalProps {
   open: boolean;
@@ -85,7 +88,8 @@ export default function KwitansiPrintModal({
                   : `Cetak Kwitansi Distribusi (${patientsToPrint.length} Pasien)`}
               </DialogTitle>
               <DialogDescription className='text-xs text-muted-foreground'>
-                Pratinjau lembar tanda terima resmi penyerahan makanan pasien rawat inap.
+                Pratinjau lembar tanda terima resmi penyerahan makanan pasien
+                rawat inap.
               </DialogDescription>
             </div>
           </div>
@@ -99,22 +103,47 @@ export default function KwitansiPrintModal({
             style={{ minHeight: '297mm' }}
           >
             {/* 1. Kop Surat Resmi */}
-            <div className='border-b-2 border-black pb-3 text-center space-y-1'>
-              <h2 className='text-base font-extrabold uppercase tracking-wide'>
-                RUMAH SAKIT UMUM DAERAH
-              </h2>
-              <h3 className='text-xs font-bold uppercase tracking-wider text-gray-700'>
-                INSTALASI GIZI & LAYANAN KATERING RUMAH SAKIT
-              </h3>
-              <p className='text-[11px] text-gray-600'>
-                Jl. Kesehatan No. 1 - Layanan Distribusi Makanan Pasien Rawat Inap
-              </p>
+            <div className='border-b-2 border-black pb-3 flex items-center justify-between gap-4'>
+              {/* Logo Kiri */}
+              <div className='w-16 h-16 sm:w-20 sm:h-20 shrink-0 flex items-center justify-center'>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src='/logo-rsud.png'
+                  alt='Logo Rumah Sakit'
+                  className='w-14 h-14 sm:w-16 sm:h-16 object-contain'
+                />
+              </div>
+
+              {/* Teks Kop Surat */}
+              <div className='flex-1 text-center space-y-1'>
+                <h2 className='text-base sm:text-lg font-extrabold uppercase tracking-wide text-black'>
+                  RSUD dr Slamet Garut
+                </h2>
+                <h3 className='text-xs sm:text-sm font-bold uppercase tracking-wider text-gray-800'>
+                  INSTALASI GIZI & LAYANAN KATERING RUMAH SAKIT
+                </h3>
+                <p className='text-[11px] sm:text-xs text-gray-600'>
+                  Jl. Kesehatan No. 1 - Layanan Distribusi Makanan Pasien Rawat
+                  Inap
+                </p>
+              </div>
+
+              {/* Logo Kanan */}
+              <div className='w-16 h-16 sm:w-20 sm:h-20 shrink-0 flex items-center justify-center'>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src='/logo-rsud.png'
+                  alt='Logo Katering'
+                  className='w-14 h-14 sm:w-16 sm:h-16 object-contain'
+                />
+              </div>
             </div>
 
             {/* 2. Judul Dokumen */}
             <div className='text-center space-y-1 pt-1'>
               <h1 className='text-sm font-bold uppercase underline tracking-wider'>
-                BUKTI TANDA TERIMA PENYERAHAN MAKANAN PASIEN (KWITANSI DISTRIBUSI)
+                BUKTI TANDA TERIMA PENYERAHAN MAKANAN PASIEN (KWITANSI
+                DISTRIBUSI)
               </h1>
               <p className='text-xs text-gray-600 font-mono'>
                 No. Kwitansi: {summaryData.kwitansiNumber}
@@ -127,13 +156,18 @@ export default function KwitansiPrintModal({
                 <table className='w-full text-xs'>
                   <tbody>
                     <tr>
-                      <td className='w-28 text-gray-600 py-0.5'>Hari / Tanggal</td>
-                      <td className='font-bold py-0.5'>: {summaryData.tanggalFormatted}</td>
+                      <td className='w-28 text-gray-600 py-0.5'>
+                        Hari / Tanggal
+                      </td>
+                      <td className='font-bold py-0.5'>
+                        : {summaryData.tanggalFormatted}
+                      </td>
                     </tr>
                     <tr>
                       <td className='text-gray-600 py-0.5'>Waktu Makan</td>
                       <td className='font-bold py-0.5'>
-                        : Makan {summaryData.waktuMakanFormatted} ({summaryData.batch?.batch_code || 'Batch Terpilih'})
+                        : Makan {summaryData.waktuMakanFormatted} (
+                        {summaryData.batch?.batch_code || 'Batch Terpilih'})
                       </td>
                     </tr>
                   </tbody>
@@ -143,12 +177,18 @@ export default function KwitansiPrintModal({
                 <table className='w-full text-xs'>
                   <tbody>
                     <tr>
-                      <td className='w-28 text-gray-600 py-0.5'>Total Pasien</td>
-                      <td className='font-bold py-0.5'>: {patientsToPrint.length} Pasien</td>
+                      <td className='w-28 text-gray-600 py-0.5'>
+                        Total Pasien
+                      </td>
+                      <td className='font-bold py-0.5'>
+                        : {patientsToPrint.length} Pasien
+                      </td>
                     </tr>
                     <tr>
                       <td className='text-gray-600 py-0.5'>Waktu Cetak</td>
-                      <td className='font-mono py-0.5'>: {new Date().toLocaleString('id-ID')} WIB</td>
+                      <td className='font-mono py-0.5'>
+                        : {new Date().toLocaleString('id-ID')} WIB
+                      </td>
                     </tr>
                   </tbody>
                 </table>
@@ -165,10 +205,16 @@ export default function KwitansiPrintModal({
                   <tr className='bg-gray-100 font-bold'>
                     <th className='border border-black p-2 w-8'>No</th>
                     <th className='border border-black p-2 w-20'>No RM</th>
-                    <th className='border border-black p-2 text-left'>Nama Pasien</th>
-                    <th className='border border-black p-2 w-28 text-left'>Ruangan & Bed</th>
+                    <th className='border border-black p-2 text-left'>
+                      Nama Pasien
+                    </th>
+                    <th className='border border-black p-2 w-28 text-left'>
+                      Ruangan & Bed
+                    </th>
                     <th className='border border-black p-2 w-16'>Kelas</th>
-                    <th className='border border-black p-2 text-left'>Jenis Diet & Ekstra</th>
+                    <th className='border border-black p-2 text-left'>
+                      Jenis Diet & Ekstra
+                    </th>
                     <th className='border border-black p-2 w-16'>Status</th>
                     <th className='border border-black p-2 w-20'>Paraf</th>
                   </tr>
@@ -176,21 +222,35 @@ export default function KwitansiPrintModal({
                 <tbody>
                   {patientsToPrint.map((p, idx) => (
                     <tr key={p.id || idx}>
-                      <td className='border border-black p-1.5 font-mono'>{idx + 1}</td>
-                      <td className='border border-black p-1.5 font-mono'>{p.no_rm}</td>
+                      <td className='border border-black p-1.5 font-mono'>
+                        {idx + 1}
+                      </td>
+                      <td className='border border-black p-1.5 font-mono'>
+                        {p.no_rm}
+                      </td>
                       <td className='border border-black p-1.5 text-left font-semibold pl-2'>
                         {p.nama_pasien}
-                        {p.is_emergent && <span className='text-[10px] text-red-600 ml-1 font-bold'>[CITO]</span>}
+                        {p.is_emergent && (
+                          <span className='text-[10px] text-red-600 ml-1 font-bold'>
+                            [CITO]
+                          </span>
+                        )}
                       </td>
                       <td className='border border-black p-1.5 text-left pl-2'>
                         {p.ruangan} ({p.bed})
                       </td>
-                      <td className='border border-black p-1.5 font-bold'>{p.kelas}</td>
+                      <td className='border border-black p-1.5 font-bold'>
+                        {p.kelas}
+                      </td>
                       <td className='border border-black p-1.5 text-left pl-2'>
                         <div>{p.diet}</div>
                         {(p.extra || p.buah || p.snack) && (
                           <div className='text-[10px] text-gray-600 italic'>
-                            {[p.extra && `Ext: ${p.extra}`, p.buah && `Buah: ${p.buah}`, p.snack && `Snk: ${p.snack}`]
+                            {[
+                              p.extra && `Ext: ${p.extra}`,
+                              p.buah && `Buah: ${p.buah}`,
+                              p.snack && `Snk: ${p.snack}`,
+                            ]
                               .filter(Boolean)
                               .join(', ')}
                           </div>
@@ -211,7 +271,10 @@ export default function KwitansiPrintModal({
             {/* 5. Pernyataan Penyerahan */}
             <div className='p-3 bg-gray-50 border border-gray-300 rounded text-xs space-y-1'>
               <p>
-                <strong>Pernyataan Serah Terima:</strong> Makanan pasien di atas telah disiapkan oleh pihak katering sesuai diet dan diserahkan dalam keadaan baik, bersih, dan tepat waktu ke ruang perawatan bersangkutan.
+                <strong>Pernyataan Serah Terima:</strong> Makanan pasien di atas
+                telah disiapkan oleh pihak katering sesuai diet dan diserahkan
+                dalam keadaan baik, bersih, dan tepat waktu ke ruang perawatan
+                bersangkutan.
               </p>
             </div>
 
@@ -224,8 +287,12 @@ export default function KwitansiPrintModal({
                   <strong>Pramusaji / Katering</strong>
                 </p>
                 <div>
-                  <p className='font-bold underline'>( ........................................ )</p>
-                  <p className='text-[10px] text-gray-500'>Petugas Distribusi</p>
+                  <p className='font-bold underline'>
+                    ( ........................................ )
+                  </p>
+                  <p className='text-[10px] text-gray-500'>
+                    Petugas Distribusi
+                  </p>
                 </div>
               </div>
 
@@ -236,7 +303,9 @@ export default function KwitansiPrintModal({
                   <strong>Perawat / PJ Ruangan</strong>
                 </p>
                 <div>
-                  <p className='font-bold underline'>( ........................................ )</p>
+                  <p className='font-bold underline'>
+                    ( ........................................ )
+                  </p>
                   <p className='text-[10px] text-gray-500'>Perawat Jaga</p>
                 </div>
               </div>
@@ -248,8 +317,12 @@ export default function KwitansiPrintModal({
                   <strong>Ahli Gizi RS</strong>
                 </p>
                 <div>
-                  <p className='font-bold underline'>( ........................................ )</p>
-                  <p className='text-[10px] text-gray-500'>NIP. ...................................</p>
+                  <p className='font-bold underline'>
+                    ( ........................................ )
+                  </p>
+                  <p className='text-[10px] text-gray-500'>
+                    NIP. ...................................
+                  </p>
                 </div>
               </div>
             </div>

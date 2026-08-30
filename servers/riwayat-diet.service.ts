@@ -54,7 +54,7 @@ export interface RiwayatDietItem {
   alasan: string;
   status: StatusRevisiType;
   dampak_dapur: string;
-  
+
   // Explicit Registered Gizi-RS Staff Credentials
   gizi_rs_id?: string;
   gizi_rs_name: string;
@@ -80,7 +80,9 @@ export interface RiwayatDietStats {
 /**
  * Fetch active patients for quick selection in manual tracker modal
  */
-export async function getActivePatientsForRiwayat(): Promise<SimplePatientOption[]> {
+export async function getActivePatientsForRiwayat(): Promise<
+  SimplePatientOption[]
+> {
   try {
     const list = await db
       .select({
@@ -145,7 +147,7 @@ export async function getGiziRsUsers(): Promise<GiziRsUser[]> {
 export async function getRiwayatDietPasienList(
   giziRsEmailFilter?: string,
   jenisFilter?: string,
-  waktuFilter?: string
+  waktuFilter?: string,
 ): Promise<RiwayatDietItem[]> {
   try {
     const giziRsUsers = await getGiziRsUsers();
@@ -179,8 +181,14 @@ export async function getRiwayatDietPasienList(
         batch_code: snapshotBatchTable.batch_code,
       })
       .from(otorisasiPerubahanDietTable)
-      .leftJoin(pasienTable, eq(otorisasiPerubahanDietTable.pasien_id, pasienTable.id))
-      .leftJoin(snapshotBatchTable, eq(otorisasiPerubahanDietTable.batch_id, snapshotBatchTable.id))
+      .leftJoin(
+        pasienTable,
+        eq(otorisasiPerubahanDietTable.pasien_id, pasienTable.id),
+      )
+      .leftJoin(
+        snapshotBatchTable,
+        eq(otorisasiPerubahanDietTable.batch_id, snapshotBatchTable.id),
+      )
       .orderBy(desc(otorisasiPerubahanDietTable.requested_at));
 
     const dbResults = await query;
@@ -200,10 +208,13 @@ export async function getRiwayatDietPasienList(
 
         const jenis = r.jenis_perubahan as JenisPerubahanType;
         let dampak = 'Perubahan Etiket Diet';
-        if (jenis === 'NEW_PATIENT') dampak = '+1 Porsi Emergent (Tambahan Makanan)';
-        else if (jenis === 'DISCHARGE') dampak = '-1 Porsi Dibatalkan (Pasien Pulang)';
+        if (jenis === 'NEW_PATIENT')
+          dampak = '+1 Porsi Emergent (Tambahan Makanan)';
+        else if (jenis === 'DISCHARGE')
+          dampak = '-1 Porsi Dibatalkan (Pasien Pulang)';
         else if (jenis === 'NPO') dampak = '-1 Porsi Dibatalkan (Puasa/NPO)';
-        else if (jenis === 'ROOM_TRANSFER') dampak = 'Pindah Lokasi Antar Makanan';
+        else if (jenis === 'ROOM_TRANSFER')
+          dampak = 'Pindah Lokasi Antar Makanan';
 
         // Extract or match Gizi-RS user details from requested_by string
         const reqStr = r.requested_by || 'Staff Gizi-RS (gizi-rs@rs-sehat.id)';
@@ -211,7 +222,7 @@ export async function getRiwayatDietPasienList(
         let staffEmail = 'gizi-rs@rs-sehat.id';
 
         const matchedUser = giziRsUsers.find(
-          (u) => reqStr.includes(u.email) || reqStr.includes(u.name)
+          (u) => reqStr.includes(u.email) || reqStr.includes(u.name),
         );
 
         if (matchedUser) {
@@ -230,10 +241,18 @@ export async function getRiwayatDietPasienList(
         return {
           id: r.id,
           pasien_id: r.pasien_id,
-          no_rm: r.no_rm || (dataBaruObj?.no_rm ?? dataLamaObj?.no_rm ?? 'RM-UNKNOWN'),
-          nama_pasien: r.nama_pasien || (dataBaruObj?.nama_pasien ?? dataLamaObj?.nama_pasien ?? 'Pasien Tanpa Nama'),
-          gedung: r.gedung || (dataBaruObj?.gedung ?? dataLamaObj?.gedung ?? ''),
-          ruangan: r.ruangan || (dataBaruObj?.ruangan ?? dataLamaObj?.ruangan ?? ''),
+          no_rm:
+            r.no_rm ||
+            (dataBaruObj?.no_rm ?? dataLamaObj?.no_rm ?? 'RM-UNKNOWN'),
+          nama_pasien:
+            r.nama_pasien ||
+            (dataBaruObj?.nama_pasien ??
+              dataLamaObj?.nama_pasien ??
+              'Pasien Tanpa Nama'),
+          gedung:
+            r.gedung || (dataBaruObj?.gedung ?? dataLamaObj?.gedung ?? ''),
+          ruangan:
+            r.ruangan || (dataBaruObj?.ruangan ?? dataLamaObj?.ruangan ?? ''),
           bed: r.bed || (dataBaruObj?.bed ?? dataLamaObj?.bed ?? ''),
           kelas: r.kelas || (dataBaruObj?.kelas ?? dataLamaObj?.kelas ?? ''),
           batch_id: r.batch_id,
@@ -248,7 +267,9 @@ export async function getRiwayatDietPasienList(
           gizi_rs_id: matchedUser?.id,
           gizi_rs_name: staffName,
           gizi_rs_email: staffEmail,
-          requested_at: r.requested_at ? r.requested_at.toISOString() : new Date().toISOString(),
+          requested_at: r.requested_at
+            ? r.requested_at.toISOString()
+            : new Date().toISOString(),
           reviewed_by: r.reviewed_by,
           reviewed_at: r.reviewed_at ? r.reviewed_at.toISOString() : null,
           review_notes: r.review_notes,
@@ -256,7 +277,10 @@ export async function getRiwayatDietPasienList(
       });
 
       if (giziRsEmailFilter && giziRsEmailFilter !== 'ALL') {
-        items = items.filter((i) => i.gizi_rs_email.toLowerCase() === giziRsEmailFilter.toLowerCase());
+        items = items.filter(
+          (i) =>
+            i.gizi_rs_email.toLowerCase() === giziRsEmailFilter.toLowerCase(),
+        );
       }
       if (jenisFilter && jenisFilter !== 'ALL') {
         items = items.filter((i) => i.jenis_perubahan === jenisFilter);
@@ -277,21 +301,32 @@ export async function getRiwayatDietPasienList(
  * Fetch stats summary for Riwayat Diet Pasien
  */
 export async function getRiwayatDietStats(
-  items?: RiwayatDietItem[]
+  items?: RiwayatDietItem[],
 ): Promise<RiwayatDietStats> {
   const data = items || (await getRiwayatDietPasienList());
   const giziRsUsers = await getGiziRsUsers();
 
   const todayStr = new Date().toISOString().slice(0, 10);
   const totalRiwayat = data.length;
-  const hariIniCount = data.filter((i) => i.requested_at.slice(0, 10) === todayStr).length;
-  const giziRsCount = giziRsUsers.length;
-  const dietChangeCount = data.filter((i) => i.jenis_perubahan === 'DIET_CHANGE').length;
-  const npoEmergentCount = data.filter(
-    (i) => i.jenis_perubahan === 'NEW_PATIENT' || i.jenis_perubahan === 'NPO' || i.jenis_perubahan === 'DISCHARGE'
+  const hariIniCount = data.filter(
+    (i) => i.requested_at.slice(0, 10) === todayStr,
   ).length;
-  const roomTransferCount = data.filter((i) => i.jenis_perubahan === 'ROOM_TRANSFER').length;
-  const approvedCount = data.filter((i) => i.status === 'APPROVED' || i.status === 'SELESAI').length;
+  const giziRsCount = giziRsUsers.length;
+  const dietChangeCount = data.filter(
+    (i) => i.jenis_perubahan === 'DIET_CHANGE',
+  ).length;
+  const npoEmergentCount = data.filter(
+    (i) =>
+      i.jenis_perubahan === 'NEW_PATIENT' ||
+      i.jenis_perubahan === 'NPO' ||
+      i.jenis_perubahan === 'DISCHARGE',
+  ).length;
+  const roomTransferCount = data.filter(
+    (i) => i.jenis_perubahan === 'ROOM_TRANSFER',
+  ).length;
+  const approvedCount = data.filter(
+    (i) => i.status === 'APPROVED' || i.status === 'SELESAI',
+  ).length;
   const pendingCount = data.filter((i) => i.status === 'PENDING').length;
 
   return {
@@ -334,7 +369,9 @@ export async function createRiwayatDietLog(data: {
       requested_at: new Date(),
       reviewed_by: 'Sistem Terverifikasi',
       reviewed_at: new Date(),
-      review_notes: 'Tercatat otomatis dalam Riwayat Perubahan Diet RS oleh ' + data.gizi_rs_name,
+      review_notes:
+        'Tercatat otomatis dalam Riwayat Perubahan Diet RS oleh ' +
+        data.gizi_rs_name,
     });
 
     // Also update patient diet in pasienTable if patient exists and diet changed

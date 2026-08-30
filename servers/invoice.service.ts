@@ -220,7 +220,10 @@ export async function getInvoiceDailyData(
         .from(dietMappingTable)
         .where(eq(dietMappingTable.is_active, true));
 
-      const mappingByRaw = new Map<string, typeof dietMappingTable.$inferSelect>();
+      const mappingByRaw = new Map<
+        string,
+        typeof dietMappingTable.$inferSelect
+      >();
       for (const m of masterMappings) {
         mappingByRaw.set(m.diet_rs_raw.trim().toLowerCase(), m);
       }
@@ -243,7 +246,11 @@ export async function getInvoiceDailyData(
           entry.malam++;
 
           const mapped = mappingByRaw.get(rawDiet.toLowerCase());
-          if (mapped?.extra?.trim() || mapped?.buah?.trim() || mapped?.snack?.trim()) {
+          if (
+            mapped?.extra?.trim() ||
+            mapped?.buah?.trim() ||
+            mapped?.snack?.trim()
+          ) {
             entry.extra += 1;
           }
 
@@ -271,34 +278,34 @@ export async function getInvoiceDailyData(
     }
 
     // Convert map to array of classes
-    const classes: InvoiceClassConsumption[] = Array.from(classMap.entries()).map(
-      ([kelasName, data]) => {
-        const totalPorsi = data.pagi + data.siang + data.malam + data.extra;
-        const totalPasien = data.pasienSet.size;
+    const classes: InvoiceClassConsumption[] = Array.from(
+      classMap.entries(),
+    ).map(([kelasName, data]) => {
+      const totalPorsi = data.pagi + data.siang + data.malam + data.extra;
+      const totalPasien = data.pasienSet.size;
 
-        const dietBreakdown: DietBreakdownItem[] = Array.from(
-          data.dietMap.entries(),
-        ).map(([key, count]) => {
-          const [bentuk, kategori] = key.split(' - ');
-          return {
-            bentuk: bentuk || 'Biasa',
-            kategori: kategori || 'Standar',
-            count,
-          };
-        });
-
+      const dietBreakdown: DietBreakdownItem[] = Array.from(
+        data.dietMap.entries(),
+      ).map(([key, count]) => {
+        const [bentuk, kategori] = key.split(' - ');
         return {
-          kelas: kelasName,
-          pagiCount: data.pagi,
-          siangCount: data.siang,
-          malamCount: data.malam,
-          extraCount: data.extra,
-          totalPorsi,
-          totalPasien,
-          dietBreakdown,
+          bentuk: bentuk || 'Biasa',
+          kategori: kategori || 'Standar',
+          count,
         };
-      },
-    );
+      });
+
+      return {
+        kelas: kelasName,
+        pagiCount: data.pagi,
+        siangCount: data.siang,
+        malamCount: data.malam,
+        extraCount: data.extra,
+        totalPorsi,
+        totalPasien,
+        dietBreakdown,
+      };
+    });
 
     // Sort classes by standard hierarchy
     classes.sort((a, b) => {
@@ -329,7 +336,7 @@ export async function getInvoiceDailyData(
       tanggal: selectedDate,
       tanggalFormatted,
       invoiceNumber,
-      hospitalName: 'RUMAH SAKIT UMUM DAERAH',
+      hospitalName: 'RSUD dr Slamet Garut',
       cateringVendor: 'INSTALASI GIZI & LAYANAN KATERING RS',
       statusBatch: isOfficialLocked ? 'OFFICIAL_LOCKED' : 'LIVE_PREVIEW',
       availableDates,
@@ -351,7 +358,7 @@ export async function getInvoiceDailyData(
       tanggal: today,
       tanggalFormatted: 'Hari Ini',
       invoiceNumber: `REKAP/GZ-RS/${today.replace(/-/g, '')}/001`,
-      hospitalName: 'RUMAH SAKIT UMUM DAERAH',
+      hospitalName: 'RSUD dr Slamet Garut',
       cateringVendor: 'INSTALASI GIZI & LAYANAN KATERING RS',
       statusBatch: 'LIVE_PREVIEW',
       availableDates: [today],

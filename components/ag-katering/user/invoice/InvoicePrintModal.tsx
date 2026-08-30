@@ -85,16 +85,39 @@ export default function InvoicePrintModal({
             style={{ minHeight: '297mm' }}
           >
             {/* 1. Header / Letterhead Kop Surat */}
-            <div className='border-b-2 border-black pb-3 text-center space-y-1'>
-              <h2 className='text-base font-extrabold uppercase tracking-wide'>
-                {data.hospitalName}
-              </h2>
-              <h3 className='text-xs font-bold uppercase tracking-wider text-gray-700'>
-                {data.cateringVendor}
-              </h3>
-              <p className='text-[11px] text-gray-600'>
-                Layanan Pengelolaan Gizi & Distribusi Makanan Pasien Rawat Inap
-              </p>
+            <div className='border-b-2 border-black pb-3 flex items-center justify-between gap-4'>
+              {/* Logo Kiri */}
+              <div className='w-16 h-16 sm:w-20 sm:h-20 shrink-0 flex items-center justify-center'>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src='/logo-rsud.png'
+                  alt='Logo Rumah Sakit'
+                  className='w-14 h-14 sm:w-16 sm:h-16 object-contain'
+                />
+              </div>
+
+              {/* Teks Kop Surat */}
+              <div className='flex-1 text-center space-y-1'>
+                <h2 className='text-base sm:text-lg font-extrabold uppercase tracking-wide text-black'>
+                  {data.hospitalName}
+                </h2>
+                <h3 className='text-xs sm:text-sm font-bold uppercase tracking-wider text-gray-800'>
+                  {data.cateringVendor}
+                </h3>
+                <p className='text-[11px] sm:text-xs text-gray-600'>
+                  Layanan Pengelolaan Gizi & Distribusi Makanan Pasien Rawat Inap
+                </p>
+              </div>
+
+              {/* Logo Kanan */}
+              <div className='w-16 h-16 sm:w-20 sm:h-20 shrink-0 flex items-center justify-center'>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src='/logo-rsud.png'
+                  alt='Logo Katering'
+                  className='w-14 h-14 sm:w-16 sm:h-16 object-contain'
+                />
+              </div>
             </div>
 
             {/* 2. Document Title & Metadata */}
