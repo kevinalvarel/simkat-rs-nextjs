@@ -12,7 +12,7 @@ import OverviewProductionSidebar from './OverviewProductionSidebar';
 import OverviewProductionCardsGrid from './OverviewProductionCardsGrid';
 import OverviewProductionLegend from './OverviewProductionLegend';
 
-const AUTO_SYNC_INTERVAL_MS = 5000; // 5 seconds polling interval
+const AUTO_SYNC_INTERVAL_MS = 60000; // 60 seconds background keep-fresh interval
 
 export default function OverviewProductionClient({
   initialData,
@@ -55,7 +55,9 @@ export default function OverviewProductionClient({
       const live = await getLiveMonitoringData();
       if (live && live.success !== false) {
         setData(live);
-        setLastSyncedAt(live.lastUpdated || new Date().toLocaleTimeString('id-ID'));
+        setLastSyncedAt(
+          live.lastUpdated || new Date().toLocaleTimeString('id-ID'),
+        );
       }
     } catch (err) {
       console.error('Error fetching live monitoring data:', err);
@@ -71,7 +73,9 @@ export default function OverviewProductionClient({
   useEffect(() => {
     if (initialData) {
       setData(initialData);
-      setLastSyncedAt(initialData.lastUpdated || new Date().toLocaleTimeString('id-ID'));
+      setLastSyncedAt(
+        initialData.lastUpdated || new Date().toLocaleTimeString('id-ID'),
+      );
     }
   }, [initialData]);
 
@@ -144,7 +148,7 @@ export default function OverviewProductionClient({
       />
 
       {/* 2. Main Live Production Dashboard Layout */}
-      <div className='grid grid-cols-1 lg:grid-cols-4 gap-6 items-stretch w-full'>
+      <div className='grid grid-cols-1 lg:grid-cols-4 gap-5 items-start w-full'>
         {/* Left Side: Live Production Sidebar */}
         <OverviewProductionSidebar
           waktuMakan={data.waktuMakan}
@@ -167,7 +171,9 @@ export default function OverviewProductionClient({
       </div>
 
       {/* 3. Legend & Help Section */}
-      <OverviewProductionLegend lastUpdated={lastSyncedAt || data.lastUpdated} />
+      <OverviewProductionLegend
+        lastUpdated={lastSyncedAt || data.lastUpdated}
+      />
     </div>
   );
 }

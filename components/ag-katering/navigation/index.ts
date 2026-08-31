@@ -37,6 +37,14 @@ export const routeDataProduksi = {
           title: 'Mapping Diet Pasien',
           url: '/dashboard/ag-katering/mapping-diet',
         },
+        {
+          title: 'Invoice',
+          url: '/dashboard/ag-katering/invoice',
+        },
+        {
+          title: 'Kwitansi',
+          url: '/dashboard/ag-katering/kwitansi',
+        },
       ],
     },
     {
@@ -45,14 +53,6 @@ export const routeDataProduksi = {
         {
           title: 'Tabulasi Rekapitulasi',
           url: '/dashboard/ag-katering/tabulasi',
-        },
-        {
-          title: 'Invoice',
-          url: '/dashboard/ag-katering/invoice',
-        },
-        {
-          title: 'Kwitansi',
-          url: '/dashboard/ag-katering/kwitansi',
         },
       ],
     },

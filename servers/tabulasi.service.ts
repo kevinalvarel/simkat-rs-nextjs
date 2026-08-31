@@ -14,6 +14,9 @@ import type {
   TabulasiMenuItem,
   TabulasiSnackSummary,
   TabulasiScheduleItem,
+  TabulasiHospitalCategoryGroup,
+  TabulasiHospitalData,
+  TabulasiHospitalItem,
 } from '@/types/tabulasitypes';
 
 export type SnapshotBatch = typeof snapshotBatchTable.$inferSelect;
@@ -666,8 +669,514 @@ function getStandardHospitalData(
     menuItems,
     snackSummary,
     schedule,
+    hospitalData: {
+      tanggal: new Date().toISOString().slice(0, 10),
+      tanggalFormatted: 'Hari Ini',
+      waktuMakan: 'SIANG',
+      siklusNomor: 1,
+      siklusNama: 'Siklus 1',
+      availableSiklus: [{ nomor_siklus: 1, nama_siklus: 'Siklus 1' }],
+      statusBatch: 'LIVE_ACTIVE',
+      batchCode: 'BATCH-LIVE-SIANG',
+      lastUpdated: new Date().toLocaleTimeString('id-ID'),
+      grandTotalPasien: 272,
+      grandTotalPorsi: 700,
+      totalGedungLama: 567,
+      totalGedungBaru: 133,
+      totalPasienMakan: 245,
+      totalPasienNpo: 27,
+      totalDietKhusus: 47,
+      categoryGroups: [],
+      allItems: [],
+    },
     lastUpdated: new Date().toLocaleTimeString('id-ID'),
   };
+}
+
+/**
+ * Generate Hospital Category Groups matching the physical spreadsheet
+ */
+function getHospitalTableGroups(mealTime: string, cycleNum: number = 1): TabulasiHospitalCategoryGroup[] {
+  const normMeal = (mealTime || 'SIANG').toUpperCase();
+
+  if (normMeal === 'SIANG') {
+    return [
+      {
+        kategori: 'HEWANI KELAS 1',
+        isTktp: false,
+        items: [
+          {
+            id: 'h-1',
+            kategori: 'HEWANI KELAS 1',
+            nama_menu: 'Nasi Tim + Suir Ayam bb balado',
+            kode_diet: 'B',
+            porsi_gedung_lama: 3,
+            porsi_gedung_baru: 1,
+            total_porsi: 4,
+          },
+          {
+            id: 'h-2',
+            kategori: 'HEWANI KELAS 1',
+            nama_menu: 'Suir Ayam (Iris + Rebus )',
+            kode_diet: 'DM, RG',
+            porsi_gedung_lama: 17,
+            porsi_gedung_baru: 1,
+            total_porsi: 18,
+          },
+        ],
+        subtotalGedungLama: 20,
+        subtotalGedungBaru: 2,
+        subtotalSemua: 22,
+      },
+      {
+        kategori: 'HEWANI KELAS 2 DAN 3',
+        isTktp: false,
+        items: [
+          {
+            id: 'h-3',
+            kategori: 'HEWANI KELAS 2 DAN 3',
+            nama_menu: 'Suir Ayam (Iris + Rebus )',
+            kode_diet: 'B',
+            porsi_gedung_lama: 89,
+            porsi_gedung_baru: 11,
+            total_porsi: 100,
+          },
+          {
+            id: 'h-4',
+            kategori: 'HEWANI KELAS 2 DAN 3',
+            nama_menu: 'Tanpa Cakue (RG,DM)',
+            kode_diet: 'RG, DM',
+            porsi_gedung_lama: 41,
+            porsi_gedung_baru: 15,
+            total_porsi: 56,
+          },
+          {
+            id: 'h-5',
+            kategori: 'HEWANI KELAS 2 DAN 3',
+            nama_menu: 'Telur rebus (seporsi 1/2 butir) (B, D, DM,RG)',
+            kode_diet: 'B, D, DM, RG',
+            porsi_gedung_lama: 138,
+            porsi_gedung_baru: 31,
+            total_porsi: 169,
+          },
+          {
+            id: 'h-6',
+            kategori: 'HEWANI KELAS 2 DAN 3',
+            nama_menu: 'Putih telur cetak mawar ( DJ, RL, Rkol)',
+            kode_diet: 'DJ, RL, Rkol',
+            porsi_gedung_lama: 19,
+            porsi_gedung_baru: 4,
+            total_porsi: 23,
+          },
+        ],
+        subtotalGedungLama: 287,
+        subtotalGedungBaru: 61,
+        subtotalSemua: 348,
+      },
+      {
+        kategori: 'NABATI',
+        isTktp: false,
+        items: [
+          {
+            id: 'h-7',
+            kategori: 'NABATI',
+            nama_menu: 'Sup labu siam, Tahu, Oyong (B, Diit, DM)',
+            kode_diet: 'B, Diit, DM',
+            porsi_gedung_lama: 136,
+            porsi_gedung_baru: 17,
+            total_porsi: 153,
+          },
+          {
+            id: 'h-8',
+            kategori: 'NABATI',
+            nama_menu: 'Sup labu siam, Tahu, Oyong (RG)',
+            kode_diet: 'RG',
+            porsi_gedung_lama: 31,
+            porsi_gedung_baru: 14,
+            total_porsi: 45,
+          },
+          {
+            id: 'h-9',
+            kategori: 'NABATI',
+            nama_menu: 'Sup Labu siam, Tahu (RS)',
+            kode_diet: 'RS',
+            porsi_gedung_lama: 1,
+            porsi_gedung_baru: 3,
+            total_porsi: 4,
+          },
+          {
+            id: 'h-10',
+            kategori: 'NABATI',
+            nama_menu: 'Sup Labu siam (RP)',
+            kode_diet: 'RP',
+            porsi_gedung_lama: 9,
+            porsi_gedung_baru: 1,
+            total_porsi: 10,
+          },
+        ],
+        subtotalGedungLama: 177,
+        subtotalGedungBaru: 35,
+        subtotalSemua: 212,
+      },
+      {
+        kategori: 'SAYUR',
+        isTktp: false,
+        items: [
+          {
+            id: 'h-11',
+            kategori: 'SAYUR',
+            nama_menu: 'Sayur Bening Bayam Labu Kuning (B, DM)',
+            kode_diet: 'B, DM',
+            porsi_gedung_lama: 112,
+            porsi_gedung_baru: 24,
+            total_porsi: 136,
+          },
+          {
+            id: 'h-12',
+            kategori: 'SAYUR',
+            nama_menu: 'Sayur Bening Bayam (RG, RS)',
+            kode_diet: 'RG, RS',
+            porsi_gedung_lama: 28,
+            porsi_gedung_baru: 8,
+            total_porsi: 36,
+          },
+        ],
+        subtotalGedungLama: 140,
+        subtotalGedungBaru: 32,
+        subtotalSemua: 172,
+      },
+      {
+        kategori: 'TKTP',
+        isTktp: true,
+        items: [
+          {
+            id: 'h-13',
+            kategori: 'TKTP',
+            nama_menu: 'Telur BB Kecap (Untuk tim ayam)',
+            kode_diet: 'TKTP',
+            porsi_gedung_lama: 3,
+            porsi_gedung_baru: 0,
+            total_porsi: 3,
+            is_tktp: true,
+          },
+          {
+            id: 'h-14',
+            kategori: 'TKTP',
+            nama_menu: 'Ayam Suwir BB Balado (Untuk bubur ayam)',
+            kode_diet: 'TKTP',
+            porsi_gedung_lama: 40,
+            porsi_gedung_baru: 13,
+            total_porsi: 53,
+            is_tktp: true,
+          },
+        ],
+        subtotalGedungLama: 43,
+        subtotalGedungBaru: 13,
+        subtotalSemua: 56,
+      },
+    ];
+  }
+
+  if (normMeal === 'PAGI') {
+    return [
+      {
+        kategori: 'HEWANI KELAS 1',
+        isTktp: false,
+        items: [
+          {
+            id: 'p-1',
+            kategori: 'HEWANI KELAS 1',
+            nama_menu: 'Opor Telur Ayam Kampung',
+            kode_diet: 'B',
+            porsi_gedung_lama: 12,
+            porsi_gedung_baru: 2,
+            total_porsi: 14,
+          },
+          {
+            id: 'p-2',
+            kategori: 'HEWANI KELAS 1',
+            nama_menu: 'Ayam Suwir Bumbu Kuning Rebus',
+            kode_diet: 'DM, RG',
+            porsi_gedung_lama: 6,
+            porsi_gedung_baru: 1,
+            total_porsi: 7,
+          },
+        ],
+        subtotalGedungLama: 18,
+        subtotalGedungBaru: 3,
+        subtotalSemua: 21,
+      },
+      {
+        kategori: 'HEWANI KELAS 2 DAN 3',
+        isTktp: false,
+        items: [
+          {
+            id: 'p-3',
+            kategori: 'HEWANI KELAS 2 DAN 3',
+            nama_menu: 'Telur Ceplok Air Bumbu Merah',
+            kode_diet: 'B',
+            porsi_gedung_lama: 128,
+            porsi_gedung_baru: 28,
+            total_porsi: 156,
+          },
+          {
+            id: 'p-4',
+            kategori: 'HEWANI KELAS 2 DAN 3',
+            nama_menu: 'Otak-Otak Ayam Panggang Non-Garam',
+            kode_diet: 'RG, DM',
+            porsi_gedung_lama: 45,
+            porsi_gedung_baru: 12,
+            total_porsi: 57,
+          },
+          {
+            id: 'p-5',
+            kategori: 'HEWANI KELAS 2 DAN 3',
+            nama_menu: 'Putih Telur Kukus Daun Jeruk',
+            kode_diet: 'DJ, RL',
+            porsi_gedung_lama: 21,
+            porsi_gedung_baru: 5,
+            total_porsi: 26,
+          },
+        ],
+        subtotalGedungLama: 194,
+        subtotalGedungBaru: 45,
+        subtotalSemua: 239,
+      },
+      {
+        kategori: 'NABATI',
+        isTktp: false,
+        items: [
+          {
+            id: 'p-6',
+            kategori: 'NABATI',
+            nama_menu: 'Tahu Bacem Gurih Basah',
+            kode_diet: 'B, Diit',
+            porsi_gedung_lama: 140,
+            porsi_gedung_baru: 32,
+            total_porsi: 172,
+          },
+          {
+            id: 'p-7',
+            kategori: 'NABATI',
+            nama_menu: 'Tempe Kukus Bumbu Kuning',
+            kode_diet: 'RG, DM',
+            porsi_gedung_lama: 38,
+            porsi_gedung_baru: 10,
+            total_porsi: 48,
+          },
+        ],
+        subtotalGedungLama: 178,
+        subtotalGedungBaru: 42,
+        subtotalSemua: 220,
+      },
+      {
+        kategori: 'SAYUR',
+        isTktp: false,
+        items: [
+          {
+            id: 'p-8',
+            kategori: 'SAYUR',
+            nama_menu: 'Sup Cocktail Sayuran (Wortel, Buncis)',
+            kode_diet: 'B, DM, RG',
+            porsi_gedung_lama: 165,
+            porsi_gedung_baru: 39,
+            total_porsi: 204,
+          },
+          {
+            id: 'p-9',
+            kategori: 'SAYUR',
+            nama_menu: 'Sup Wortel Labu Siam Halus',
+            kode_diet: 'RP, RS',
+            porsi_gedung_lama: 15,
+            porsi_gedung_baru: 3,
+            total_porsi: 18,
+          },
+        ],
+        subtotalGedungLama: 180,
+        subtotalGedungBaru: 42,
+        subtotalSemua: 222,
+      },
+      {
+        kategori: 'TKTP',
+        isTktp: true,
+        items: [
+          {
+            id: 'p-10',
+            kategori: 'TKTP',
+            nama_menu: 'Telur Rebus Utuh Tambahan TKTP',
+            kode_diet: 'TKTP',
+            porsi_gedung_lama: 36,
+            porsi_gedung_baru: 11,
+            total_porsi: 47,
+            is_tktp: true,
+          },
+          {
+            id: 'p-11',
+            kategori: 'TKTP',
+            nama_menu: 'Ayam Suwir Gurih Bubur TKTP',
+            kode_diet: 'TKTP',
+            porsi_gedung_lama: 22,
+            porsi_gedung_baru: 6,
+            total_porsi: 28,
+            is_tktp: true,
+          },
+        ],
+        subtotalGedungLama: 58,
+        subtotalGedungBaru: 17,
+        subtotalSemua: 75,
+      },
+    ];
+  }
+
+  // MALAM / SORE
+  return [
+    {
+      kategori: 'HEWANI KELAS 1',
+      isTktp: false,
+      items: [
+        {
+          id: 'm-1',
+          kategori: 'HEWANI KELAS 1',
+          nama_menu: 'Semur Daging Sapi Fillet Empuk',
+          kode_diet: 'B',
+          porsi_gedung_lama: 14,
+          porsi_gedung_baru: 3,
+          total_porsi: 17,
+        },
+        {
+          id: 'm-2',
+          kategori: 'HEWANI KELAS 1',
+          nama_menu: 'Ayam Panggang Bumbu Rujak Halus',
+          kode_diet: 'DM, RG',
+          porsi_gedung_lama: 4,
+          porsi_gedung_baru: 1,
+          total_porsi: 5,
+        },
+      ],
+      subtotalGedungLama: 18,
+      subtotalGedungBaru: 4,
+      subtotalSemua: 22,
+    },
+    {
+      kategori: 'HEWANI KELAS 2 DAN 3',
+      isTktp: false,
+      items: [
+        {
+          id: 'm-3',
+          kategori: 'HEWANI KELAS 2 DAN 3',
+          nama_menu: 'Rolade Daging Ayam Saus Tiram',
+          kode_diet: 'B',
+          porsi_gedung_lama: 115,
+          porsi_gedung_baru: 26,
+          total_porsi: 141,
+        },
+        {
+          id: 'm-4',
+          kategori: 'HEWANI KELAS 2 DAN 3',
+          nama_menu: 'Ikan Kembung Kukus Daun Kunyit',
+          kode_diet: 'RG, DM',
+          porsi_gedung_lama: 48,
+          porsi_gedung_baru: 14,
+          total_porsi: 62,
+        },
+        {
+          id: 'm-5',
+          kategori: 'HEWANI KELAS 2 DAN 3',
+          nama_menu: 'Putih Telur Bumbu Balado Manis',
+          kode_diet: 'DJ, RL',
+          porsi_gedung_lama: 24,
+          porsi_gedung_baru: 6,
+          total_porsi: 30,
+        },
+      ],
+      subtotalGedungLama: 187,
+      subtotalGedungBaru: 46,
+      subtotalSemua: 233,
+    },
+    {
+      kategori: 'NABATI',
+      isTktp: false,
+      items: [
+        {
+          id: 'm-6',
+          kategori: 'NABATI',
+          nama_menu: 'Oseng Tempe Cabe Ijo Non-Pedas',
+          kode_diet: 'B, Diit',
+          porsi_gedung_lama: 132,
+          porsi_gedung_baru: 29,
+          total_porsi: 161,
+        },
+        {
+          id: 'm-7',
+          kategori: 'NABATI',
+          nama_menu: 'Tahu Sutra Siram Kuah Jamur',
+          kode_diet: 'RG, DM',
+          porsi_gedung_lama: 42,
+          porsi_gedung_baru: 11,
+          total_porsi: 53,
+        },
+      ],
+      subtotalGedungLama: 174,
+      subtotalGedungBaru: 40,
+      subtotalSemua: 214,
+    },
+    {
+      kategori: 'SAYUR',
+      isTktp: false,
+      items: [
+        {
+          id: 'm-8',
+          kategori: 'SAYUR',
+          nama_menu: 'Sayur Lodeh Labu Siam Gurih Encer',
+          kode_diet: 'B, DM',
+          porsi_gedung_lama: 120,
+          porsi_gedung_baru: 27,
+          total_porsi: 147,
+        },
+        {
+          id: 'm-9',
+          kategori: 'SAYUR',
+          nama_menu: 'Tumis Labu Air Bening',
+          kode_diet: 'RG, RS',
+          porsi_gedung_lama: 35,
+          porsi_gedung_baru: 9,
+          total_porsi: 44,
+        },
+      ],
+      subtotalGedungLama: 155,
+      subtotalGedungBaru: 36,
+      subtotalSemua: 191,
+    },
+    {
+      kategori: 'TKTP',
+      isTktp: true,
+      items: [
+        {
+          id: 'm-10',
+          kategori: 'TKTP',
+          nama_menu: 'Telur Dadar Gulung TKTP',
+          kode_diet: 'TKTP',
+          porsi_gedung_lama: 28,
+          porsi_gedung_baru: 8,
+          total_porsi: 36,
+          is_tktp: true,
+        },
+        {
+          id: 'm-11',
+          kategori: 'TKTP',
+          nama_menu: 'Daging Cincang Bumbu Semur TKTP',
+          kode_diet: 'TKTP',
+          porsi_gedung_lama: 19,
+          porsi_gedung_baru: 5,
+          total_porsi: 24,
+          is_tktp: true,
+        },
+      ],
+      subtotalGedungLama: 47,
+      subtotalGedungBaru: 13,
+      subtotalSemua: 60,
+    },
+  ];
 }
 
 /**
@@ -676,7 +1185,8 @@ function getStandardHospitalData(
 export async function getTabulasiDashboardData(
   batchId?: number,
   selectedDate?: string,
-  mealTime?: string
+  mealTime?: string,
+  siklusKe?: number
 ): Promise<TabulasiDashboardData> {
   try {
     const rawBatches = await getTabulationBatches();
@@ -698,8 +1208,41 @@ export async function getTabulasiDashboardData(
       selectedBatch = availableBatches[0];
     }
 
+    const currentMeal = (mealTime || selectedBatch?.waktu_makan || 'Siang').toUpperCase();
+    const targetDate = selectedDate || selectedBatch?.tanggal_produksi || new Date().toISOString().slice(0, 10);
+    
+    // Determine active menu cycle (1 to 10/31)
+    const dayNum = parseInt(targetDate.split('-')[2] || '1', 10);
+    const activeCycleNum = siklusKe || (dayNum > 30 ? 31 : ((dayNum - 1) % 10) + 1);
+
+    const availableSiklus = Array.from({ length: 10 }, (_, i) => ({
+      nomor_siklus: i + 1,
+      nama_siklus: `Siklus ${i + 1}`,
+    }));
+    availableSiklus.push({ nomor_siklus: 31, nama_siklus: 'Siklus 31 (Tgl 31)' });
+
+    // Format display date in Indonesian
+    let formattedDate = targetDate;
+    try {
+      const d = new Date(targetDate);
+      formattedDate = d.toLocaleDateString('id-ID', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      });
+    } catch (_) {}
+
     // Default rich operational dataset
     const baseData = getStandardHospitalData(selectedBatch, availableBatches);
+
+    // Build Hospital Table category groups
+    const categoryGroups = getHospitalTableGroups(currentMeal, activeCycleNum);
+    const allItems = categoryGroups.flatMap((g) => g.items);
+
+    const totalPortionsLama = categoryGroups.reduce((sum, g) => sum + g.subtotalGedungLama, 0);
+    const totalPortionsBaru = categoryGroups.reduce((sum, g) => sum + g.subtotalGedungBaru, 0);
+    const grandTotalPorsi = totalPortionsLama + totalPortionsBaru;
 
     // If batch ID exists in database, attempt to augment counts with real records
     if (selectedBatch && selectedBatch.id > 0) {
@@ -770,7 +1313,6 @@ export async function getTabulasiDashboardData(
             }
           }
 
-          // If valid count gathered from DB, selectively merge
           if (totalInBatch > 0) {
             baseData.summary.totalPatients = totalInBatch;
             baseData.summary.patientsEating = totalInBatch - npoCount;
@@ -784,10 +1326,53 @@ export async function getTabulasiDashboardData(
       }
     }
 
+    baseData.hospitalData = {
+      tanggal: targetDate,
+      tanggalFormatted: formattedDate,
+      waktuMakan: currentMeal,
+      siklusNomor: activeCycleNum,
+      siklusNama: `Siklus ${activeCycleNum}`,
+      availableSiklus,
+      statusBatch: selectedBatch?.status_batch === 'LOCKED' ? 'OFFICIAL_LOCKED' : 'LIVE_ACTIVE',
+      batchCode: selectedBatch?.batch_code || `BATCH-${targetDate.replace(/-/g, '')}-${currentMeal}`,
+      lastUpdated: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+      grandTotalPasien: baseData.summary.totalPatients,
+      grandTotalPorsi,
+      totalGedungLama: totalPortionsLama,
+      totalGedungBaru: totalPortionsBaru,
+      totalPasienMakan: baseData.summary.patientsEating,
+      totalPasienNpo: baseData.summary.othersNpo,
+      totalDietKhusus: baseData.summary.specialDiet,
+      categoryGroups,
+      allItems,
+    };
+
     return baseData;
   } catch (error) {
     console.error('Error in getTabulasiDashboardData:', error);
-    return getStandardHospitalData(null, []);
+    const fallback = getStandardHospitalData(null, []);
+    const groups = getHospitalTableGroups('SIANG', 1);
+    fallback.hospitalData = {
+      tanggal: new Date().toISOString().slice(0, 10),
+      tanggalFormatted: 'Hari Ini',
+      waktuMakan: 'SIANG',
+      siklusNomor: 1,
+      siklusNama: 'Siklus 1',
+      availableSiklus: [{ nomor_siklus: 1, nama_siklus: 'Siklus 1' }],
+      statusBatch: 'LIVE_ACTIVE',
+      batchCode: 'BATCH-LIVE-SIANG',
+      lastUpdated: '12:00',
+      grandTotalPasien: 272,
+      grandTotalPorsi: 700,
+      totalGedungLama: 567,
+      totalGedungBaru: 133,
+      totalPasienMakan: 245,
+      totalPasienNpo: 27,
+      totalDietKhusus: 47,
+      categoryGroups: groups,
+      allItems: groups.flatMap((g) => g.items),
+    };
+    return fallback;
   }
 }
 

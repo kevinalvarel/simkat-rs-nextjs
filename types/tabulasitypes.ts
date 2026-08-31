@@ -103,11 +103,62 @@ export interface TabulasiBatchOption {
 export interface TabulasiFilterState {
   date: string;
   mealTime: string; // 'Pagi' | 'Siang' | 'Malam' | 'Snack' | 'Semua'
-  gedung: string;
-  lantai: string;
-  diet: string;
-  status: string;
-  search: string;
+  siklus?: number;
+  gedung?: string;
+  lantai?: string;
+  kategori?: string;
+  diet?: string;
+  status?: string;
+  search?: string;
+}
+
+/**
+ * Hospital-specific Tabulation Table Row (matching physical hospital kitchen spreadsheet)
+ */
+export interface TabulasiHospitalItem {
+  id: string;
+  kategori: string; // e.g. "HEWANI KELAS 1", "HEWANI KELAS 2 DAN 3", "NABATI", "SAYUR", "TKTP", "EXTRA"
+  nama_menu: string;
+  kode_diet: string;
+  porsi_gedung_lama: number;
+  porsi_gedung_baru: number;
+  total_porsi: number;
+  is_tktp?: boolean; // Highlighted row (kuning di excel)
+  catatan?: string;
+}
+
+export interface TabulasiHospitalCategoryGroup {
+  kategori: string;
+  items: TabulasiHospitalItem[];
+  subtotalGedungLama: number;
+  subtotalGedungBaru: number;
+  subtotalSemua: number;
+  isTktp?: boolean;
+}
+
+export interface TabulasiHospitalData {
+  tanggal: string;
+  tanggalFormatted: string;
+  waktuMakan: string; // PAGI | SIANG | MALAM | SNACK
+  siklusNomor: number;
+  siklusNama: string;
+  availableSiklus: Array<{ nomor_siklus: number; nama_siklus: string }>;
+  statusBatch: string; // "OFFICIAL_LOCKED" | "LIVE_ACTIVE"
+  batchCode: string;
+  lastUpdated: string;
+  
+  // KPI Totals
+  grandTotalPasien: number;
+  grandTotalPorsi: number;
+  totalGedungLama: number;
+  totalGedungBaru: number;
+  totalPasienMakan: number;
+  totalPasienNpo: number;
+  totalDietKhusus: number;
+
+  // Grouped by Category for Hospital Table
+  categoryGroups: TabulasiHospitalCategoryGroup[];
+  allItems: TabulasiHospitalItem[];
 }
 
 export interface TabulasiDashboardData {
@@ -120,5 +171,7 @@ export interface TabulasiDashboardData {
   menuItems: TabulasiMenuItem[];
   snackSummary: TabulasiSnackSummary;
   schedule: TabulasiScheduleItem[];
+  hospitalData: TabulasiHospitalData;
   lastUpdated: string;
 }
+

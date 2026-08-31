@@ -53,55 +53,69 @@ export function exportTabulasiToExcel(
 
   // --- SECTION 2: MIDDLE MENU TABULATION (GEDUNG LAMA & GEDUNG BARU) ---
   rows.push([
-    'GEDUNG LAMA', '', '', '',
-    'GEDUNG BARU', '', '', ''
+    'GEDUNG LAMA', '', '',
+    'GEDUNG BARU', '', ''
   ]);
   rows.push([
-    mealTime.toUpperCase(), 'JUMLAH PORSI', '', '',
-    mealTime.toUpperCase(), 'JUMLAH PORSI', '', ''
+    'KATEGORI', `${mealTime.toUpperCase()} (MENU HIDANGAN)`, 'DIET', 'JUMLAH PORSI',
+    'KATEGORI', `${mealTime.toUpperCase()} (MENU HIDANGAN)`, 'DIET', 'JUMLAH PORSI'
   ]);
 
-  const leftMenus = [
-    ['Otak-Otak Ayam Panggang (B)', 5],
-    ['Otak-Otak Ayam Panggang (RG)', 11],
-    ['Telur Ceplok Asam Manis (B)', 132],
-    ['Telur Ceplok Cetak Mawar Bumbu Merah Daun Jeruk (Diit, DM)', 2],
-    ['Telur Ceplok Cetak Mawar Bumbu Merah Daun Jeruk (RG)', 29],
-    ['Putih Telur Bumbu Merah Daun Jeruk (DJ, RL, RKOL)', 26],
-    ['Oseng Tempe Buncis (B, Diit)', 153],
-    ['Oseng Tempe Buncis Basah (RG, DM) *PAKE KECAP DM', 52],
-    ['Sup Cocktail (Buncis, Wortel, Jg.Manis) (B)', 116],
-    ['Sup Cocktail (Buncis, Wortel, Jg.Manis) (RG)', 38],
-    ['Sup Cocktail (Buncis, Wortel) (DM)', 14],
-    ['Sup Cocktail (Wortel) (RP, RS)', 37],
-    ['Telur Puyuh BB Rendang (EXTRA)', 45],
-    ['BSS MANIS (TELUR+KINCA) (EXTRA)', 19],
-    ['PUTEL CETAK (EXTRA)', 6],
-  ];
+  if (data.hospitalData && data.hospitalData.allItems && data.hospitalData.allItems.length > 0) {
+    for (const item of data.hospitalData.allItems) {
+      rows.push([
+        item.kategori,
+        item.nama_menu,
+        item.kode_diet,
+        item.porsi_gedung_lama,
+        item.kategori,
+        item.nama_menu,
+        item.kode_diet,
+        item.porsi_gedung_baru,
+      ]);
+    }
 
-  const rightMenus = [
-    ['Otak-Otak Ayam Panggang (RG)', 1],
-    ['Telur Ceplok Asam Manis (B)', 29],
-    ['Telur Ceplok Cetak Mawar Bumbu Merah Daun Jeruk (Diit, DM)', 8],
-    ['Telur Ceplok Cetak Mawar Bumbu Merah Daun Jeruk (RG)', 9],
-    ['Putih Telur Bumbu Merah Daun Jeruk (DJ, RL, RKOL)', 3],
-    ['Oseng Tempe Buncis (B, Diit)', 36],
-    ['Oseng Tempe Buncis Basah (RG, DM) *PAKE KECAP DM', 14],
-    ['Sup Cocktail (Buncis, Wortel, Jg.Manis) (B)', 31],
-    ['Sup Cocktail (Buncis, Wortel, Jg.Manis) (RG)', 12],
-    ['Sup Cocktail (Buncis, Wortel) (DM)', 2],
-    ['Sup Cocktail (Wortel) (RP, RS)', 5],
-    ['Telur Puyuh BB Rendang (EXTRA)', 13],
-    ['BSS MANIS (TELUR+KINCA) (EXTRA)', 5],
-    ['PUTEL CETAK (EXTRA)', 3],
-    ['', ''],
-  ];
+    rows.push([
+      'TOTAL PORSI GEDUNG LAMA', '', '', data.hospitalData.totalGedungLama,
+      'TOTAL PORSI GEDUNG BARU', '', '', data.hospitalData.totalGedungBaru
+    ]);
+  } else {
+    const leftMenus = [
+      ['HEWANI KELAS 1', 'Nasi Tim + Suir Ayam bb balado', 'B', 3],
+      ['HEWANI KELAS 1', 'Suir Ayam (Iris + Rebus )', 'DM, RG', 17],
+      ['HEWANI KELAS 2 DAN 3', 'Suir Ayam (Iris + Rebus )', 'B', 89],
+      ['HEWANI KELAS 2 DAN 3', 'Tanpa Cakue (RG,DM)', 'RG, DM', 41],
+      ['HEWANI KELAS 2 DAN 3', 'Telur rebus (seporsi 1/2 butir) (B, D, DM,RG)', 'B, D, DM, RG', 138],
+      ['HEWANI KELAS 2 DAN 3', 'Putih telur cetak mawar ( DJ, RL, Rkol)', 'DJ, RL, Rkol', 19],
+      ['NABATI', 'Sup labu siam, Tahu, Oyong (B, Diit, DM)', 'B, Diit, DM', 136],
+      ['NABATI', 'Sup labu siam, Tahu, Oyong (RG)', 'RG', 31],
+      ['NABATI', 'Sup Labu siam, Tahu (RS)', 'RS', 1],
+      ['NABATI', 'Sup Labu siam (RP)', 'RP', 9],
+      ['TKTP', 'Telur BB Kecap (Untuk tim ayam)', 'TKTP', 3],
+      ['TKTP', 'Ayam Suwir BB Balado (Untuk bubur ayam)', 'TKTP', 40],
+    ];
 
-  const maxLen = Math.max(leftMenus.length, rightMenus.length);
-  for (let i = 0; i < maxLen; i++) {
-    const l = leftMenus[i] || ['', ''];
-    const r = rightMenus[i] || ['', ''];
-    rows.push([l[0], l[1], '', '', r[0], r[1], '', '', '']);
+    const rightMenus = [
+      ['HEWANI KELAS 1', 'Nasi Tim + Suir Ayam bb balado', 'B', 1],
+      ['HEWANI KELAS 1', 'Suir Ayam (Iris + Rebus )', 'DM, RG', 1],
+      ['HEWANI KELAS 2 DAN 3', 'Suir Ayam (Iris + Rebus )', 'B', 11],
+      ['HEWANI KELAS 2 DAN 3', 'Tanpa Cakue (RG,DM)', 'RG, DM', 15],
+      ['HEWANI KELAS 2 DAN 3', 'Telur rebus (seporsi 1/2 butir) (B, D, DM,RG)', 'B, D, DM, RG', 31],
+      ['HEWANI KELAS 2 DAN 3', 'Putih telur cetak mawar ( DJ, RL, Rkol)', 'DJ, RL, Rkol', 4],
+      ['NABATI', 'Sup labu siam, Tahu, Oyong (B, Diit, DM)', 'B, Diit, DM', 17],
+      ['NABATI', 'Sup labu siam, Tahu, Oyong (RG)', 'RG', 14],
+      ['NABATI', 'Sup Labu siam, Tahu (RS)', 'RS', 3],
+      ['NABATI', 'Sup Labu siam (RP)', 'RP', 1],
+      ['TKTP', 'Telur BB Kecap (Untuk tim ayam)', 'TKTP', 0],
+      ['TKTP', 'Ayam Suwir BB Balado (Untuk bubur ayam)', 'TKTP', 13],
+    ];
+
+    const maxLen = Math.max(leftMenus.length, rightMenus.length);
+    for (let i = 0; i < maxLen; i++) {
+      const l = leftMenus[i] || ['', '', '', ''];
+      const r = rightMenus[i] || ['', '', '', ''];
+      rows.push([l[0], l[1], l[2], l[3], r[0], r[1], r[2], r[3]]);
+    }
   }
   rows.push([]); // Spacer
 
@@ -133,29 +147,14 @@ export function exportTabulasiToExcel(
 
   // Set column widths
   ws['!cols'] = [
-    { wch: 38 }, // A: Label / Left Menu
-    { wch: 10 }, // B: Porsi / I
-    { wch: 10 }, // C: II
-    { wch: 14 }, // D: Total (I-II)
-    { wch: 12 }, // E: Right Menu
-    { wch: 38 }, // F: Porsi
-    { wch: 10 }, // G: I-II
-    { wch: 10 }, // H: III
-    { wch: 14 }, // I: Grand Total
-  ];
-
-  // Merge headers
-  ws['!merges'] = [
-    // Top table merges
-    { s: { r: 3, c: 1 }, e: { r: 3, c: 4 } }, // GEDUNG LAMA
-    { s: { r: 3, c: 5 }, e: { r: 3, c: 7 } }, // GEDUNG BARU
-    // Middle table merges
-    { s: { r: 20, c: 0 }, e: { r: 20, c: 1 } }, // GEDUNG LAMA
-    { s: { r: 20, c: 4 }, e: { r: 20, c: 5 } }, // GEDUNG BARU
-    // Snack merges
-    { s: { r: 38, c: 1 }, e: { r: 38, c: 8 } }, // TABULASI SNACK
-    { s: { r: 39, c: 1 }, e: { r: 39, c: 4 } }, // GD LAMA
-    { s: { r: 39, c: 5 }, e: { r: 39, c: 7 } }, // GD BARU
+    { wch: 22 }, // A: Kategori Lama
+    { wch: 38 }, // B: Menu Lama
+    { wch: 14 }, // C: Diet Lama
+    { wch: 14 }, // D: Porsi Lama
+    { wch: 22 }, // E: Kategori Baru
+    { wch: 38 }, // F: Menu Baru
+    { wch: 14 }, // G: Diet Baru
+    { wch: 14 }, // H: Porsi Baru
   ];
 
   XLSX.utils.book_append_sheet(wb, ws, 'Tabulasi Gizi');

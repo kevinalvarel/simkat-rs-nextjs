@@ -26,6 +26,7 @@ import {
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useRole } from '@/lib/use-role';
+import Image from 'next/image';
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname();
@@ -42,11 +43,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               size='lg'
               render={<Link href='/dashboard/ag-katering/overview/produksi' />}
             >
-              <div className='flex flex-col gap-0.5 leading-none'>
-                <span className='font-medium text-xl'>SIMKAT</span>
-                <span className='text-xs text-muted-foreground'>
-                  Ahli Gizi Katering
-                </span>
+              <div className='flex flex-row items-center gap-2'>
+                <Image src='/logo-rsud.png' alt='Logo' width={50} height={50} />
+                <div className='flex flex-col gap-0.5 leading-none'>
+                  <span className='font-medium text-xl'>SIMKAT</span>
+                  <span className='text-xs text-muted-foreground'>
+                    Ahli Gizi Katering
+                  </span>
+                </div>
               </div>
             </SidebarMenuButton>
           </SidebarMenuItem>

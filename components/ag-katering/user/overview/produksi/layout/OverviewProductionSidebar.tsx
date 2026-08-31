@@ -37,7 +37,6 @@ export default function OverviewProductionSidebar({
   hari = 'SENIN',
   tanggalFormatted,
   totalPasien = 0,
-  totalPorsi = 0,
 }: OverviewProductionSidebarProps) {
   const displayDate =
     tanggalFormatted ||
@@ -148,7 +147,8 @@ export default function OverviewProductionSidebar({
         </div>
 
         <p className='text-[10px] text-muted-foreground leading-relaxed max-w-[200px] mx-auto'>
-          Data hidangan disesuaikan otomatis mengikuti siklus menu & perubahan diet pasien
+          Data hidangan disesuaikan otomatis mengikuti siklus menu & perubahan
+          diet pasien
         </p>
       </div>
     </Card>

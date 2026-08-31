@@ -5,14 +5,8 @@ import type {
   UnmappedDietItem,
   KategoriMenuOption,
 } from '@/servers/mapping-diet.service';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { broadcastProductionUpdate } from '@/lib/realtime-sync';
 import {
   Select,
   SelectContent,
@@ -281,6 +275,7 @@ export default function MappingDietTable({
         startTransition(() => {
           onRefresh?.();
         });
+        broadcastProductionUpdate('SYNC_NOW', 'mapping-diet');
       } else {
         setRowStates((prev) => ({
           ...prev,

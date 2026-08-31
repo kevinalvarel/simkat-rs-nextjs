@@ -20,7 +20,8 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Loader2, Users, Search, Lock, ShieldAlert } from 'lucide-react';
+import { Users, Search, Lock, ShieldAlert } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface SnapshotDetailDialogProps {
   batch: SnapshotBatch | null;
@@ -101,11 +102,27 @@ export default function SnapshotDetailDialog({
 
         <div className='flex-1 overflow-y-auto rounded-lg border'>
           {loading ? (
-            <div className='flex flex-col items-center justify-center py-12 space-y-2'>
-              <Loader2 className='h-7 w-7 animate-spin text-primary' />
-              <p className='text-xs text-muted-foreground'>
-                Memuat rincian data pasien snapshot...
-              </p>
+            <div className='p-4 space-y-3'>
+              <div className='flex items-center gap-4 py-2 border-b border-muted'>
+                <Skeleton className='h-4 w-6' />
+                <Skeleton className='h-4 w-32' />
+                <Skeleton className='h-4 w-20' />
+                <Skeleton className='h-4 w-28' />
+                <Skeleton className='h-4 w-12' />
+                <Skeleton className='h-4 w-16' />
+                <Skeleton className='h-4 w-24 ml-auto' />
+              </div>
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className='flex items-center gap-4 py-2.5'>
+                  <Skeleton className='h-4 w-4' />
+                  <Skeleton className='h-4 w-36' />
+                  <Skeleton className='h-4 w-24' />
+                  <Skeleton className='h-4 w-28' />
+                  <Skeleton className='h-4 w-12' />
+                  <Skeleton className='h-5 w-16 rounded-full' />
+                  <Skeleton className='h-5 w-24 rounded-full ml-auto' />
+                </div>
+              ))}
             </div>
           ) : filteredDetails.length === 0 ? (
             <div className='flex flex-col items-center justify-center py-12 text-center space-y-2'>

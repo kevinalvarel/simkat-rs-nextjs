@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Save, Layers, AlertTriangle, Loader2 } from 'lucide-react';
 import { bulkSaveDietMapping } from '@/servers/mapping-diet.service';
+import { broadcastProductionUpdate } from '@/lib/realtime-sync';
 import { toast } from 'sonner';
 import { SelectField, KATEGORI_LABEL } from './ui/SelectField';
 
@@ -84,6 +85,7 @@ export default function MappingDietBulkDialog({
 
       if (res.success) {
         toast.success(res.message);
+        broadcastProductionUpdate('SYNC_NOW', 'mapping-diet');
         onSuccess();
         onOpenChange(false);
         setKarbo('');
