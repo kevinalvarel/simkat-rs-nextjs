@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Navbar from '@/components/ag-rs/navbar';
 import SelectionStepHeader from '@/components/ag-rs/selection/ui/SelectionStepHeader';
 import SelectionProgressIndicator from '@/components/ag-rs/selection/ui/SelectionProgressIndicator';
@@ -46,6 +46,7 @@ export default function SelectionClient({
   initialSnapshotBatches,
 }: SelectionClientProps = {}) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isNavigating, startNavigationTransition] = useTransition();
 
   const [selectedMealTime, setSelectedMealTime] = useState<MealTimeType>(null);
@@ -54,8 +55,9 @@ export default function SelectionClient({
   const [selectedRuangan, setSelectedRuangan] = useState<RuanganItem | null>(
     null,
   );
-  const [selectedKamar, setSelectedKamar] =
-    useState<SelectedKamarItem | null>(null);
+  const [selectedKamar, setSelectedKamar] = useState<SelectedKamarItem | null>(
+    null,
+  );
 
   const [gedungList, setGedungList] = useState<GedungWithRuangan[]>(
     () => initialGedungList || [],
@@ -97,6 +99,58 @@ export default function SelectionClient({
       isMounted = false;
     };
   }, [initialGedungList]);
+
+  // Auto-restore state from URL query parameters (e.g. when user clicks "Kembali" from Data Pasien)
+  useEffect(() => {
+    if (!gedungList || gedungList.length === 0) return;
+
+    const mealParam = searchParams.get('meal') as MealTimeType;
+    const waktuMakanParam = searchParams.get('waktuMakan');
+    const resolvedMeal: MealTimeType =
+      mealParam ||
+      (waktuMakanParam === 'PAGI'
+        ? 'Makan Pagi'
+        : waktuMakanParam === 'SIANG'
+          ? 'Makan Siang'
+          : waktuMakanParam === 'MALAM'
+            ? 'Makan Malam'
+            : null);
+
+    const gedungParam = searchParams.get('gedung');
+    const gedungIdParam = searchParams.get('gedungId');
+    const ruanganParam = searchParams.get('ruangan');
+    const ruanganIdParam = searchParams.get('ruanganId');
+
+    if (resolvedMeal) {
+      setSelectedMealTime((prev) => prev || resolvedMeal);
+    }
+
+    if (gedungParam || gedungIdParam) {
+      const foundGedung = gedungList.find(
+        (g) =>
+          (gedungIdParam && String(g.idGedung) === String(gedungIdParam)) ||
+          (gedungParam &&
+            g.namaGedung.toLowerCase() === gedungParam.toLowerCase()),
+      );
+      if (foundGedung) {
+        setSelectedGedung((prev) => prev || foundGedung);
+
+        if (ruanganParam || ruanganIdParam) {
+          const foundRuangan = foundGedung.ruanganList.find(
+            (r) =>
+              (ruanganIdParam &&
+                String(r.idRuangan) === String(ruanganIdParam)) ||
+              (ruanganParam &&
+                r.namaRuangan.toLowerCase() ===
+                  ruanganParam.toLowerCase()),
+          );
+          if (foundRuangan) {
+            setSelectedRuangan((prev) => prev || foundRuangan);
+          }
+        }
+      }
+    }
+  }, [gedungList, searchParams]);
 
   // Helper to determine lock status and whether a meal cycle is the IMMEDIATELY PREVIOUS batch (eligible for revision)
   function getMealLockInfo(
@@ -221,6 +275,8 @@ export default function SelectionClient({
       gedung: gedung.namaGedung,
       ruanganId: String(ruangan.idRuangan),
       gedungId: String(gedung.idGedung),
+      meal: meal,
+      waktuMakan: jenisMakan,
       ...(kamar && kamar.idKamar !== 'all'
         ? {
             kamar: kamar.nomorKamar,
@@ -231,7 +287,6 @@ export default function SelectionClient({
         ? {
             isRevisi: 'true',
             revisiMeal: meal,
-            waktuMakan: jenisMakan,
             batchId: targetBatch ? String(targetBatch.id) : '',
           }
         : {}),
@@ -438,5 +493,3 @@ export default function SelectionClient({
     </div>
   );
 }
-
-

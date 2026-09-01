@@ -141,6 +141,33 @@ export default function PatientFormDialog({
     return Array.from(set);
   }, [gedungList, selectedRuanganName, defaultRuangan, defaultKamar]);
 
+  // Compute configured default Kelas from Konfigurasi Ruangan
+  const defaultRoomKelas = useMemo(() => {
+    const matchedRuangan = gedungList
+      .flatMap((g) => g.ruanganList)
+      .find(
+        (r) =>
+          r.namaRuangan.toLowerCase() ===
+          (selectedRuanganName || defaultRuangan || '').toLowerCase(),
+      );
+    const matchedKamar = matchedRuangan?.kamarList?.find(
+      (k) =>
+        k.nomorKamar.toLowerCase() === (defaultKamar || '').toLowerCase(),
+    );
+    return (
+      matchedKamar?.kelas ||
+      matchedRuangan?.kelas ||
+      availableKelasOptions[0] ||
+      'Kelas 1'
+    );
+  }, [
+    gedungList,
+    selectedRuanganName,
+    defaultRuangan,
+    defaultKamar,
+    availableKelasOptions,
+  ]);
+
   // Reset form when dialog opens/closes or patient changes
   useEffect(() => {
     if (isOpen) {
@@ -161,7 +188,7 @@ export default function PatientFormDialog({
           nama_pasien: '',
           no_rm: '',
           diet: '',
-          kelas: availableKelasOptions[0] || 'Kelas 1',
+          kelas: defaultRoomKelas,
           gedung: defaultKamar || availableKamarOptions[0] || defaultGedung || 'Kamar 1',
           ruangan: defaultRuangan,
           bed: initialBed,
@@ -177,6 +204,7 @@ export default function PatientFormDialog({
     defaultGedung,
     defaultKamar,
     initialBed,
+    defaultRoomKelas,
     availableKelasOptions,
     availableKamarOptions,
     form,
@@ -326,6 +354,16 @@ export default function PatientFormDialog({
                 onValueChange={(val) => {
                   if (val !== null) {
                     form.setValue('ruangan', val, { shouldValidate: true });
+                    const newRoom = gedungList
+                      .flatMap((g) => g.ruanganList)
+                      .find(
+                        (r) => r.namaRuangan.toLowerCase() === val.toLowerCase(),
+                      );
+                    if (newRoom?.kelas) {
+                      form.setValue('kelas', newRoom.kelas, {
+                        shouldValidate: true,
+                      });
+                    }
                   }
                 }}
               >

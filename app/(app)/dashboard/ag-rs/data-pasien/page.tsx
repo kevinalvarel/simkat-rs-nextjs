@@ -31,7 +31,7 @@ export default async function DataPasienPage({
 
   // Fetch patients and master data in parallel from the database
   const [patients, kelasList, gedungList] = await Promise.all([
-    getPatientsByRoom(ruangan),
+    getPatientsByRoom(ruangan, kamar),
     getKelas(),
     getGedungWithRuangan(),
   ]);

@@ -24,10 +24,6 @@ export const routeDataProduksi = {
           title: 'Snapshot & Waktu Kunci',
           url: '/dashboard/ag-katering/status-snapshot',
         },
-        {
-          title: 'Revisi Post-Snapshot',
-          url: '/dashboard/ag-katering/revisi-post-snapshot',
-        },
       ],
     },
     {
@@ -42,8 +38,8 @@ export const routeDataProduksi = {
           url: '/dashboard/ag-katering/invoice',
         },
         {
-          title: 'Kwitansi',
-          url: '/dashboard/ag-katering/kwitansi',
+          title: 'Cetak DPMP',
+          url: '/dashboard/ag-katering/cetak-dpmp',
         },
       ],
     },
@@ -81,10 +77,6 @@ export const routeDataSupervisor = {
           title: 'Snapshot & Waktu Kunci',
           url: '/dashboard/ag-katering/status-snapshot',
         },
-        {
-          title: 'Revisi Post-Snapshot',
-          url: '/dashboard/ag-katering/revisi-post-snapshot',
-        },
       ],
     },
     {
@@ -108,8 +100,8 @@ export const routeDataSupervisor = {
           url: '/dashboard/ag-katering/invoice',
         },
         {
-          title: 'Kwitansi',
-          url: '/dashboard/ag-katering/kwitansi',
+          title: 'Cetak DPMP',
+          url: '/dashboard/ag-katering/cetak-dpmp',
         },
       ],
     },

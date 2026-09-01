@@ -35,6 +35,7 @@ interface GedungCardProps {
   onOpenAddRuangan: (gedungId: number) => void;
   onOpenEditGedung: (gedung: GedungHierarkis) => void;
   onDeleteGedung: (gedung: GedungHierarkis) => void;
+  onOpenManageKamar: (ruangan: RuanganDetail) => void;
   onOpenAddKamar: (ruangan: RuanganDetail) => void;
   onEditKamar: (ruangan: RuanganDetail, kamar: KamarDetail) => void;
   onDeleteKamar: (ruangan: RuanganDetail, kamar: KamarDetail) => void;
@@ -55,6 +56,7 @@ export function GedungCard({
   onOpenAddRuangan,
   onOpenEditGedung,
   onDeleteGedung,
+  onOpenManageKamar,
   onOpenAddKamar,
   onEditKamar,
   onDeleteKamar,
@@ -126,7 +128,7 @@ export function GedungCard({
           <Button
             variant='outline'
             size='sm'
-            className='h-8 gap-1.5 text-xs border-blue-500/30 text-blue-700 dark:text-blue-300 hover:bg-blue-500/10'
+            className='h-8 gap-1.5 text-xs border-blue-500/30 text-blue-700 dark:text-blue-300 hover:bg-blue-500/10 cursor-pointer'
             onClick={() => onOpenAddRuangan(gedung.idGedung)}
           >
             <Plus className='w-3.5 h-3.5' /> Tambah Ruangan
@@ -134,7 +136,7 @@ export function GedungCard({
           <Button
             variant='ghost'
             size='icon'
-            className='h-8 w-8 text-muted-foreground hover:text-foreground'
+            className='h-8 w-8 text-muted-foreground hover:text-foreground cursor-pointer'
             onClick={() => onOpenEditGedung(gedung)}
             title='Edit Nama Gedung'
           >
@@ -143,7 +145,7 @@ export function GedungCard({
           <Button
             variant='ghost'
             size='icon'
-            className='h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10'
+            className='h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10 cursor-pointer'
             onClick={() => onDeleteGedung(gedung)}
             title='Hapus Gedung'
           >
@@ -164,19 +166,21 @@ export function GedungCard({
               <Button
                 size='sm'
                 variant='outline'
-                className='h-7 text-xs gap-1'
+                className='h-7 text-xs gap-1 cursor-pointer'
                 onClick={() => onOpenAddRuangan(gedung.idGedung)}
               >
                 <Plus className='w-3 h-3' /> Tambah Ruangan Sekarang
               </Button>
             </div>
           ) : (
-            <div className='space-y-3.5'>
+            <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5'>
               {gedung.ruanganList.map((ruangan) => (
                 <RuanganCard
                   key={ruangan.idRuangan}
                   ruangan={ruangan}
+                  gedungNama={gedung.namaGedung}
                   savedGedungList={savedGedungList}
+                  onOpenManageKamar={onOpenManageKamar}
                   onOpenAddKamar={onOpenAddKamar}
                   onEditKamar={onEditKamar}
                   onDeleteKamar={onDeleteKamar}

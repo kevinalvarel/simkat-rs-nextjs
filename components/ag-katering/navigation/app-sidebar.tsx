@@ -44,7 +44,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               render={<Link href='/dashboard/ag-katering/overview/produksi' />}
             >
               <div className='flex flex-row items-center gap-2'>
-                <Image src='/logo-rsud.png' alt='Logo' width={50} height={50} />
+                <Image
+                  src='/logo-rsud.webp'
+                  alt='Logo'
+                  width={50}
+                  height={50}
+                />
                 <div className='flex flex-col gap-0.5 leading-none'>
                   <span className='font-medium text-xl'>SIMKAT</span>
                   <span className='text-xs text-muted-foreground'>

@@ -3,7 +3,8 @@ export interface PemorsianPatientItem {
   nama_pasien: string;
   no_rm: string;
   ruangan: string;
-  gedung: string;
+  kamar: string;
+  gedung?: string;
   bed: string;
   diet: string;
   waktu: string; // Pagi | Siang | Malam
@@ -35,6 +36,7 @@ export interface PemorsianDietCount {
 export interface DataDietDetail {
   diet?: string;
   gedung?: string;
+  kamar?: string;
   ruangan?: string;
   bed?: string;
   kelas?: string;
@@ -48,6 +50,7 @@ export interface PemorsianRevisiItem {
   nama_pasien: string;
   gedung: string;
   ruangan: string;
+  kamar?: string;
   bed: string;
   kelas: string;
   waktu_makan: string;
@@ -82,7 +85,8 @@ export interface PemorsianSummaryData {
 
 export interface PemorsianFilterState {
   search: string;
-  gedung: string;
+  gedung?: string;
+  kamar?: string;
   ruangan: string;
   diet: string;
   status: string;
@@ -97,6 +101,7 @@ export interface EtiketData {
   no_rm?: string;
   kelas?: string;
   gedung?: string;
+  kamar?: string;
   is_revisi?: boolean;
   keterangan_revisi?: string;
 }

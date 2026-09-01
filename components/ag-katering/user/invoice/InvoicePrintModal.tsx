@@ -13,6 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Printer, FileText, CheckCircle2 } from 'lucide-react';
 import type { InvoiceDailySummary } from '@/types/invoicetypes';
+import Image from 'next/image';
 
 interface InvoicePrintModalProps {
   open: boolean;
@@ -90,7 +91,7 @@ export default function InvoicePrintModal({
               <div className='w-16 h-16 sm:w-20 sm:h-20 shrink-0 flex items-center justify-center'>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src='/logo-rsud.png'
+                  src='/icons/logo-rsud.png'
                   alt='Logo Rumah Sakit'
                   className='w-14 h-14 sm:w-16 sm:h-16 object-contain'
                 />
@@ -105,17 +106,20 @@ export default function InvoicePrintModal({
                   {data.cateringVendor}
                 </h3>
                 <p className='text-[11px] sm:text-xs text-gray-600'>
-                  Layanan Pengelolaan Gizi & Distribusi Makanan Pasien Rawat Inap
+                  Layanan Pengelolaan Gizi & Distribusi Makanan Pasien Rawat
+                  Inap
                 </p>
               </div>
 
               {/* Logo Kanan */}
               <div className='w-16 h-16 sm:w-20 sm:h-20 shrink-0 flex items-center justify-center'>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src='/logo-rsud.png'
+                <Image
+                  src='/icons/logo-tradco.png'
                   alt='Logo Katering'
                   className='w-14 h-14 sm:w-16 sm:h-16 object-contain'
+                  height={50}
+                  width={50}
                 />
               </div>
             </div>

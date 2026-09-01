@@ -89,14 +89,29 @@ export default function PatientTable({
       ? currentRuanganObj.kamarList.map((k) => k.nomorKamar)
       : ['Kamar 1'];
 
+  const currentKamarObj = currentRuanganObj?.kamarList?.find(
+    (k) =>
+      (kamar && k.nomorKamar.toLowerCase() === kamar.toLowerCase()) ||
+      (kamarId && k.idKamar === kamarId),
+  );
+
+  // Default value Kelas merujuk pada kelas yang sudah ditetapkan pada KonfigurasiRuangan
+  const defaultRoomKelas =
+    currentRuanganObj?.kelas ||
+    currentKamarObj?.kelas ||
+    kelasList[0]?.namaKelas ||
+    kelasOptions[0] ||
+    'Kelas 1';
+
   function startInlineAdd(bedLabel: string) {
     setInlineAddBedKey(bedLabel);
+    const activeKamarValue = kamar || roomKamarOptions[0] || 'Kamar 1';
     setInlineAddDraft({
       nama_pasien: '',
       no_rm: '',
       diet: '',
-      kelas: kelasOptions[0] || 'Kelas 1',
-      gedung: kamar || roomKamarOptions[0] || gedung,
+      kelas: defaultRoomKelas,
+      gedung: activeKamarValue,
       ruangan: ruangan,
       bed: bedLabel,
       status_pasien: 'AKTIF',
@@ -132,12 +147,13 @@ export default function PatientTable({
       return;
     }
 
+    const activeKamarValue = kamar || roomKamarOptions[0] || 'Kamar 1';
     const payload: PatientFormValues = {
       nama_pasien: inlineAddDraft.nama_pasien.trim(),
       no_rm: inlineAddDraft.no_rm.trim(),
       diet: inlineAddDraft.diet.trim(),
-      kelas: inlineAddDraft.kelas || kelasOptions[0] || 'Kelas 1',
-      gedung: inlineAddDraft.gedung || gedung,
+      kelas: inlineAddDraft.kelas || defaultRoomKelas,
+      gedung: inlineAddDraft.gedung || activeKamarValue,
       ruangan: inlineAddDraft.ruangan || ruangan,
       bed: inlineAddDraft.bed || bedKey,
       status_pasien: inlineAddDraft.status_pasien || 'AKTIF',
@@ -402,6 +418,7 @@ export default function PatientTable({
                     gedungOptions={gedungOptions}
                     gedungList={gedungList}
                     statusOptions={STATUS_OPTIONS}
+                    kamar={kamar}
                     onStartEditField={(patientId, field: EditableField) =>
                       setEditingTarget({ patientId, field })
                     }

@@ -11,33 +11,32 @@ import {
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Search, RotateCcw } from 'lucide-react';
-import type { KwitansiFilterState } from '@/types/kwitansitypes';
+import type { DpmpFilterState } from '@/types/dpmptypes';
 
-interface KwitansiFilterBarProps {
-  filter: KwitansiFilterState;
-  onFilterChange: (newFilter: Partial<KwitansiFilterState>) => void;
+interface DpmpFilterBarProps {
+  filter: DpmpFilterState;
+  onFilterChange: (newFilter: Partial<DpmpFilterState>) => void;
   onResetFilter: () => void;
-  gedungOptions: string[];
   ruanganOptions: string[];
+  kamarOptions: string[];
   dietOptions: string[];
   totalFiltered: number;
   totalAll: number;
 }
 
-export default function KwitansiFilterBar({
+export default function DpmpFilterBar({
   filter,
   onFilterChange,
   onResetFilter,
-  gedungOptions,
   ruanganOptions,
-  dietOptions,
+  kamarOptions,
   totalFiltered,
   totalAll,
-}: KwitansiFilterBarProps) {
+}: DpmpFilterBarProps) {
   const isFiltered =
     Boolean(filter.search.trim()) ||
-    filter.gedung !== 'ALL' ||
     filter.ruangan !== 'ALL' ||
+    filter.kamar !== 'ALL' ||
     filter.kelas !== 'ALL' ||
     filter.diet !== 'ALL' ||
     filter.status !== 'ALL';
@@ -57,44 +56,44 @@ export default function KwitansiFilterBar({
           />
         </div>
 
-        {/* Gedung Filter */}
-        <div>
-          <Select
-            value={filter.gedung}
-            onValueChange={(val) => onFilterChange({ gedung: val || 'ALL' })}
-          >
-            <SelectTrigger className='h-9 text-xs rounded-xl bg-muted/40 border-muted-foreground/20'>
-              <SelectValue placeholder='Semua Gedung' />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value='ALL' className='text-xs'>
-                Semua Gedung
-              </SelectItem>
-              {gedungOptions.map((g) => (
-                <SelectItem key={g} value={g} className='text-xs'>
-                  Gedung {g}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
         {/* Ruangan Filter */}
         <div>
           <Select
             value={filter.ruangan}
             onValueChange={(val) => onFilterChange({ ruangan: val || 'ALL' })}
           >
-            <SelectTrigger className='h-9 text-xs rounded-xl bg-muted/40 border-muted-foreground/20'>
+            <SelectTrigger className='h-9 text-xs rounded-xl bg-muted/40 border-muted-foreground/20 font-medium'>
               <SelectValue placeholder='Semua Ruangan' />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value='ALL' className='text-xs'>
+              <SelectItem value='ALL' className='text-xs font-semibold'>
                 Semua Ruangan
               </SelectItem>
               {ruanganOptions.map((r) => (
                 <SelectItem key={r} value={r} className='text-xs'>
                   {r}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Kamar Filter (Menggantikan Gedung) */}
+        <div>
+          <Select
+            value={filter.kamar}
+            onValueChange={(val) => onFilterChange({ kamar: val || 'ALL' })}
+          >
+            <SelectTrigger className='h-9 text-xs rounded-xl bg-muted/40 border-muted-foreground/20 font-medium'>
+              <SelectValue placeholder='Semua Kamar' />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value='ALL' className='text-xs font-semibold'>
+                Semua Kamar
+              </SelectItem>
+              {kamarOptions.map((k) => (
+                <SelectItem key={k} value={k} className='text-xs'>
+                  {k}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -107,7 +106,7 @@ export default function KwitansiFilterBar({
             value={filter.kelas}
             onValueChange={(val) => onFilterChange({ kelas: val || 'ALL' })}
           >
-            <SelectTrigger className='h-9 text-xs rounded-xl bg-muted/40 border-muted-foreground/20'>
+            <SelectTrigger className='h-9 text-xs rounded-xl bg-muted/40 border-muted-foreground/20 font-medium'>
               <SelectValue placeholder='Semua Kelas' />
             </SelectTrigger>
             <SelectContent>
@@ -136,7 +135,7 @@ export default function KwitansiFilterBar({
             value={filter.status}
             onValueChange={(val) => onFilterChange({ status: val || 'ALL' })}
           >
-            <SelectTrigger className='h-9 text-xs rounded-xl bg-muted/40 border-muted-foreground/20 flex-1'>
+            <SelectTrigger className='h-9 text-xs rounded-xl bg-muted/40 border-muted-foreground/20 flex-1 font-medium'>
               <SelectValue placeholder='Semua Status' />
             </SelectTrigger>
             <SelectContent>

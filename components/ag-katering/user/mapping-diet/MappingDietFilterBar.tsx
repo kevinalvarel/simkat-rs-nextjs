@@ -4,6 +4,13 @@ import React from 'react';
 import { Search, RotateCcw } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface MappingDietFilterBarProps {
   searchQuery: string;
@@ -39,15 +46,21 @@ export default function MappingDietFilterBar({
       {/* Filters */}
       <div className='flex items-center gap-2 flex-wrap w-full sm:w-auto'>
         {/* Status Filter */}
-        <select
+        <Select
           value={selectedStatus}
-          onChange={(e) => onStatusChange(e.target.value)}
-          className='h-9 rounded-lg border border-input bg-background px-2.5 text-xs focus:outline-hidden focus:ring-2 focus:ring-primary/20 flex-1 sm:flex-none sm:w-48'
+          onValueChange={(value) => onStatusChange(value || 'ALL')}
         >
-          <option value='ALL'>Semua Status</option>
-          <option value='UNMAPPED'>UNMAPPED (Belum Dipetakan)</option>
-          <option value='PARTIAL'>PARTIAL (Sebagian Dipetakan)</option>
-        </select>
+          <SelectTrigger className='h-9 text-xs bg-background min-w-[150px]'>
+            <SelectValue placeholder='Semua Status' />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value='ALL'>Semua Status</SelectItem>
+            <SelectItem value='UNMAPPED'>UNMAPPED (Belum Dipetakan)</SelectItem>
+            <SelectItem value='PARTIAL'>
+              PARTIAL (Sebagian Dipetakan)
+            </SelectItem>
+          </SelectContent>
+        </Select>
 
         {/* Reset */}
         {isFiltered && (

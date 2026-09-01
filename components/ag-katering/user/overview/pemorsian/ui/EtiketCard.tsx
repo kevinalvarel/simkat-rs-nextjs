@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Rnd } from 'react-rnd';
 import type { EtiketData } from '@/types/pemorsiantypes';
+import Image from 'next/image';
 
 export interface EtiketElementLayout {
   x: number;
@@ -49,7 +50,11 @@ export default function EtiketCard({
   const mealTimeUpper = (data.waktu || 'PAGI').toUpperCase();
   const [layout, setLayout] = useState<EtiketTemplateLayout>(DEFAULT_LAYOUT);
 
-  const updatePosition = (key: keyof EtiketTemplateLayout, x: number, y: number) => {
+  const updatePosition = (
+    key: keyof EtiketTemplateLayout,
+    x: number,
+    y: number,
+  ) => {
     setLayout((prev) => ({
       ...prev,
       [key]: {
@@ -98,13 +103,19 @@ export default function EtiketCard({
         position={{ x: layout.logoKiri.x, y: layout.logoKiri.y }}
         onDragStop={(_, d) => updatePosition('logoKiri', d.x, d.y)}
         onResizeStop={(_, __, ref, ___, pos) =>
-          updateSize('logoKiri', ref.offsetWidth, ref.offsetHeight, pos.x, pos.y)
+          updateSize(
+            'logoKiri',
+            ref.offsetWidth,
+            ref.offsetHeight,
+            pos.x,
+            pos.y,
+          )
         }
         className='group/rnd hover:ring-1 hover:ring-blue-500/60 hover:ring-dashed rounded-xs cursor-move z-10'
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src='/logo-rsud.png'
+          src='/icons/logo-rsud.png'
           alt='Logo Kiri'
           className='w-full h-full object-contain pointer-events-none'
         />
@@ -114,11 +125,20 @@ export default function EtiketCard({
       <Rnd
         bounds='parent'
         disableDragging={!isDraggable}
-        size={{ width: layout.headerTitle.width, height: layout.headerTitle.height }}
+        size={{
+          width: layout.headerTitle.width,
+          height: layout.headerTitle.height,
+        }}
         position={{ x: layout.headerTitle.x, y: layout.headerTitle.y }}
         onDragStop={(_, d) => updatePosition('headerTitle', d.x, d.y)}
         onResizeStop={(_, __, ref, ___, pos) =>
-          updateSize('headerTitle', ref.offsetWidth, ref.offsetHeight, pos.x, pos.y)
+          updateSize(
+            'headerTitle',
+            ref.offsetWidth,
+            ref.offsetHeight,
+            pos.x,
+            pos.y,
+          )
         }
         className='group/rnd hover:ring-1 hover:ring-blue-500/60 hover:ring-dashed rounded-xs cursor-move z-10 flex items-center justify-center'
       >
@@ -138,18 +158,29 @@ export default function EtiketCard({
       <Rnd
         bounds='parent'
         disableDragging={!isDraggable}
-        size={{ width: layout.logoKanan.width, height: layout.logoKanan.height }}
+        size={{
+          width: layout.logoKanan.width,
+          height: layout.logoKanan.height,
+        }}
         position={{ x: layout.logoKanan.x, y: layout.logoKanan.y }}
         onDragStop={(_, d) => updatePosition('logoKanan', d.x, d.y)}
         onResizeStop={(_, __, ref, ___, pos) =>
-          updateSize('logoKanan', ref.offsetWidth, ref.offsetHeight, pos.x, pos.y)
+          updateSize(
+            'logoKanan',
+            ref.offsetWidth,
+            ref.offsetHeight,
+            pos.x,
+            pos.y,
+          )
         }
         className='group/rnd hover:ring-1 hover:ring-blue-500/60 hover:ring-dashed rounded-xs cursor-move z-10'
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src='/logo-rsud.png'
-          alt='Logo Kanan'
+        <Image
+          height={50}
+          width={50}
+          src='/icons/logo-tradco.png'
+          alt='Logo Katering'
           className='w-full h-full object-contain pointer-events-none'
         />
       </Rnd>
@@ -239,7 +270,9 @@ export default function EtiketCard({
       >
         <div className='grid grid-cols-[64px_1fr] items-baseline gap-1 w-full text-xs sm:text-[13px] leading-tight text-black'>
           <span className='font-semibold'>Diet</span>
-          <span className='font-bold break-words line-clamp-2'>: {data.diet}</span>
+          <span className='font-bold break-words line-clamp-2'>
+            : {data.diet}
+          </span>
         </div>
       </Rnd>
 

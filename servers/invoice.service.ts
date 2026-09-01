@@ -17,7 +17,6 @@ import type {
 // Standard class ordering priority
 const KELAS_ORDER: Record<string, number> = {
   VIP: 1,
-  VVIP: 1,
   'KELAS 1': 2,
   'KELAS I': 2,
   'KELAS 2': 3,

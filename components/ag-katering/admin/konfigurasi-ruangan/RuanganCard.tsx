@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import type {
   RuanganDetail,
   KamarDetail,
@@ -15,15 +15,15 @@ import {
   Plus,
   Pencil,
   Trash2,
-  ChevronDown,
-  ChevronUp,
-  Sparkles,
+  SlidersHorizontal,
+  Layers,
 } from 'lucide-react';
-import { KamarCard } from './KamarCard';
 
 interface RuanganCardProps {
   ruangan: RuanganDetail;
+  gedungNama?: string;
   savedGedungList: GedungHierarkis[];
+  onOpenManageKamar: (ruangan: RuanganDetail) => void;
   onOpenAddKamar: (ruangan: RuanganDetail) => void;
   onEditKamar: (ruangan: RuanganDetail, kamar: KamarDetail) => void;
   onDeleteKamar: (ruangan: RuanganDetail, kamar: KamarDetail) => void;
@@ -40,34 +40,50 @@ export function renderKelasBadge(kelas: string) {
   const normalized = (kelas || '').toUpperCase();
   if (normalized.includes('VIP')) {
     return (
-      <Badge className='bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/30 font-bold text-xs'>
-        {kelas}
+      <Badge className='bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30 font-bold text-xs shadow-2xs'>
+        {kelas || 'VIP'}
       </Badge>
     );
   }
   if (normalized.includes('KELAS 1') || normalized.includes('1')) {
     return (
-      <Badge className='bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/30 font-semibold text-xs'>
-        {kelas}
+      <Badge className='bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30 font-semibold text-xs shadow-2xs'>
+        {kelas || 'Kelas 1'}
       </Badge>
     );
   }
   if (normalized.includes('KELAS 2') || normalized.includes('2')) {
     return (
-      <Badge className='bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 font-semibold text-xs'>
-        {kelas}
+      <Badge className='bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 font-semibold text-xs shadow-2xs'>
+        {kelas || 'Kelas 2'}
       </Badge>
     );
   }
-  if (normalized.includes('ICU') || normalized.includes('HCU')) {
+  if (normalized.includes('KELAS 3') || normalized.includes('3')) {
     return (
-      <Badge className='bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/30 font-bold text-xs'>
+      <Badge className='bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30 font-semibold text-xs shadow-2xs'>
+        {kelas || 'Kelas 3'}
+      </Badge>
+    );
+  }
+  if (
+    normalized.includes('ICU') ||
+    normalized.includes('HCU') ||
+    normalized.includes('NICU') ||
+    normalized.includes('PICU') ||
+    normalized.includes('ISOLASI')
+  ) {
+    return (
+      <Badge className='bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30 font-bold text-xs shadow-2xs'>
         {kelas}
       </Badge>
     );
   }
   return (
-    <Badge variant='outline' className='font-medium text-xs'>
+    <Badge
+      variant='outline'
+      className='bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/30 font-medium text-xs shadow-2xs'
+    >
       {kelas || 'Kelas 1'}
     </Badge>
   );
@@ -76,15 +92,11 @@ export function renderKelasBadge(kelas: string) {
 export function RuanganCard({
   ruangan,
   savedGedungList,
+  onOpenManageKamar,
   onOpenAddKamar,
-  onEditKamar,
-  onDeleteKamar,
-  onQuickAdjustBed,
   onEditRuangan,
   onDeleteRuangan,
 }: RuanganCardProps) {
-  const [isExpanded, setIsExpanded] = useState(true);
-
   // Find saved state of this ruangan to detect modified kamar/beds
   const savedGedung = savedGedungList.find(
     (g) => g.idGedung === ruangan.gedungId,
@@ -98,7 +110,11 @@ export function RuanganCard({
       (sk) => sk.idKamar === k.idKamar,
     );
     if (!savedKamar) return true; // new kamar
-    return savedKamar.jumlahBed !== k.jumlahBed;
+    return (
+      savedKamar.jumlahBed !== k.jumlahBed ||
+      savedKamar.nomorKamar !== k.nomorKamar ||
+      savedKamar.kelas !== k.kelas
+    );
   });
 
   const totalKamar = ruangan.kamarList.length;
@@ -107,146 +123,143 @@ export function RuanganCard({
     0,
   );
 
+  // Take first 4 kamars for compact preview chips in column card
+  const previewKamars = ruangan.kamarList.slice(0, 4);
+  const extraKamarsCount = totalKamar - previewKamars.length;
+
   return (
     <div
-      className={`border rounded-2xl bg-card shadow-xs transition-all overflow-hidden ${
+      className={`group relative flex flex-col justify-between rounded-2xl border bg-card/90 backdrop-blur-xs p-4 sm:p-5 transition-all duration-200 hover:shadow-md h-full ${
         hasModifiedBeds
-          ? 'border-amber-500/50 dark:border-amber-500/40 ring-1 ring-amber-500/20'
-          : 'border-border/80 hover:border-primary/30'
+          ? 'border-amber-500/50 dark:border-amber-500/40 ring-1 ring-amber-500/20 bg-amber-500/5'
+          : 'border-border/80 hover:border-emerald-500/40 hover:bg-card'
       }`}
     >
-      {/* Ruangan Header */}
-      <div className='p-4 bg-muted/20 border-b flex flex-col sm:flex-row sm:items-center justify-between gap-3'>
-        <div
-          className='flex items-center gap-3 cursor-pointer group flex-1 min-w-0'
-          onClick={() => setIsExpanded((prev) => !prev)}
-        >
-          <div className='p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 group-hover:scale-105 transition-transform shrink-0'>
-            <DoorOpen className='w-5 h-5' />
-          </div>
-
-          <div className='min-w-0'>
-            <div className='flex items-center gap-2 flex-wrap'>
+      {/* Top Header Section */}
+      <div className='space-y-3'>
+        <div className='flex items-start justify-between gap-2.5'>
+          <div className='flex items-center gap-2.5 min-w-0 flex-1'>
+            <div className='p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 group-hover:scale-105 transition-transform shrink-0'>
+              <DoorOpen className='w-5 h-5' />
+            </div>
+            <div className='min-w-0 flex-1'>
               <h4
-                className='font-bold text-sm sm:text-base text-foreground group-hover:text-primary transition-colors truncate'
+                className='font-bold text-base text-foreground group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors truncate'
                 title={ruangan.namaRuangan}
               >
                 {ruangan.namaRuangan}
               </h4>
-              {renderKelasBadge(ruangan.kelas)}
-              {hasModifiedBeds && (
-                <span className='text-[10px] text-amber-700 dark:text-amber-300 font-bold bg-amber-500/20 px-2 py-0.5 rounded-full'>
-                  Perubahan Belum Disimpan
-                </span>
-              )}
+              <div className='flex items-center gap-1.5 pt-0.5 flex-wrap'>
+                {renderKelasBadge(ruangan.kelas)}
+                {hasModifiedBeds && (
+                  <span className='text-[10px] text-amber-700 dark:text-amber-300 font-bold bg-amber-500/20 border border-amber-500/30 px-1.5 py-0.2 rounded-full animate-pulse'>
+                    Pending
+                  </span>
+                )}
+              </div>
             </div>
+          </div>
 
-            <div className='flex items-center gap-2 text-xs text-muted-foreground pt-0.5 font-medium'>
-              <span className='flex items-center gap-1'>
-                <DoorClosed className='w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400' />
-                <strong>{totalKamar}</strong> Kamar/Pintu
-              </span>
-              <span>·</span>
-              <span className='flex items-center gap-1'>
-                <Bed className='w-3.5 h-3.5 text-purple-600 dark:text-purple-400' />
-                <strong>{totalBed}</strong> Total Bed
-              </span>
-            </div>
+          {/* Quick Edit & Delete Icon Actions */}
+          <div className='flex items-center gap-0.5 shrink-0'>
+            <Button
+              variant='ghost'
+              size='icon'
+              className='h-7 w-7 text-muted-foreground hover:text-foreground cursor-pointer'
+              onClick={() => onEditRuangan(ruangan)}
+              title='Edit Ruangan'
+            >
+              <Pencil className='w-3.5 h-3.5' />
+            </Button>
+            <Button
+              variant='ghost'
+              size='icon'
+              className='h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 cursor-pointer'
+              onClick={() => onDeleteRuangan(ruangan)}
+              title='Hapus Ruangan'
+            >
+              <Trash2 className='w-3.5 h-3.5' />
+            </Button>
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div className='flex items-center gap-1.5 shrink-0 self-end sm:self-auto'>
-          <Button
-            variant='outline'
-            size='sm'
-            className='h-8 text-xs gap-1 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10'
-            onClick={() => onOpenAddKamar(ruangan)}
-          >
-            <Plus className='w-3.5 h-3.5' /> Tambah Kamar / Pintu
-          </Button>
+        {/* Stats Row Badges */}
+        <div className='grid grid-cols-2 gap-2 text-xs font-semibold'>
+          <div className='flex items-center gap-1.5 bg-muted/60 px-2.5 py-1.5 rounded-lg text-foreground'>
+            <DoorClosed className='w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0' />
+            <span className='truncate'>{totalKamar} Kamar</span>
+          </div>
+          <div className='flex items-center gap-1.5 bg-purple-500/10 px-2.5 py-1.5 rounded-lg text-purple-700 dark:text-purple-300 border border-purple-500/20'>
+            <Bed className='w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0' />
+            <span className='truncate'>{totalBed} Bed</span>
+          </div>
+        </div>
 
-          <Button
-            variant='ghost'
-            size='icon'
-            className='h-8 w-8 text-muted-foreground hover:text-foreground'
-            onClick={() => onEditRuangan(ruangan)}
-            title='Edit Ruangan & Kelola Kamar'
-          >
-            <Pencil className='w-3.5 h-3.5' />
-          </Button>
+        {/* Kamar Chips Preview Area */}
+        <div className='space-y-1.5 pt-1'>
+          <div className='text-[11px] font-medium text-muted-foreground flex items-center gap-1'>
+            <Layers className='w-3 h-3 text-muted-foreground' /> Rincian Kamar:
+          </div>
 
-          <Button
-            variant='ghost'
-            size='icon'
-            className='h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10'
-            onClick={() => onDeleteRuangan(ruangan)}
-            title='Hapus Ruangan'
-          >
-            <Trash2 className='w-3.5 h-3.5' />
-          </Button>
-
-          <Button
-            variant='ghost'
-            size='icon'
-            className='h-8 w-8 text-muted-foreground'
-            onClick={() => setIsExpanded((prev) => !prev)}
-            title={isExpanded ? 'Sembunyikan Kamar' : 'Tampilkan Kamar'}
-          >
-            {isExpanded ? (
-              <ChevronUp className='w-4 h-4' />
+          <div className='flex items-center gap-1.5 flex-wrap min-h-[26px]'>
+            {previewKamars.length === 0 ? (
+              <span className='text-[11px] text-muted-foreground italic'>
+                Belum ada kamar
+              </span>
             ) : (
-              <ChevronDown className='w-4 h-4' />
+              <>
+                {previewKamars.map((kamar) => (
+                  <span
+                    key={kamar.idKamar}
+                    className='inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-background border border-border/80 text-[11px] font-mono text-foreground'
+                    title={`${kamar.nomorKamar} (${kamar.jumlahBed} Bed)`}
+                  >
+                    <DoorClosed className='w-2.5 h-2.5 text-emerald-600 shrink-0' />
+                    <span className='font-sans font-medium truncate max-w-[80px]'>
+                      {kamar.nomorKamar}
+                    </span>
+                    <span className='text-[10px] text-purple-600 dark:text-purple-400 font-bold shrink-0'>
+                      ({kamar.jumlahBed}B)
+                    </span>
+                  </span>
+                ))}
+                {extraKamarsCount > 0 && (
+                  <span
+                    onClick={() => onOpenManageKamar(ruangan)}
+                    className='inline-flex items-center px-1.5 py-0.5 rounded-md bg-muted text-[10px] font-medium text-muted-foreground hover:bg-muted/80 cursor-pointer transition-colors'
+                    title={`Lihat ${extraKamarsCount} kamar lainnya`}
+                  >
+                    +{extraKamarsCount} lagi
+                  </span>
+                )}
+              </>
             )}
-          </Button>
+          </div>
         </div>
       </div>
 
-      {/* Ruangan Content: Kamar / Nomor Pintu List */}
-      {isExpanded && (
-        <div className='p-4 bg-background/50 animate-in fade-in duration-200'>
-          {ruangan.kamarList.length === 0 ? (
-            <div className='text-center py-6 border border-dashed rounded-xl space-y-2 bg-muted/10'>
-              <DoorClosed className='w-6 h-6 text-muted-foreground mx-auto' />
-              <p className='text-xs text-muted-foreground'>
-                Belum ada nomor pintu/kamar di ruangan{' '}
-                <strong>{ruangan.namaRuangan}</strong>.
-              </p>
-              <Button
-                size='sm'
-                variant='outline'
-                className='h-7 text-xs gap-1'
-                onClick={() => onOpenAddKamar(ruangan)}
-              >
-                <Plus className='w-3 h-3' /> Tambah Kamar / Pintu Pertama
-              </Button>
-            </div>
-          ) : (
-            <div className='grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3'>
-              {ruangan.kamarList.map((kamar) => {
-                const savedKamar = savedRuangan?.kamarList.find(
-                  (sk) => sk.idKamar === kamar.idKamar,
-                );
-                const isBedModified = savedKamar
-                  ? savedKamar.jumlahBed !== kamar.jumlahBed
-                  : true;
+      {/* Bottom Footer Actions */}
+      <div className='pt-4 border-t border-border/60 mt-3.5 flex items-center gap-2'>
+        <Button
+          size='sm'
+          onClick={() => onOpenManageKamar(ruangan)}
+          className='flex-1 h-8.5 text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-xs cursor-pointer'
+          title='Buka Modal Kelola Kamar'
+        >
+          <SlidersHorizontal className='w-3.5 h-3.5' />
+          Lihat & Kelola Kamar
+        </Button>
 
-                return (
-                  <KamarCard
-                    key={kamar.idKamar}
-                    kamar={kamar}
-                    ruangan={ruangan}
-                    isBedModified={isBedModified}
-                    onQuickAdjustBed={onQuickAdjustBed}
-                    onEditKamar={onEditKamar}
-                    onDeleteKamar={onDeleteKamar}
-                  />
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
+        <Button
+          variant='outline'
+          size='icon'
+          className='h-8.5 w-8.5 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10 cursor-pointer shrink-0'
+          onClick={() => onOpenAddKamar(ruangan)}
+          title='Tambah Kamar Cepat'
+        >
+          <Plus className='w-4 h-4' />
+        </Button>
+      </div>
     </div>
   );
 }

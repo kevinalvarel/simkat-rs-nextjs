@@ -134,7 +134,11 @@ export default function KonfigurasiRuanganClient({
           );
         });
 
-        if (isCountChanged || isKamarModified || savedR.jumlahBed !== r.jumlahBed) {
+        if (
+          isCountChanged ||
+          isKamarModified ||
+          savedR.jumlahBed !== r.jumlahBed
+        ) {
           changes.push({
             idRuangan: r.idRuangan,
             namaRuangan: r.namaRuangan,
@@ -225,8 +229,7 @@ export default function KonfigurasiRuanganClient({
     () =>
       gedungList.reduce(
         (acc, g) =>
-          acc +
-          g.ruanganList.reduce((rAcc, r) => rAcc + (r.jumlahBed || 0), 0),
+          acc + g.ruanganList.reduce((rAcc, r) => rAcc + (r.jumlahBed || 0), 0),
         0,
       ),
     [gedungList],
@@ -417,7 +420,12 @@ export default function KonfigurasiRuanganClient({
       return;
     }
 
-    const computedBed = ruanganKamarListInput.reduce(
+    const finalKamarList = ruanganKamarListInput.map((k) => ({
+      ...k,
+      kelas: k.kelas || ruanganKelasInput,
+    }));
+
+    const computedBed = finalKamarList.reduce(
       (acc, k) => acc + (k.jumlahBed || 0),
       0,
     );
@@ -429,7 +437,7 @@ export default function KonfigurasiRuanganClient({
           editingRuangan.idRuangan,
           ruanganNameInput,
           ruanganKelasInput,
-          ruanganKamarListInput,
+          finalKamarList,
         );
         if (res.success) {
           toast.success(res.message);
@@ -443,7 +451,7 @@ export default function KonfigurasiRuanganClient({
                         namaRuangan: ruanganNameInput.trim(),
                         kelas: ruanganKelasInput,
                         jumlahBed: computedBed,
-                        kamarList: ruanganKamarListInput,
+                        kamarList: finalKamarList,
                       }
                     : r,
                 );
@@ -475,7 +483,7 @@ export default function KonfigurasiRuanganClient({
           targetGedungId,
           ruanganNameInput,
           ruanganKelasInput,
-          ruanganKamarListInput,
+          finalKamarList,
         );
         if (res.success) {
           toast.success(res.message);
@@ -485,7 +493,7 @@ export default function KonfigurasiRuanganClient({
             kelas: ruanganKelasInput,
             jumlahBed: computedBed,
             gedungId: targetGedungId,
-            kamarList: ruanganKamarListInput,
+            kamarList: finalKamarList,
           };
           const addFn = (prev: GedungHierarkis[]) =>
             prev.map((g) => {
@@ -861,7 +869,10 @@ export default function KonfigurasiRuanganClient({
                     : 'Belum ada gedung yang terdaftar dalam sistem.'}
                 </p>
               </div>
-              <Button onClick={openAddGedungModal} className='gap-2 mt-2 cursor-pointer'>
+              <Button
+                onClick={openAddGedungModal}
+                className='gap-2 mt-2 cursor-pointer'
+              >
                 <Plus className='w-4 h-4' /> Tambah Gedung Pertama
               </Button>
             </CardContent>
@@ -877,6 +888,7 @@ export default function KonfigurasiRuanganClient({
               onOpenAddRuangan={openAddRuanganModal}
               onOpenEditGedung={openEditGedungModal}
               onDeleteGedung={setDeletingGedungTarget}
+              onOpenManageKamar={openEditRuanganModal}
               onOpenAddKamar={openAddKamarModal}
               onEditKamar={openEditKamarModal}
               onDeleteKamar={(ruangan, kamar) =>
@@ -916,6 +928,11 @@ export default function KonfigurasiRuanganClient({
       <RuanganDialog
         isOpen={isRuanganDialogOpen}
         editingRuangan={editingRuangan}
+        gedungNama={
+          gedungList.find(
+            (g) => g.idGedung === (editingRuangan?.gedungId ?? targetGedungId),
+          )?.namaGedung
+        }
         ruanganNameInput={ruanganNameInput}
         ruanganKelasInput={ruanganKelasInput}
         kamarListInput={ruanganKamarListInput}

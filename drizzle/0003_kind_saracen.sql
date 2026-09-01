@@ -1,0 +1,1 @@
+ALTER TABLE "master_siklus" ADD COLUMN "hari" text;

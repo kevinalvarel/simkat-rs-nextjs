@@ -23,22 +23,35 @@ export interface RevisionContext {
   requestedBy?: string;
 }
 
-export async function getPatientsByRoom(ruangan: string): Promise<Patient[]> {
+export async function getPatientsByRoom(
+  ruangan: string,
+  kamar?: string,
+): Promise<Patient[]> {
   try {
+    const conditions = [
+      eq(pasienTable.ruangan, ruangan),
+      ne(pasienTable.status_pasien, 'PULANG'),
+    ];
+
+    if (
+      kamar &&
+      kamar.trim() !== '' &&
+      !kamar.toLowerCase().startsWith('semua') &&
+      kamar !== 'ALL'
+    ) {
+      // In pasienTable, the kamar is stored in the `gedung` column
+      conditions.push(eq(pasienTable.gedung, kamar));
+    }
+
     const patients = await db
       .select()
       .from(pasienTable)
-      .where(
-        and(
-          eq(pasienTable.ruangan, ruangan),
-          ne(pasienTable.status_pasien, 'PULANG'),
-        ),
-      )
+      .where(and(...conditions))
       .orderBy(pasienTable.nama_pasien);
 
     return patients;
   } catch (error) {
-    console.error('Error fetching patients by room:', error);
+    console.error('Error fetching patients by room and kamar:', error);
     return [];
   }
 }

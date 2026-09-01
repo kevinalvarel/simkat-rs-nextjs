@@ -38,15 +38,26 @@ export default function DataPasienClient({
   const activeKamarId = kamarId || searchParams.get('kamarId') || undefined;
 
   const isRevisiMode = searchParams.get('isRevisi') === 'true';
-  const revisiMeal = searchParams.get('revisiMeal') || 'Batch Sebelumnya';
+  const mealParam = searchParams.get('meal');
   const waktuMakanParam = searchParams.get('waktuMakan');
+
   const waktuMakan: 'PAGI' | 'SIANG' | 'MALAM' =
     (waktuMakanParam as 'PAGI' | 'SIANG' | 'MALAM') ||
-    (revisiMeal.toUpperCase().includes('SIANG')
+    (mealParam?.toUpperCase().includes('SIANG')
       ? 'SIANG'
-      : revisiMeal.toUpperCase().includes('MALAM')
+      : mealParam?.toUpperCase().includes('MALAM')
         ? 'MALAM'
         : 'PAGI');
+
+  const revisiMeal =
+    searchParams.get('revisiMeal') ||
+    mealParam ||
+    (waktuMakan === 'SIANG'
+      ? 'Makan Siang'
+      : waktuMakan === 'MALAM'
+        ? 'Makan Malam'
+        : 'Makan Pagi');
+
   const batchIdParam = searchParams.get('batchId');
   const batchId = batchIdParam ? parseInt(batchIdParam, 10) : null;
 
@@ -113,9 +124,22 @@ export default function DataPasienClient({
     ? targetKamar.jumlahBed
     : (targetRuangan?.jumlahBed ?? 6);
 
-  // Filter patients based on search query (excluding PULANG patients)
+  // Filter patients based on search query (excluding PULANG patients) and activeKamar
   const filteredPatients = useMemo(() => {
-    const active = patientList.filter((p) => p.status_pasien !== 'PULANG');
+    let active = patientList.filter((p) => p.status_pasien !== 'PULANG');
+
+    // If activeKamar is specified (and not 'Semua Kamar'), filter by kamar
+    if (
+      activeKamar &&
+      !activeKamar.toLowerCase().startsWith('semua kamar') &&
+      activeKamar !== 'ALL'
+    ) {
+      active = active.filter((p) => {
+        if (!p.gedung) return true;
+        return p.gedung.toLowerCase() === activeKamar.toLowerCase();
+      });
+    }
+
     if (!searchQuery.trim()) return active;
     const query = searchQuery.toLowerCase().trim();
     return active.filter(
@@ -123,7 +147,7 @@ export default function DataPasienClient({
         p.nama_pasien.toLowerCase().includes(query) ||
         p.no_rm.toLowerCase().includes(query),
     );
-  }, [patientList, searchQuery]);
+  }, [patientList, activeKamar, searchQuery]);
 
   // =========================================================================
   // OPTIMISTIC ACTIONS (Instant Frontend UI + Background Server Mutations)
@@ -135,13 +159,20 @@ export default function DataPasienClient({
     defaultBed?: string,
   ) => {
     const tempId = -Date.now();
+    const defaultKamarValue =
+      draftData.gedung ||
+      activeKamar ||
+      targetKamar?.nomorKamar ||
+      targetRuangan?.kamarList?.[0]?.nomorKamar ||
+      'Kamar 1';
+
     const optimisticPatient: Patient = {
       id: tempId,
       nama_pasien: draftData.nama_pasien,
       no_rm: draftData.no_rm,
       diet: draftData.diet,
       kelas: draftData.kelas,
-      gedung: draftData.gedung || gedung,
+      gedung: defaultKamarValue,
       ruangan: draftData.ruangan || ruangan,
       bed: draftData.bed || defaultBed || 'Bed 1',
       status_pasien: isRevisiMode
@@ -399,7 +430,33 @@ export default function DataPasienClient({
   }
 
   function handleBack() {
-    router.push('/dashboard/ag-rs');
+    const params = new URLSearchParams();
+    if (waktuMakan) {
+      const mealTitle =
+        mealParam ||
+        (waktuMakan === 'PAGI'
+          ? 'Makan Pagi'
+          : waktuMakan === 'SIANG'
+            ? 'Makan Siang'
+            : 'Makan Malam');
+      params.set('meal', mealTitle);
+      params.set('waktuMakan', waktuMakan);
+    }
+    if (gedung) params.set('gedung', gedung);
+    if (searchParams.get('gedungId')) params.set('gedungId', searchParams.get('gedungId')!);
+    if (ruangan) params.set('ruangan', ruangan);
+    if (searchParams.get('ruanganId')) params.set('ruanganId', searchParams.get('ruanganId')!);
+    if (activeKamar) params.set('kamar', activeKamar);
+    if (searchParams.get('kamarId')) params.set('kamarId', searchParams.get('kamarId')!);
+    if (isRevisiMode) {
+      params.set('isRevisi', 'true');
+      if (searchParams.get('revisiMeal') || revisiMeal) {
+        params.set('revisiMeal', searchParams.get('revisiMeal') || revisiMeal);
+      }
+      if (batchId) params.set('batchId', String(batchId));
+    }
+
+    router.push(`/dashboard/ag-rs?${params.toString()}`);
   }
 
   return (

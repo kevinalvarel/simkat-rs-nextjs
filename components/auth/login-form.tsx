@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   Field,
+  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
@@ -17,11 +18,18 @@ import { LoginFormSchema } from '@/validations/LoginFormSchema';
 import Image from 'next/image';
 import { signIn } from '@/servers/login.service';
 import { toast } from 'sonner';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from '@/components/ui/input-group';
+import { Eye, EyeClosed } from 'lucide-react';
 
 export function LoginForm({
   className,
   ...props
 }: React.ComponentProps<'div'>) {
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
@@ -36,6 +44,10 @@ export function LoginForm({
       setIsLoading(false);
     }
   }
+
+  const showPasswordHandler = () => {
+    setShowPassword((prev) => !prev);
+  };
 
   const form = useForm<LoginFormSchema>({
     resolver: zodResolver(LoginFormSchema),
@@ -81,7 +93,20 @@ export function LoginForm({
                 render={({ field, fieldState }) => (
                   <Field>
                     <FieldLabel htmlFor='password'>Password</FieldLabel>
-                    <Input {...field} id='password' type='password' />
+                    <InputGroup>
+                      <InputGroupInput
+                        {...field}
+                        id='password'
+                        type={showPassword ? 'text' : 'password'}
+                      />
+                      <InputGroupAddon
+                        onClick={showPasswordHandler}
+                        align={'inline-end'}
+                        className='cursor-pointer'
+                      >
+                        {showPassword ? <Eye /> : <EyeClosed />}
+                      </InputGroupAddon>
+                    </InputGroup>
                     {fieldState.invalid && (
                       <FieldError errors={[fieldState.error]} />
                     )}
@@ -106,6 +131,18 @@ export function LoginForm({
           </div>
         </CardContent>
       </Card>
+      <FieldDescription className='px-6 text-center text-xs'>
+        &copy; 2026 RSUD dr Slamet Garut. Managed by{' '}
+        <a
+          href='https://www.instagram.com/tradcoenergy/'
+          rel='noopener noreferrer'
+          target='_blank'
+          className='underline'
+        >
+          Tradco Energy
+        </a>
+        .
+      </FieldDescription>
     </div>
   );
 }

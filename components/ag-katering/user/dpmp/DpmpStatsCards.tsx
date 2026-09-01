@@ -9,17 +9,17 @@ import {
   AlertCircle,
   CheckSquare,
 } from 'lucide-react';
-import type { KwitansiSummaryData } from '@/types/kwitansitypes';
+import type { DpmpSummaryData } from '@/types/dpmptypes';
 
-interface KwitansiStatsCardsProps {
-  data: KwitansiSummaryData;
+interface DpmpStatsCardsProps {
+  data: DpmpSummaryData;
   selectedCount: number;
 }
 
-export default function KwitansiStatsCards({
+export default function DpmpStatsCards({
   data,
   selectedCount,
-}: KwitansiStatsCardsProps) {
+}: DpmpStatsCardsProps) {
   const cards = [
     {
       title: 'Total Pasien',
@@ -66,7 +66,7 @@ export default function KwitansiStatsCards({
       title: 'Pasien Terpilih',
       value: selectedCount,
       unit: 'Orang',
-      description: selectedCount > 0 ? 'Siap cetak tanda terima' : 'Pilih dari tabel di bawah',
+      description: selectedCount > 0 ? 'Siap cetak lembar DPMP' : 'Pilih dari tabel di bawah',
       icon: CheckSquare,
       iconColor: 'text-primary',
       bgIcon: 'bg-primary/10',

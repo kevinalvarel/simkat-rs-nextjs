@@ -2,7 +2,6 @@
 
 import React from 'react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -15,16 +14,14 @@ import {
   Printer,
   Download,
   RefreshCw,
-  Clock,
   Layers,
-  Sparkles,
 } from 'lucide-react';
-import type { KwitansiSummaryData } from '@/types/kwitansitypes';
+import type { DpmpSummaryData } from '@/types/dpmptypes';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 
-interface KwitansiHeaderProps {
-  data: KwitansiSummaryData;
+interface DpmpHeaderProps {
+  data: DpmpSummaryData;
   selectedBatchId?: number;
   onBatchChange: (batchId: number) => void;
   onOpenPrintModal: () => void;
@@ -33,7 +30,7 @@ interface KwitansiHeaderProps {
   selectedCount: number;
 }
 
-export default function KwitansiHeader({
+export default function DpmpHeader({
   data,
   selectedBatchId,
   onBatchChange,
@@ -41,7 +38,7 @@ export default function KwitansiHeader({
   isRefreshing,
   onRefresh,
   selectedCount,
-}: KwitansiHeaderProps) {
+}: DpmpHeaderProps) {
   // Export Excel function
   function handleExportExcel() {
     try {
@@ -49,8 +46,8 @@ export default function KwitansiHeader({
         No: idx + 1,
         'No RM': p.no_rm,
         'Nama Pasien': p.nama_pasien,
-        Gedung: p.gedung,
         Ruangan: p.ruangan,
+        Kamar: p.kamar || '—',
         Bed: p.bed,
         Kelas: p.kelas,
         Diet: p.diet,
@@ -60,11 +57,11 @@ export default function KwitansiHeader({
 
       const worksheet = XLSX.utils.json_to_sheet(rows);
       const workbook = XLSX.utils.book_new();
-      const batchName = data.batch?.batch_code || 'Kwitansi_Pasien';
+      const batchName = data.batch?.batch_code || 'DPMP_Pasien';
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Data_Pasien');
 
-      XLSX.writeFile(workbook, `Tanda_Terima_Kwitansi_${batchName}.xlsx`);
-      toast.success('File Excel berhasil diunduh.');
+      XLSX.writeFile(workbook, `DPMP_Tanda_Terima_${batchName}.xlsx`);
+      toast.success('File Excel DPMP berhasil diunduh.');
     } catch (err) {
       console.error('Error exporting Excel:', err);
       toast.error('Gagal mengunduh file Excel.');
@@ -72,6 +69,7 @@ export default function KwitansiHeader({
   }
 
   const currentBatch = data.batch;
+  const docNumber = data.dpmpNumber || data.kwitansiNumber;
 
   return (
     <div className='flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-5 rounded-2xl border border-primary/20 shadow-xs'>
@@ -79,19 +77,19 @@ export default function KwitansiHeader({
       <div className='space-y-1.5'>
         <div className='flex items-center gap-2 flex-wrap'>
           <span className='inline-flex items-center gap-1 text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-primary/15 text-primary border border-primary/25'>
-            <FileText className='w-3 h-3' /> Kwitansi & Tanda Terima
+            <FileText className='w-3 h-3' /> DPMP & Tanda Terima
           </span>
           <span className='font-mono text-xs text-muted-foreground'>
-            {data.kwitansiNumber}
+            {docNumber}
           </span>
         </div>
 
         <h1 className='text-xl sm:text-2xl font-bold tracking-tight text-foreground font-sans flex items-center gap-2'>
-          Kwitansi Distribusi & Penyerahan Makanan
+          Daftar Permintaan Makanan Pasien (DPMP)
         </h1>
 
         <p className='text-xs sm:text-sm text-muted-foreground'>
-          Bukti tanda terima penyerahan makanan pasien per ruangan dan bangsal perawatan rumah sakit.
+          Dokumen resmi DPMP dan bukti tanda terima distribusi penyerahan makanan pasien per ruangan rawat inap.
         </p>
       </div>
 
@@ -144,7 +142,7 @@ export default function KwitansiHeader({
           <span className='hidden sm:inline'>Ekspor</span> Excel
         </Button>
 
-        {/* Print Kwitansi Button */}
+        {/* Print DPMP Button */}
         <Button
           size='sm'
           onClick={onOpenPrintModal}
@@ -152,8 +150,8 @@ export default function KwitansiHeader({
         >
           <Printer className='w-3.5 h-3.5' />
           {selectedCount > 0
-            ? `Cetak Kwitansi (${selectedCount} Terpilih)`
-            : 'Cetak Tanda Terima'}
+            ? `Cetak DPMP (${selectedCount} Terpilih)`
+            : 'Cetak Lembar DPMP'}
         </Button>
       </div>
     </div>
