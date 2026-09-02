@@ -189,7 +189,19 @@ export default function RuanganCardGrid({
       </div>
 
       {/* 2. Ruangan Cards Grid */}
-      {filteredRuanganGroups.length > 0 ? (
+      {patients.length === 0 ? (
+        <div className='rounded-2xl border border-dashed border-border bg-card/60 p-12 text-center text-muted-foreground shadow-2xs'>
+          <div className='flex flex-col items-center justify-center space-y-2'>
+            <Building className='w-10 h-10 text-muted-foreground/40' />
+            <p className='font-bold text-sm text-foreground'>
+              Tidak Ada Data Pasien untuk Jadwal Ini
+            </p>
+            <p className='text-xs text-muted-foreground max-w-sm'>
+              Belum ada snapshot batch atau data pasien pada tanggal dan waktu makan yang dipilih. Silakan pilih tanggal atau jadwal makan lain.
+            </p>
+          </div>
+        </div>
+      ) : filteredRuanganGroups.length > 0 ? (
         <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4'>
           {filteredRuanganGroups.map((group) => {
             const primaryKelas = group.kelasList[0] || 'Umum';
@@ -226,61 +238,55 @@ export default function RuanganCardGrid({
 
                     <Badge
                       variant='outline'
-                      className={`text-[10px] px-2 py-0.5 rounded-md shrink-0 ${badgeStyle}`}
+                      className={`text-[10px] px-2 py-0.5 shrink-0 ${badgeStyle}`}
                     >
                       {primaryKelas}
                     </Badge>
                   </div>
 
-                  {/* Big Metric: Total Patients */}
-                  <div className='p-3.5 rounded-xl bg-muted/40 border border-border/40 flex items-baseline justify-between'>
-                    <div>
-                      <span className='text-xs text-muted-foreground font-medium block'>
-                        Total Pasien
-                      </span>
-                      <div className='flex items-baseline gap-1.5 pt-0.5'>
-                        <span className='text-2xl font-extrabold text-foreground tracking-tight'>
-                          {group.totalPasien}
-                        </span>
-                        <span className='text-xs text-muted-foreground font-medium'>
-                          Orang
-                        </span>
-                      </div>
+                  {/* Patient Count & Status Badges */}
+                  <div className='grid grid-cols-3 gap-2 text-center pt-1'>
+                    <div className='bg-muted/40 rounded-xl p-2 border border-border/50'>
+                      <p className='text-[10px] text-muted-foreground uppercase font-bold tracking-wider'>
+                        Total
+                      </p>
+                      <p className='text-sm sm:text-base font-extrabold text-foreground'>
+                        {group.totalPasien}
+                      </p>
                     </div>
 
-                    {/* Status Breakdown Chips */}
-                    <div className='flex flex-col items-end gap-1'>
-                      <span className='inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'>
-                        <Utensils className='w-3 h-3' /> {group.activeCount}{' '}
+                    <div className='bg-emerald-500/10 dark:bg-emerald-950/30 rounded-xl p-2 border border-emerald-500/20'>
+                      <p className='text-[10px] text-emerald-700 dark:text-emerald-400 uppercase font-bold tracking-wider'>
                         Makan
-                      </span>
-                      {group.npoCount > 0 && (
-                        <span className='inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-800 dark:text-amber-300'>
-                          <Ban className='w-3 h-3' /> {group.npoCount} Puasa
-                        </span>
-                      )}
-                      {group.emergentCount > 0 && (
-                        <span className='inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-800 dark:text-rose-300'>
-                          <AlertCircle className='w-3 h-3' />{' '}
-                          {group.emergentCount} Cito
-                        </span>
-                      )}
+                      </p>
+                      <p className='text-sm sm:text-base font-extrabold text-emerald-700 dark:text-emerald-400'>
+                        {group.activeCount}
+                      </p>
+                    </div>
+
+                    <div className='bg-amber-500/10 dark:bg-amber-950/30 rounded-xl p-2 border border-amber-500/20'>
+                      <p className='text-[10px] text-amber-700 dark:text-amber-400 uppercase font-bold tracking-wider'>
+                        Puasa
+                      </p>
+                      <p className='text-sm sm:text-base font-extrabold text-amber-700 dark:text-amber-400'>
+                        {group.npoCount}
+                      </p>
                     </div>
                   </div>
 
-                  {/* Kamar Preview Pills */}
+                  {/* Kamar tags Preview */}
                   {group.kamarList.length > 0 && (
-                    <div className='flex flex-wrap gap-1'>
+                    <div className='flex flex-wrap gap-1 pt-1'>
                       {group.kamarList.slice(0, 3).map((k) => (
                         <span
                           key={k}
-                          className='text-[10px] px-2 py-0.5 rounded-md bg-secondary text-secondary-foreground font-mono'
+                          className='text-[10px] bg-muted px-2 py-0.5 rounded-md text-muted-foreground font-medium'
                         >
                           {k}
                         </span>
                       ))}
                       {group.kamarList.length > 3 && (
-                        <span className='text-[10px] px-1.5 py-0.5 rounded-md bg-muted text-muted-foreground font-mono'>
+                        <span className='text-[10px] bg-muted/60 px-1.5 py-0.5 rounded-md text-muted-foreground font-semibold'>
                           +{group.kamarList.length - 3} lainnya
                         </span>
                       )}
@@ -289,23 +295,21 @@ export default function RuanganCardGrid({
                 </CardContent>
 
                 {/* Card Footer Actions */}
-                <div className='p-3.5 bg-muted/20 border-t flex items-center justify-between gap-2'>
+                <div className='px-5 py-3 border-t border-border/80 bg-muted/20 flex items-center justify-between gap-2'>
                   <Button
-                    type='button'
                     variant='ghost'
                     size='sm'
                     onClick={(e) => {
                       e.stopPropagation();
                       onOpenRuanganModal(group.ruanganName, group.patientList);
                     }}
-                    className='text-xs h-8 gap-1.5 text-primary hover:text-primary hover:bg-primary/10 font-semibold cursor-pointer rounded-xl flex-1 justify-center'
+                    className='text-xs h-8 px-2 gap-1.5 text-muted-foreground hover:text-foreground font-semibold cursor-pointer'
                   >
                     <Eye className='w-3.5 h-3.5' />
                     Lihat Pasien
                   </Button>
 
                   <Button
-                    type='button'
                     variant='outline'
                     size='sm'
                     onClick={(e) => {

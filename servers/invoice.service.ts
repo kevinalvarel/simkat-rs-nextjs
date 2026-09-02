@@ -1,6 +1,6 @@
 'use server';
 
-import { eq, desc, and, ne, asc } from 'drizzle-orm';
+import { eq, desc, and, ne, asc, gte, lte } from 'drizzle-orm';
 import { db } from '@/drizzle';
 import { snapshotBatchTable } from '@/db/schemas/snapshot/snapshot-batch';
 import { snapshotDetailTable } from '@/db/schemas/snapshot/snapshot-detail';
@@ -79,30 +79,59 @@ export async function getAvailableInvoiceDates(): Promise<string[]> {
  */
 export async function getInvoiceDailyData(
   targetDateStr?: string,
+  endDateStr?: string,
 ): Promise<InvoiceDailySummary> {
   try {
     const todayStr = new Date().toISOString().slice(0, 10);
     const selectedDate = targetDateStr || todayStr;
     const availableDates = await getAvailableInvoiceDates();
 
-    const dateObj = new Date(selectedDate);
-    const tanggalFormatted = !isNaN(dateObj.getTime())
-      ? dateObj.toLocaleDateString('id-ID', {
-          weekday: 'long',
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric',
-        })
+    const isRange = Boolean(endDateStr && endDateStr !== selectedDate);
+    const start = isRange
+      ? selectedDate < endDateStr!
+        ? selectedDate
+        : endDateStr!
+      : selectedDate;
+    const end = isRange
+      ? selectedDate < endDateStr!
+        ? endDateStr!
+        : selectedDate
       : selectedDate;
 
-    const dateCode = selectedDate.replace(/-/g, '');
-    const invoiceNumber = `REKAP/GZ-RS/${dateCode}/001`;
+    const startDateObj = new Date(start);
+    const endDateObj = new Date(end);
+    const diffDays =
+      Math.round(
+        (endDateObj.getTime() - startDateObj.getTime()) /
+          (1000 * 60 * 60 * 24),
+      ) + 1;
+    const totalDays = isRange ? Math.max(1, diffDays) : 1;
 
-    // 1. Check if locked batches exist for this date
-    const dateBatches = await db
-      .select()
-      .from(snapshotBatchTable)
-      .where(eq(snapshotBatchTable.tanggal_produksi, selectedDate));
+    const formatIndo = (dStr: string) => {
+      const d = new Date(dStr);
+      return !isNaN(d.getTime())
+        ? d.toLocaleDateString('id-ID', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+          })
+        : dStr;
+    };
+
+    const tanggalFormatted = isRange
+      ? `${formatIndo(start)} – ${formatIndo(end)} (${totalDays} Hari)`
+      : !isNaN(startDateObj.getTime())
+        ? startDateObj.toLocaleDateString('id-ID', {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+          })
+        : selectedDate;
+
+    const invoiceNumber = isRange
+      ? `REKAP/GZ-RS/PERIODE/${start.replace(/-/g, '')}-${end.replace(/-/g, '')}/001`
+      : `REKAP/GZ-RS/${selectedDate.replace(/-/g, '')}/001`;
 
     // Data structures for aggregation
     const classMap = new Map<
@@ -134,16 +163,49 @@ export async function getInvoiceDailyData(
 
     let isOfficialLocked = false;
 
-    if (dateBatches && dateBatches.length > 0) {
-      // ─── Case A: Locked snapshot batches exist for this date ───────────
-      isOfficialLocked = true;
+    if (isRange) {
+      // ─── Case A: Date Range Query across multiple dates ──────────────
+      const rangeBatches = await db
+        .select()
+        .from(snapshotBatchTable)
+        .where(
+          and(
+            gte(snapshotBatchTable.tanggal_produksi, start),
+            lte(snapshotBatchTable.tanggal_produksi, end),
+          ),
+        )
+        .orderBy(asc(snapshotBatchTable.tanggal_produksi));
 
-      for (const batch of dateBatches) {
-        const waktu = (batch.waktu_makan || 'PAGI').toUpperCase();
+      if (rangeBatches && rangeBatches.length > 0) {
+        isOfficialLocked = true;
+
         const details = await db
-          .select()
+          .select({
+            batch_id: snapshotDetailTable.batch_id,
+            waktu_makan: snapshotBatchTable.waktu_makan,
+            tanggal_produksi: snapshotBatchTable.tanggal_produksi,
+            kelas: snapshotDetailTable.kelas,
+            no_rm: snapshotDetailTable.no_rm,
+            nama_pasien: snapshotDetailTable.nama_pasien,
+            status_saat_snapshot: snapshotDetailTable.status_saat_snapshot,
+            diet_rs_raw: snapshotDetailTable.diet_rs_raw,
+            bentuk_makanan: snapshotDetailTable.bentuk_makanan,
+            kategori_diet: snapshotDetailTable.kategori_diet,
+            extra: snapshotDetailTable.extra,
+            buah: snapshotDetailTable.buah,
+            snack: snapshotDetailTable.snack,
+          })
           .from(snapshotDetailTable)
-          .where(eq(snapshotDetailTable.batch_id, batch.id));
+          .innerJoin(
+            snapshotBatchTable,
+            eq(snapshotDetailTable.batch_id, snapshotBatchTable.id),
+          )
+          .where(
+            and(
+              gte(snapshotBatchTable.tanggal_produksi, start),
+              lte(snapshotBatchTable.tanggal_produksi, end),
+            ),
+          );
 
         for (const d of details) {
           const isNpo =
@@ -151,20 +213,21 @@ export async function getInvoiceDailyData(
             (d.diet_rs_raw || '').toLowerCase() === 'npo' ||
             (d.diet_rs_raw || '').toLowerCase() === 'puasa';
 
+          const waktu = (d.waktu_makan || 'PAGI').toUpperCase();
           const entry = getOrCreateClassEntry(d.kelas);
-          entry.pasienSet.add(d.no_rm || d.nama_pasien);
+          // In range mode, patient-days count = distinct patient per day
+          const patientDayKey = `${d.tanggal_produksi}_${d.no_rm || d.nama_pasien}`;
+          entry.pasienSet.add(patientDayKey);
 
           if (!isNpo) {
             if (waktu === 'PAGI') entry.pagi++;
             else if (waktu === 'SIANG') entry.siang++;
             else if (waktu === 'MALAM' || waktu === 'SORE') entry.malam++;
 
-            // Count extras if present
             if (d.extra?.trim() || d.buah?.trim() || d.snack?.trim()) {
               entry.extra++;
             }
 
-            // Diet breakdown tag
             const bentuk = d.bentuk_makanan || 'Biasa';
             const kategori = d.kategori_diet || 'Standar';
             const dietKey = `${bentuk} - ${kategori}`;
@@ -173,90 +236,135 @@ export async function getInvoiceDailyData(
         }
       }
     } else {
-      // ─── Case B: Live preview from active patients for today ──────────
-      isOfficialLocked = false;
+      // ─── Case B: Single Date Query ───────────────────────────────────
+      const dateBatches = await db
+        .select()
+        .from(snapshotBatchTable)
+        .where(eq(snapshotBatchTable.tanggal_produksi, selectedDate));
 
-      // Pending revisions
-      const pendingRevisions = await db
-        .select({
-          pasien_id: otorisasiPerubahanDietTable.pasien_id,
-          jenis_perubahan: otorisasiPerubahanDietTable.jenis_perubahan,
-        })
-        .from(otorisasiPerubahanDietTable)
-        .where(eq(otorisasiPerubahanDietTable.status, 'PENDING'));
+      if (dateBatches && dateBatches.length > 0) {
+        isOfficialLocked = true;
 
-      const pendingNewPatientIds = new Set(
-        pendingRevisions
-          .filter((r) => r.jenis_perubahan === 'NEW_PATIENT')
-          .map((r) => r.pasien_id),
-      );
+        for (const batch of dateBatches) {
+          const waktu = (batch.waktu_makan || 'PAGI').toUpperCase();
+          const details = await db
+            .select()
+            .from(snapshotDetailTable)
+            .where(eq(snapshotDetailTable.batch_id, batch.id));
 
-      const allPatients = await db
-        .select({
-          id: pasienTable.id,
-          nama_pasien: pasienTable.nama_pasien,
-          no_rm: pasienTable.no_rm,
-          diet: pasienTable.diet,
-          kelas: pasienTable.kelas,
-          is_npo: pasienTable.is_npo,
-          status_pasien: pasienTable.status_pasien,
-        })
-        .from(pasienTable)
-        .where(
-          and(
-            ne(pasienTable.status_pasien, 'PULANG'),
-            ne(pasienTable.status_pasien, 'PENDING_REVISI'),
-          ),
+          for (const d of details) {
+            const isNpo =
+              d.status_saat_snapshot === 'NPO' ||
+              (d.diet_rs_raw || '').toLowerCase() === 'npo' ||
+              (d.diet_rs_raw || '').toLowerCase() === 'puasa';
+
+            const entry = getOrCreateClassEntry(d.kelas);
+            entry.pasienSet.add(d.no_rm || d.nama_pasien);
+
+            if (!isNpo) {
+              if (waktu === 'PAGI') entry.pagi++;
+              else if (waktu === 'SIANG') entry.siang++;
+              else if (waktu === 'MALAM' || waktu === 'SORE') entry.malam++;
+
+              // Count extras if present
+              if (d.extra?.trim() || d.buah?.trim() || d.snack?.trim()) {
+                entry.extra++;
+              }
+
+              // Diet breakdown tag
+              const bentuk = d.bentuk_makanan || 'Biasa';
+              const kategori = d.kategori_diet || 'Standar';
+              const dietKey = `${bentuk} - ${kategori}`;
+              entry.dietMap.set(dietKey, (entry.dietMap.get(dietKey) || 0) + 1);
+            }
+          }
+        }
+      } else {
+        // ─── Case C: Live preview from active patients for today ──────────
+        isOfficialLocked = false;
+
+        // Pending revisions
+        const pendingRevisions = await db
+          .select({
+            pasien_id: otorisasiPerubahanDietTable.pasien_id,
+            jenis_perubahan: otorisasiPerubahanDietTable.jenis_perubahan,
+          })
+          .from(otorisasiPerubahanDietTable)
+          .where(eq(otorisasiPerubahanDietTable.status, 'PENDING'));
+
+        const pendingNewPatientIds = new Set(
+          pendingRevisions
+            .filter((r) => r.jenis_perubahan === 'NEW_PATIENT')
+            .map((r) => r.pasien_id),
         );
 
-      const activePatients = allPatients.filter(
-        (p) => !pendingNewPatientIds.has(p.id),
-      );
+        const allPatients = await db
+          .select({
+            id: pasienTable.id,
+            nama_pasien: pasienTable.nama_pasien,
+            no_rm: pasienTable.no_rm,
+            diet: pasienTable.diet,
+            kelas: pasienTable.kelas,
+            is_npo: pasienTable.is_npo,
+            status_pasien: pasienTable.status_pasien,
+          })
+          .from(pasienTable)
+          .where(
+            and(
+              ne(pasienTable.status_pasien, 'PULANG'),
+              ne(pasienTable.status_pasien, 'PENDING_REVISI'),
+            ),
+          );
 
-      // Fetch master diet mappings
-      const masterMappings = await db
-        .select()
-        .from(dietMappingTable)
-        .where(eq(dietMappingTable.is_active, true));
+        const activePatients = allPatients.filter(
+          (p) => !pendingNewPatientIds.has(p.id),
+        );
 
-      const mappingByRaw = new Map<
-        string,
-        typeof dietMappingTable.$inferSelect
-      >();
-      for (const m of masterMappings) {
-        mappingByRaw.set(m.diet_rs_raw.trim().toLowerCase(), m);
-      }
+        // Fetch master diet mappings
+        const masterMappings = await db
+          .select()
+          .from(dietMappingTable)
+          .where(eq(dietMappingTable.is_active, true));
 
-      for (const p of activePatients) {
-        const rawDiet = (p.diet || '').trim();
-        const isNpo =
-          p.is_npo ||
-          p.status_pasien === 'NPO' ||
-          rawDiet.toLowerCase() === 'npo' ||
-          rawDiet.toLowerCase() === 'puasa';
+        const mappingByRaw = new Map<
+          string,
+          typeof dietMappingTable.$inferSelect
+        >();
+        for (const m of masterMappings) {
+          mappingByRaw.set(m.diet_rs_raw.trim().toLowerCase(), m);
+        }
 
-        const entry = getOrCreateClassEntry(p.kelas);
-        entry.pasienSet.add(p.no_rm || p.nama_pasien);
+        for (const p of activePatients) {
+          const rawDiet = (p.diet || '').trim();
+          const isNpo =
+            p.is_npo ||
+            p.status_pasien === 'NPO' ||
+            rawDiet.toLowerCase() === 'npo' ||
+            rawDiet.toLowerCase() === 'puasa';
 
-        if (!isNpo) {
-          // Standard full day consumption: 3 meals (Pagi, Siang, Malam)
-          entry.pagi++;
-          entry.siang++;
-          entry.malam++;
+          const entry = getOrCreateClassEntry(p.kelas);
+          entry.pasienSet.add(p.no_rm || p.nama_pasien);
 
-          const mapped = mappingByRaw.get(rawDiet.toLowerCase());
-          if (
-            mapped?.extra?.trim() ||
-            mapped?.buah?.trim() ||
-            mapped?.snack?.trim()
-          ) {
-            entry.extra += 1;
+          if (!isNpo) {
+            // Standard full day consumption: 3 meals (Pagi, Siang, Malam)
+            entry.pagi++;
+            entry.siang++;
+            entry.malam++;
+
+            const mapped = mappingByRaw.get(rawDiet.toLowerCase());
+            if (
+              mapped?.extra?.trim() ||
+              mapped?.buah?.trim() ||
+              mapped?.snack?.trim()
+            ) {
+              entry.extra += 1;
+            }
+
+            const bentuk = mapped?.bentuk_makanan || 'Biasa';
+            const kategori = mapped?.kategori_diet || 'Standar';
+            const dietKey = `${bentuk} - ${kategori}`;
+            entry.dietMap.set(dietKey, (entry.dietMap.get(dietKey) || 0) + 1);
           }
-
-          const bentuk = mapped?.bentuk_makanan || 'Biasa';
-          const kategori = mapped?.kategori_diet || 'Standar';
-          const dietKey = `${bentuk} - ${kategori}`;
-          entry.dietMap.set(dietKey, (entry.dietMap.get(dietKey) || 0) + 1);
         }
       }
     }
@@ -332,7 +440,7 @@ export async function getInvoiceDailyData(
     }
 
     return {
-      tanggal: selectedDate,
+      tanggal: isRange ? `${start} s/d ${end}` : selectedDate,
       tanggalFormatted,
       invoiceNumber,
       hospitalName: 'RSUD dr Slamet Garut',
@@ -349,6 +457,11 @@ export async function getInvoiceDailyData(
 
       classes,
       lastUpdated: new Date().toLocaleTimeString('id-ID'),
+
+      isRange,
+      startDate: start,
+      endDate: end,
+      totalDays,
     };
   } catch (error) {
     console.error('Error fetching invoice daily data:', error);

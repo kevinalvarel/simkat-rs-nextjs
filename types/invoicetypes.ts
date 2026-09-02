@@ -34,6 +34,22 @@ export interface InvoiceDailySummary {
 
   classes: InvoiceClassConsumption[];
   lastUpdated: string;
+
+  // Range metadata
+  isRange?: boolean;
+  startDate?: string;
+  endDate?: string;
+  totalDays?: number;
+  dailyBreakdown?: Array<{
+    tanggal: string;
+    tanggalFormatted: string;
+    totalPasien: number;
+    totalPorsi: number;
+    pagi: number;
+    siang: number;
+    malam: number;
+    extra: number;
+  }>;
 }
 
 export interface InvoicePageProps {

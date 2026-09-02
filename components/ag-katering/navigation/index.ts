@@ -8,11 +8,11 @@ export const routeDataProduksi = {
       title: 'Dashboard',
       items: [
         {
-          title: 'Produksi',
+          title: 'Live Produksi',
           url: '/dashboard/ag-katering/overview/produksi',
         },
         {
-          title: 'Pemorsian',
+          title: 'Live Pemorsian',
           url: '/dashboard/ag-katering/overview/pemorsian',
         },
       ],
@@ -34,7 +34,11 @@ export const routeDataProduksi = {
           url: '/dashboard/ag-katering/mapping-diet',
         },
         {
-          title: 'Invoice',
+          title: 'Cetak Etiket',
+          url: '/dashboard/ag-katering/cetak-etiket',
+        },
+        {
+          title: 'Cetak Invoice',
           url: '/dashboard/ag-katering/invoice',
         },
         {
@@ -61,11 +65,11 @@ export const routeDataSupervisor = {
       title: 'Dashboard',
       items: [
         {
-          title: 'Produksi',
+          title: 'Live Produksi',
           url: '/dashboard/ag-katering/overview/produksi',
         },
         {
-          title: 'Pemorsian',
+          title: 'Live Pemorsian',
           url: '/dashboard/ag-katering/overview/pemorsian',
         },
       ],
@@ -86,6 +90,18 @@ export const routeDataSupervisor = {
           title: 'Mapping Diet Pasien',
           url: '/dashboard/ag-katering/mapping-diet',
         },
+        {
+          title: 'Cetak Etiket',
+          url: '/dashboard/ag-katering/cetak-etiket',
+        },
+        {
+          title: 'Cetak Invoice',
+          url: '/dashboard/ag-katering/invoice',
+        },
+        {
+          title: 'Cetak DPMP',
+          url: '/dashboard/ag-katering/cetak-dpmp',
+        },
       ],
     },
     {
@@ -94,14 +110,6 @@ export const routeDataSupervisor = {
         {
           title: 'Tabulasi Rekapitulasi',
           url: '/dashboard/ag-katering/tabulasi',
-        },
-        {
-          title: 'Invoice',
-          url: '/dashboard/ag-katering/invoice',
-        },
-        {
-          title: 'Cetak DPMP',
-          url: '/dashboard/ag-katering/cetak-dpmp',
         },
       ],
     },

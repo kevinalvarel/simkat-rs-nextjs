@@ -17,22 +17,30 @@ interface InvoiceStatsCardsProps {
 }
 
 export default function InvoiceStatsCards({ data }: InvoiceStatsCardsProps) {
+  const isRange = Boolean(data.isRange);
+
   const cards = [
     {
-      title: 'Total Pasien Terlayani',
+      title: isRange ? 'Total Pasien-Hari' : 'Total Pasien Terlayani',
       value: data.grandTotalPasien,
-      unit: 'Pasien',
-      description: 'Pasien rawat inap aktif',
+      unit: isRange ? 'Pasien-Hari' : 'Pasien',
+      description: isRange
+        ? 'Akumulasi pasien terlayani periode ini'
+        : 'Pasien rawat inap aktif',
       icon: Users,
       iconColor: 'text-blue-600 dark:text-blue-400',
       bgIcon: 'bg-blue-500/10 dark:bg-blue-950/40',
       borderColor: 'border-blue-500/20',
     },
     {
-      title: 'Total Porsi Harian',
+      title: isRange
+        ? `Total Porsi (${data.totalDays || 1} Hari)`
+        : 'Total Porsi Harian',
       value: data.grandTotalPorsi,
       unit: 'Porsi',
-      description: 'Akumulasi seluruh waktu makan',
+      description: isRange
+        ? `Akumulasi porsi periode ${data.tanggalFormatted}`
+        : 'Akumulasi seluruh waktu makan',
       icon: UtensilsCrossed,
       iconColor: 'text-emerald-600 dark:text-emerald-400',
       bgIcon: 'bg-emerald-500/10 dark:bg-emerald-950/40',

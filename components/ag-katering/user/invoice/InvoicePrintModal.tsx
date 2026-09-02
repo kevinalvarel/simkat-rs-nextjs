@@ -28,9 +28,13 @@ export default function InvoicePrintModal({
 }: InvoicePrintModalProps) {
   const printRef = useRef<HTMLDivElement>(null);
 
+  const isRange = Boolean(data.isRange);
+
   const handlePrint = useReactToPrint({
     contentRef: printRef,
-    documentTitle: `Rekap_Konsumsi_Makanan_Harian_${data.tanggal}`,
+    documentTitle: isRange
+      ? `Rekap_Konsumsi_Makanan_Periode_${data.startDate}_sd_${data.endDate}`
+      : `Rekap_Konsumsi_Makanan_Harian_${data.tanggal}`,
     pageStyle: `
       @page {
         size: A4 portrait;
@@ -68,11 +72,13 @@ export default function InvoicePrintModal({
             <div className='space-y-1 text-left'>
               <DialogTitle className='text-base sm:text-lg font-bold text-foreground flex items-center gap-2'>
                 <Printer className='w-5 h-5 text-primary' />
-                Cetak Dokumen Rekap Konsumsi Makanan Harian per Kelas
+                Cetak Dokumen Rekap Konsumsi Makanan{' '}
+                {isRange ? 'Periode' : 'Harian'} per Kelas
               </DialogTitle>
               <DialogDescription className='text-xs text-muted-foreground'>
-                Pratinjau lembar rekapitulasi resmi konsumsi makanan pasien
-                untuk verifikasi katering.
+                {isRange
+                  ? `Pratinjau lembar rekapitulasi konsumsi pasien periode ${data.tanggalFormatted} untuk verifikasi tagihan katering.`
+                  : 'Pratinjau lembar rekapitulasi resmi konsumsi makanan pasien untuk verifikasi katering.'}
               </DialogDescription>
             </div>
           </div>
@@ -127,7 +133,9 @@ export default function InvoicePrintModal({
             {/* 2. Document Title & Metadata */}
             <div className='text-center space-y-1 pt-1'>
               <h1 className='text-sm font-bold uppercase underline tracking-wider'>
-                BERITA ACARA REKAPITULASI KONSUMSI MAKANAN HARIAN PER KELAS
+                {isRange
+                  ? 'BERITA ACARA REKAPITULASI KONSUMSI MAKANAN PERIODE PER KELAS'
+                  : 'BERITA ACARA REKAPITULASI KONSUMSI MAKANAN HARIAN PER KELAS'}
               </h1>
               <p className='text-xs text-gray-600 font-mono'>
                 No: {data.invoiceNumber}
@@ -141,12 +149,20 @@ export default function InvoicePrintModal({
                   <tbody>
                     <tr>
                       <td className='w-28 text-gray-600 py-0.5'>
-                        Hari / Tanggal
+                        {isRange ? 'Periode Tanggal' : 'Hari / Tanggal'}
                       </td>
                       <td className='font-bold py-0.5'>
                         : {data.tanggalFormatted}
                       </td>
                     </tr>
+                    {isRange && (
+                      <tr>
+                        <td className='text-gray-600 py-0.5'>Jumlah Hari</td>
+                        <td className='font-semibold py-0.5'>
+                          : {data.totalDays} Hari Kalender
+                        </td>
+                      </tr>
+                    )}
                     <tr>
                       <td className='text-gray-600 py-0.5'>Unit Layanan</td>
                       <td className='font-semibold py-0.5'>
@@ -184,7 +200,9 @@ export default function InvoicePrintModal({
             {/* 4. Main Consumption Table per Class */}
             <div className='space-y-2'>
               <h4 className='text-xs font-bold uppercase tracking-wide text-gray-800'>
-                I. Tabel Rekapitulasi Jumlah Porsi per Kelas Perawatan
+                {isRange
+                  ? 'I. Tabel Rekapitulasi Jumlah Porsi Periode per Kelas Perawatan'
+                  : 'I. Tabel Rekapitulasi Jumlah Porsi per Kelas Perawatan'}
               </h4>
               <table className='w-full text-xs border-collapse border border-black text-center'>
                 <thead>
@@ -193,7 +211,9 @@ export default function InvoicePrintModal({
                     <th className='border border-black p-2 text-left'>
                       Kelas Perawatan
                     </th>
-                    <th className='border border-black p-2 w-20'>Pasien</th>
+                    <th className='border border-black p-2 w-24'>
+                      {isRange ? 'Pasien-Hari' : 'Pasien'}
+                    </th>
                     <th className='border border-black p-2 w-20'>Pagi</th>
                     <th className='border border-black p-2 w-20'>Siang</th>
                     <th className='border border-black p-2 w-20'>Malam</th>
@@ -265,13 +285,29 @@ export default function InvoicePrintModal({
             <div className='p-3 bg-gray-50 border border-gray-300 rounded text-xs space-y-1'>
               <p>
                 <strong>Catatan Verifikasi:</strong> Total keseluruhan porsi
-                makan pasien yang diproduksi dan didistribusikan pada tanggal{' '}
-                <strong>{data.tanggalFormatted}</strong> adalah sebanyak{' '}
-                <strong className='underline'>
-                  {data.grandTotalPorsi} Porsi
-                </strong>{' '}
-                untuk <strong>{data.grandTotalPasien} Pasien</strong> rawat
-                inap.
+                makan pasien yang diproduksi dan didistribusikan{' '}
+                {isRange ? (
+                  <>
+                    selama periode <strong>{data.tanggalFormatted}</strong>{' '}
+                    adalah sebanyak{' '}
+                    <strong className='underline'>
+                      {data.grandTotalPorsi} Porsi
+                    </strong>{' '}
+                    untuk akumulasi{' '}
+                    <strong>{data.grandTotalPasien} Pasien-Hari</strong> rawat
+                    inap.
+                  </>
+                ) : (
+                  <>
+                    pada tanggal <strong>{data.tanggalFormatted}</strong> adalah
+                    sebanyak{' '}
+                    <strong className='underline'>
+                      {data.grandTotalPorsi} Porsi
+                    </strong>{' '}
+                    untuk <strong>{data.grandTotalPasien} Pasien</strong> rawat
+                    inap.
+                  </>
+                )}
               </p>
             </div>
 

@@ -48,8 +48,16 @@ export default function InvoiceClassTable({ data }: InvoiceClassTableProps) {
           <div className='flex items-center gap-2 flex-wrap'>
             <h3 className='text-sm sm:text-base font-bold tracking-tight text-foreground flex items-center gap-2'>
               <Layers className='w-4 h-4 text-primary' />
-              Tabel Konsumsi Makanan Harian per Kelas
+              Tabel Konsumsi Makanan {data.isRange ? 'Periode' : 'Harian'} per Kelas
             </h3>
+            {data.isRange && (
+              <Badge
+                variant='outline'
+                className='text-[10px] font-bold px-2 py-0.5 bg-primary/10 text-primary border-primary/30'
+              >
+                Rentang: {data.totalDays} Hari
+              </Badge>
+            )}
             <Badge
               variant='outline'
               className={`text-[10px] font-bold px-2 py-0.5 ${
@@ -64,7 +72,8 @@ export default function InvoiceClassTable({ data }: InvoiceClassTableProps) {
             </Badge>
           </div>
           <p className='text-xs text-muted-foreground'>
-            Rekapitulasi total keseluruhan porsi makan pasien yang dipisahkan berdasarkan kelas perawatan untuk tanggal{' '}
+            Rekapitulasi total keseluruhan porsi makan pasien yang dipisahkan berdasarkan kelas perawatan untuk{' '}
+            {data.isRange ? 'periode ' : 'tanggal '}
             <strong className='text-foreground'>{data.tanggalFormatted}</strong>.
           </p>
         </div>
@@ -81,9 +90,9 @@ export default function InvoiceClassTable({ data }: InvoiceClassTableProps) {
               <TableHead className='min-w-[150px] text-xs font-semibold'>
                 Kelas Perawatan
               </TableHead>
-              <TableHead className='w-[120px] text-center text-xs font-semibold'>
+              <TableHead className='w-[130px] text-center text-xs font-semibold'>
                 <span className='flex items-center justify-center gap-1'>
-                  <Users className='w-3.5 h-3.5' /> Pasien
+                  <Users className='w-3.5 h-3.5' /> {data.isRange ? 'Pasien-Hari' : 'Pasien'}
                 </span>
               </TableHead>
               <TableHead className='w-[100px] text-center text-xs font-semibold'>
@@ -98,8 +107,8 @@ export default function InvoiceClassTable({ data }: InvoiceClassTableProps) {
               <TableHead className='w-[100px] text-center text-xs font-semibold'>
                 Extra / Snack
               </TableHead>
-              <TableHead className='w-[130px] text-center text-xs font-bold text-foreground bg-primary/5'>
-                Total Porsi
+              <TableHead className='w-[140px] text-center text-xs font-bold text-foreground bg-primary/5'>
+                {data.isRange ? 'Total Porsi Periode' : 'Total Porsi'}
               </TableHead>
               <TableHead className='w-[90px] text-center text-xs font-semibold'>
                 Rincian
@@ -232,14 +241,14 @@ export default function InvoiceClassTable({ data }: InvoiceClassTableProps) {
             {/* Grand Total Summary Row */}
             <TableRow className='bg-muted/80 font-bold border-t-2 border-primary/30'>
               <TableCell colSpan={2} className='py-4 text-xs font-extrabold uppercase tracking-wider text-foreground text-left pl-4'>
-                TOTAL KESELURUHAN KONSUMSI
+                TOTAL KESELURUHAN KONSUMSI {data.isRange ? `(${data.totalDays} HARI)` : ''}
               </TableCell>
               <TableCell className='text-center py-4'>
                 <span className='font-mono font-extrabold text-sm text-foreground'>
                   {data.grandTotalPasien}
                 </span>
                 <span className='text-[11px] text-muted-foreground ml-1'>
-                  org
+                  {data.isRange ? 'pasien-hari' : 'org'}
                 </span>
               </TableCell>
               <TableCell className='text-center py-4 font-mono font-extrabold text-sm text-foreground'>

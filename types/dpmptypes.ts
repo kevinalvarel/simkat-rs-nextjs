@@ -32,6 +32,11 @@ export interface DpmpSummaryData {
   tanggalFormatted: string;
   waktuMakanFormatted: string;
   lastUpdated: string;
+  selectedDate?: string;
+  selectedWaktu?: 'PAGI' | 'SIANG' | 'MALAM';
+  availableDates?: string[];
+  existingWaktuForDate?: string[];
+  currentLiveWaktu?: 'PAGI' | 'SIANG' | 'MALAM';
 }
 
 export interface DpmpPageProps {

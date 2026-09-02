@@ -20,11 +20,14 @@ import {
 import type { InvoiceDailySummary } from '@/types/invoicetypes';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
+import InvoiceDateRangePicker, {
+  type DateRangeValue,
+} from './InvoiceDateRangePicker';
 
 interface InvoiceHeaderProps {
   data: InvoiceDailySummary;
-  selectedDate: string;
-  onDateChange: (date: string) => void;
+  dateRange: DateRangeValue;
+  onDateRangeChange: (range: DateRangeValue) => void;
   onOpenPrintModal: () => void;
   isRefreshing: boolean;
   onRefresh: () => void;
@@ -32,51 +35,61 @@ interface InvoiceHeaderProps {
 
 export default function InvoiceHeader({
   data,
-  selectedDate,
-  onDateChange,
+  dateRange,
+  onDateRangeChange,
   onOpenPrintModal,
   isRefreshing,
   onRefresh,
 }: InvoiceHeaderProps) {
+  const isRange = Boolean(data.isRange);
+
   // Export Excel function using XLSX
   function handleExportExcel() {
     try {
       const rows = data.classes.map((c, idx) => ({
         No: idx + 1,
         'Kelas Perawatan': c.kelas,
-        'Pasien Terlayani': c.totalPasien,
+        [isRange ? 'Pasien Terlayani (Hari)' : 'Pasien Terlayani']:
+          c.totalPasien,
         'Makan Pagi (Porsi)': c.pagiCount,
         'Makan Siang (Porsi)': c.siangCount,
         'Makan Malam (Porsi)': c.malamCount,
         'Extra / Snack (Porsi)': c.extraCount,
-        'Total Porsi Harian': c.totalPorsi,
+        [isRange ? 'Total Porsi Periode' : 'Total Porsi Harian']: c.totalPorsi,
       }));
 
       // Append Total Row
       rows.push({
         No: 'TOTAL' as any,
         'Kelas Perawatan': 'TOTAL KESELURUHAN',
-        'Pasien Terlayani': data.grandTotalPasien,
+        [isRange ? 'Pasien Terlayani (Hari)' : 'Pasien Terlayani']:
+          data.grandTotalPasien,
         'Makan Pagi (Porsi)': data.grandTotalPagi,
         'Makan Siang (Porsi)': data.grandTotalSiang,
         'Makan Malam (Porsi)': data.grandTotalMalam,
         'Extra / Snack (Porsi)': data.grandTotalExtra,
-        'Total Porsi Harian': data.grandTotalPorsi,
+        [isRange ? 'Total Porsi Periode' : 'Total Porsi Harian']:
+          data.grandTotalPorsi,
       });
 
       const worksheet = XLSX.utils.json_to_sheet(rows);
       const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(
-        workbook,
-        worksheet,
-        `Konsumsi_${data.tanggal}`,
-      );
+      const sheetName = isRange
+        ? `Periode_${data.startDate || 'Range'}`.slice(0, 31)
+        : `Konsumsi_${data.tanggal}`.slice(0, 31);
 
-      XLSX.writeFile(
-        workbook,
-        `Rekap_Konsumsi_Makanan_Harian_${data.tanggal}.xlsx`,
+      XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+
+      const fileName = isRange
+        ? `Rekap_Konsumsi_Makanan_Periode_${data.startDate}_sd_${data.endDate}.xlsx`
+        : `Rekap_Konsumsi_Makanan_Harian_${data.tanggal}.xlsx`;
+
+      XLSX.writeFile(workbook, fileName);
+      toast.success(
+        isRange
+          ? 'File Excel rekapitulasi periode berhasil diunduh.'
+          : 'File Excel berhasil diunduh.',
       );
-      toast.success('File Excel berhasil diunduh.');
     } catch (err) {
       console.error('Error exporting Excel:', err);
       toast.error('Gagal mengunduh file Excel.');
@@ -89,7 +102,10 @@ export default function InvoiceHeader({
       <div className='space-y-1.5'>
         <div className='flex items-center gap-2 flex-wrap'>
           <span className='inline-flex items-center gap-1 text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-primary/15 text-primary border border-primary/25'>
-            <Receipt className='w-3 h-3' /> Rekapitulasi Harian
+            <Receipt className='w-3 h-3' />{' '}
+            {isRange
+              ? `Rekapitulasi Periode (${data.totalDays} Hari)`
+              : 'Rekapitulasi Harian'}
           </span>
           <span className='font-mono text-xs text-muted-foreground'>
             {data.invoiceNumber}
@@ -97,26 +113,26 @@ export default function InvoiceHeader({
         </div>
 
         <h1 className='text-xl sm:text-2xl font-bold tracking-tight text-foreground font-sans flex items-center gap-2'>
-          Konsumsi Makanan Harian per Kelas
+          {isRange
+            ? 'Konsumsi Makanan Periode per Kelas'
+            : 'Konsumsi Makanan Harian per Kelas'}
         </h1>
 
         <p className='text-xs sm:text-sm text-muted-foreground'>
-          Laporan rekapitulasi jumlah porsi makan pasien rumah sakit berdasarkan kelas perawatan.
+          {isRange
+            ? `Laporan rekapitulasi jumlah porsi makan pasien rumah sakit periode ${data.tanggalFormatted}.`
+            : 'Laporan rekapitulasi jumlah porsi makan pasien rumah sakit berdasarkan kelas perawatan.'}
         </p>
       </div>
 
       {/* Actions & Filters */}
       <div className='flex flex-wrap items-center gap-2.5 self-start sm:self-auto'>
-        {/* Date Selector */}
-        <div className='flex items-center gap-1.5 bg-background border rounded-xl px-2.5 py-1 shadow-2xs'>
-          <Calendar className='w-3.5 h-3.5 text-muted-foreground shrink-0' />
-          <input
-            type='date'
-            value={selectedDate}
-            onChange={(e) => onDateChange(e.target.value)}
-            className='bg-transparent text-xs font-semibold text-foreground focus:outline-none cursor-pointer'
-          />
-        </div>
+        {/* Shadcn Date Range Picker */}
+        <InvoiceDateRangePicker
+          value={dateRange}
+          onChange={onDateRangeChange}
+          disabled={isRefreshing}
+        />
 
         {/* Refresh button */}
         <Button
@@ -150,7 +166,7 @@ export default function InvoiceHeader({
           className='h-9 px-3.5 text-xs gap-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer shadow-xs font-bold'
         >
           <Printer className='w-3.5 h-3.5' />
-          Cetak Dokumen
+          {isRange ? 'Cetak Periode' : 'Cetak Dokumen'}
         </Button>
       </div>
     </div>

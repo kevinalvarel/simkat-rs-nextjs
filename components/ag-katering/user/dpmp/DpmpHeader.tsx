@@ -9,21 +9,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  FileText,
-  Printer,
-  Download,
-  RefreshCw,
-  Layers,
-} from 'lucide-react';
+import { FileText, Printer, Download, RefreshCw, Layers } from 'lucide-react';
 import type { DpmpSummaryData } from '@/types/dpmptypes';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
+import DpmpDateWaktuPicker, {
+  type WaktuMakanType,
+} from './DpmpDateWaktuPicker';
 
 interface DpmpHeaderProps {
   data: DpmpSummaryData;
-  selectedBatchId?: number;
-  onBatchChange: (batchId: number) => void;
+  selectedDate: string;
+  selectedWaktu: WaktuMakanType;
+  onFilterChange: (date: string, waktu: WaktuMakanType) => void;
   onOpenPrintModal: () => void;
   isRefreshing: boolean;
   onRefresh: () => void;
@@ -32,8 +30,9 @@ interface DpmpHeaderProps {
 
 export default function DpmpHeader({
   data,
-  selectedBatchId,
-  onBatchChange,
+  selectedDate,
+  selectedWaktu,
+  onFilterChange,
   onOpenPrintModal,
   isRefreshing,
   onRefresh,
@@ -57,7 +56,8 @@ export default function DpmpHeader({
 
       const worksheet = XLSX.utils.json_to_sheet(rows);
       const workbook = XLSX.utils.book_new();
-      const batchName = data.batch?.batch_code || 'DPMP_Pasien';
+      const batchName =
+        data.batch?.batch_code || `DPMP_${selectedDate}_${selectedWaktu}`;
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Data_Pasien');
 
       XLSX.writeFile(workbook, `DPMP_Tanda_Terima_${batchName}.xlsx`);
@@ -82,6 +82,11 @@ export default function DpmpHeader({
           <span className='font-mono text-xs text-muted-foreground'>
             {docNumber}
           </span>
+          {currentBatch && (
+            <span className='font-mono text-[11px] font-bold text-primary/80 bg-primary/10 px-2 py-0.5 rounded-md'>
+              {currentBatch.batch_code}
+            </span>
+          )}
         </div>
 
         <h1 className='text-xl sm:text-2xl font-bold tracking-tight text-foreground font-sans flex items-center gap-2'>
@@ -89,33 +94,29 @@ export default function DpmpHeader({
         </h1>
 
         <p className='text-xs sm:text-sm text-muted-foreground'>
-          Dokumen resmi DPMP dan bukti tanda terima distribusi penyerahan makanan pasien per ruangan rawat inap.
+          Dokumen resmi DPMP dan bukti tanda terima distribusi penyerahan
+          makanan pasien per ruangan rawat inap untuk{' '}
+          <strong className='text-foreground'>{data.tanggalFormatted}</strong>{' '}
+          (Makan{' '}
+          <strong className='text-foreground'>
+            {data.waktuMakanFormatted}
+          </strong>
+          ).
         </p>
       </div>
 
-      {/* Actions & Batch Selection */}
+      {/* Actions & Calendar + Meal Time Selection */}
       <div className='flex flex-wrap items-center gap-2.5 self-start sm:self-auto'>
-        {/* Batch Selector Dropdown */}
-        {data.availableBatches.length > 0 && (
-          <div className='flex items-center gap-1.5 bg-background border rounded-xl px-2 py-0.5 shadow-2xs'>
-            <Layers className='w-3.5 h-3.5 text-muted-foreground shrink-0 ml-1' />
-            <Select
-              value={String(currentBatch?.id || data.availableBatches[0].id)}
-              onValueChange={(val) => onBatchChange(Number(val))}
-            >
-              <SelectTrigger className='h-8 text-xs font-semibold border-0 bg-transparent focus:ring-0 w-[190px] shadow-none cursor-pointer'>
-                <SelectValue placeholder='Pilih Batch Snapshot' />
-              </SelectTrigger>
-              <SelectContent>
-                {data.availableBatches.map((b) => (
-                  <SelectItem key={b.id} value={String(b.id)} className='text-xs'>
-                    {b.batch_code} ({b.waktu_makan})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
+        {/* Shadcn Calendar Date + Meal Time Filter */}
+        <DpmpDateWaktuPicker
+          selectedDate={selectedDate}
+          selectedWaktu={selectedWaktu}
+          onChange={onFilterChange}
+          existingWaktuForDate={data.existingWaktuForDate}
+          currentLiveWaktu={data.currentLiveWaktu}
+          isLocked={currentBatch?.status_batch === 'LOCKED'}
+          disabled={isRefreshing}
+        />
 
         {/* Refresh button */}
         <Button

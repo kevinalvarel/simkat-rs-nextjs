@@ -47,22 +47,124 @@ export async function getAvailableDpmpBatches(): Promise<DpmpBatchOption[]> {
 }
 
 /**
+ * Determines which meal time is currently LIVE (not locked) for a given date (defaults to today).
+ * Sequence: PAGI -> SIANG -> MALAM
+ * If PAGI is locked and SIANG is locked, then MALAM is live.
+ * If PAGI is locked, but SIANG is not, then SIANG is live.
+ * If PAGI is not locked, then PAGI is live.
+ */
+export async function getLiveWaktuMakan(
+  targetDateStr?: string,
+): Promise<'PAGI' | 'SIANG' | 'MALAM'> {
+  const targetDate = targetDateStr || new Date().toISOString().slice(0, 10);
+  try {
+    const lockedBatches = await db
+      .select({ waktu_makan: snapshotBatchTable.waktu_makan })
+      .from(snapshotBatchTable)
+      .where(
+        and(
+          eq(snapshotBatchTable.tanggal_produksi, targetDate),
+          eq(snapshotBatchTable.status_batch, 'LOCKED'),
+        ),
+      );
+
+    const lockedSet = new Set(
+      lockedBatches.map((b) => b.waktu_makan.toUpperCase()),
+    );
+    const sequence: Array<'PAGI' | 'SIANG' | 'MALAM'> = [
+      'PAGI',
+      'SIANG',
+      'MALAM',
+    ];
+
+    for (const w of sequence) {
+      if (!lockedSet.has(w)) {
+        return w;
+      }
+    }
+
+    return 'MALAM';
+  } catch (err) {
+    console.error('Error determining live waktu makan:', err);
+    return 'PAGI';
+  }
+}
+
+/**
  * Fetch patient data and summary for DPMP (Daftar Permintaan Makanan Pasien) distribution & receipt page
  */
 export async function getDpmpData(
-  batchId?: number,
+  targetDateOrBatchId?: number | string,
+  targetWaktuMakan?: string,
 ): Promise<DpmpSummaryData> {
   try {
-    const availableBatches = await getAvailableDpmpBatches();
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const currentLiveWaktu = await getLiveWaktuMakan(todayStr);
 
-    // 1. Determine selected batch
+    const availableBatches = await getAvailableDpmpBatches();
+    const availableDatesSet = new Set<string>([todayStr]);
+    for (const b of availableBatches) {
+      if (b.tanggal_produksi) availableDatesSet.add(b.tanggal_produksi);
+    }
+    const availableDates = Array.from(availableDatesSet).sort((a, b) =>
+      b.localeCompare(a),
+    );
+
     let selectedBatch: DpmpBatchOption | null = null;
-    if (batchId) {
-      selectedBatch = availableBatches.find((b) => b.id === batchId) || null;
+    let selectedDate = todayStr;
+    let selectedWaktu: 'PAGI' | 'SIANG' | 'MALAM' = currentLiveWaktu;
+
+    if (typeof targetDateOrBatchId === 'number') {
+      selectedBatch =
+        availableBatches.find((b) => b.id === targetDateOrBatchId) || null;
+      if (selectedBatch) {
+        selectedDate = selectedBatch.tanggal_produksi;
+        selectedWaktu = selectedBatch.waktu_makan.toUpperCase() as
+          | 'PAGI'
+          | 'SIANG'
+          | 'MALAM';
+      }
+    } else if (typeof targetDateOrBatchId === 'string') {
+      if (
+        targetDateOrBatchId === 'LIVE_PREVIEW' ||
+        targetDateOrBatchId === 'LIVE'
+      ) {
+        selectedDate = todayStr;
+        selectedWaktu = (targetWaktuMakan?.toUpperCase() ||
+          currentLiveWaktu) as 'PAGI' | 'SIANG' | 'MALAM';
+      } else {
+        selectedDate = targetDateOrBatchId;
+        selectedWaktu = (targetWaktuMakan?.toUpperCase() ||
+          (selectedDate === todayStr ? currentLiveWaktu : 'PAGI')) as
+          | 'PAGI'
+          | 'SIANG'
+          | 'MALAM';
+        selectedBatch =
+          availableBatches.find(
+            (b) =>
+              b.tanggal_produksi === selectedDate &&
+              b.waktu_makan.toUpperCase() === selectedWaktu,
+          ) || null;
+      }
+    } else {
+      // Default: Always default to today and the currently LIVE snapshot meal time!
+      selectedDate = todayStr;
+      selectedWaktu = currentLiveWaktu;
+      selectedBatch =
+        availableBatches.find(
+          (b) =>
+            b.tanggal_produksi === selectedDate &&
+            b.waktu_makan.toUpperCase() === selectedWaktu,
+        ) || null;
     }
-    if (!selectedBatch && availableBatches.length > 0) {
-      selectedBatch = availableBatches[0];
-    }
+
+    // Existing batches for this date
+    const batchesOnDate = availableBatches.filter(
+      (b) => b.tanggal_produksi === selectedDate,
+    );
+    const existingWaktuForDate = batchesOnDate.map((b) =>
+      b.waktu_makan.toUpperCase(),
+    );
 
     let patientItems: DpmpPatientItem[] = [];
 
@@ -84,7 +186,9 @@ export async function getDpmpData(
             gedung: d.gedung,
             bed: d.no_bed,
             diet: d.diet_rs_raw || d.bentuk_makanan || 'Diet Biasa',
-            waktu: formatWaktuTitle(selectedBatch?.waktu_makan || 'PAGI'),
+            waktu: formatWaktuTitle(
+              selectedBatch?.waktu_makan || selectedWaktu,
+            ),
             status: d.is_emergent
               ? 'EMERGENT'
               : d.status_saat_snapshot || 'AKTIF',
@@ -100,10 +204,8 @@ export async function getDpmpData(
       } catch (err) {
         console.error('Error fetching snapshot details for DPMP:', err);
       }
-    }
-
-    // 3. Fallback to live active patients if no batches exist in DB
-    if (patientItems.length === 0 && availableBatches.length === 0) {
+    } else if (selectedDate === todayStr) {
+      // 3. Fallback to live active patients if today has no locked batch for this meal time
       try {
         const livePatients = await db
           .select()
@@ -116,10 +218,6 @@ export async function getDpmpData(
           );
 
         if (livePatients && livePatients.length > 0) {
-          const currentWaktu = selectedBatch
-            ? formatWaktuTitle(selectedBatch.waktu_makan)
-            : 'Pagi';
-
           patientItems = livePatients.map((p) => {
             const isNpo =
               p.is_npo ||
@@ -136,7 +234,7 @@ export async function getDpmpData(
               gedung: p.gedung,
               bed: p.bed,
               diet: isNpo ? 'NPO (Puasa)' : p.diet,
-              waktu: currentWaktu,
+              waktu: formatWaktuTitle(selectedWaktu),
               status: isNpo ? 'NPO' : p.status_pasien,
               kelas: p.kelas,
               batch_id: null,
@@ -154,10 +252,11 @@ export async function getDpmpData(
     const totalCount = patientItems.length;
     const activeCount = patientItems.filter((p) => p.status === 'AKTIF').length;
     const npoCount = patientItems.filter((p) => p.status === 'NPO').length;
-    const emergentCount = patientItems.filter((p) => p.is_emergent || p.status === 'EMERGENT').length;
+    const emergentCount = patientItems.filter(
+      (p) => p.is_emergent || p.status === 'EMERGENT',
+    ).length;
 
-    const targetDateStr = selectedBatch?.tanggal_produksi || new Date().toISOString().slice(0, 10);
-    const dateObj = new Date(targetDateStr);
+    const dateObj = new Date(selectedDate);
     const tanggalFormatted = !isNaN(dateObj.getTime())
       ? dateObj.toLocaleDateString('id-ID', {
           weekday: 'long',
@@ -165,18 +264,25 @@ export async function getDpmpData(
           month: 'long',
           year: 'numeric',
         })
-      : targetDateStr;
+      : selectedDate;
 
-    const waktuMakanFormatted = selectedBatch
-      ? formatWaktuTitle(selectedBatch.waktu_makan)
-      : 'Pagi';
+    const waktuMakanFormatted = formatWaktuTitle(selectedWaktu);
+    const dateClean = selectedDate.replace(/-/g, '');
+    const dpmpNumber = `DPMP/GZ-RS/${dateClean}/${selectedWaktu}-001`;
 
-    const dateClean = targetDateStr.replace(/-/g, '');
-    const dpmpNumber = `DPMP/GZ-RS/${dateClean}/${selectedBatch?.waktu_makan?.toUpperCase() || 'PAGI'}-001`;
+    const effectiveBatch: DpmpBatchOption = selectedBatch || {
+      id: 0,
+      batch_code: 'LIVE-PREVIEW',
+      tanggal_produksi: selectedDate,
+      waktu_makan: selectedWaktu,
+      total_pasien: totalCount,
+      status_batch: 'LIVE_PREVIEW',
+      cutoff_time: null,
+    };
 
     return {
       success: true,
-      batch: selectedBatch,
+      batch: effectiveBatch,
       availableBatches,
       patients: patientItems,
       totalCount,
@@ -188,6 +294,11 @@ export async function getDpmpData(
       tanggalFormatted,
       waktuMakanFormatted,
       lastUpdated: new Date().toLocaleTimeString('id-ID'),
+      selectedDate,
+      selectedWaktu,
+      availableDates,
+      existingWaktuForDate,
+      currentLiveWaktu,
     };
   } catch (error) {
     console.error('Error in getDpmpData:', error);
@@ -207,6 +318,10 @@ export async function getDpmpData(
       tanggalFormatted: 'Hari Ini',
       waktuMakanFormatted: 'Pagi',
       lastUpdated: new Date().toLocaleTimeString('id-ID'),
+      selectedDate: today,
+      selectedWaktu: 'PAGI',
+      availableDates: [today],
+      existingWaktuForDate: [],
     };
   }
 }

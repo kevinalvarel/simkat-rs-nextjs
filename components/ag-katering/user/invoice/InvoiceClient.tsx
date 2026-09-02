@@ -7,6 +7,7 @@ import type {
 } from '@/types/invoicetypes';
 import { getInvoiceDailyData } from '@/servers/invoice.service';
 import InvoiceHeader from './InvoiceHeader';
+import type { DateRangeValue } from './InvoiceDateRangePicker';
 import InvoiceStatsCards from './InvoiceStatsCards';
 import InvoiceClassTable from './InvoiceClassTable';
 import InvoicePrintModal from './InvoicePrintModal';
@@ -14,20 +15,23 @@ import { toast } from 'sonner';
 
 export default function InvoiceClient({ initialData }: InvoicePageProps) {
   const [data, setData] = useState<InvoiceDailySummary>(initialData);
-  const [selectedDate, setSelectedDate] = useState<string>(initialData.tanggal);
+  const [dateRange, setDateRange] = useState<DateRangeValue>({
+    from: initialData.startDate || initialData.tanggal,
+    to: initialData.endDate || initialData.tanggal,
+  });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
-  async function handleDateChange(newDate: string) {
-    if (!newDate) return;
-    setSelectedDate(newDate);
+  async function handleDateRangeChange(range: DateRangeValue) {
+    if (!range.from) return;
+    setDateRange(range);
     setIsRefreshing(true);
     try {
-      const freshData = await getInvoiceDailyData(newDate);
+      const freshData = await getInvoiceDailyData(range.from, range.to);
       setData(freshData);
     } catch (err) {
       console.error('Error fetching date data:', err);
-      toast.error('Gagal memuat data konsumsi untuk tanggal yang dipilih.');
+      toast.error('Gagal memuat data konsumsi.');
     } finally {
       setIsRefreshing(false);
     }
@@ -36,7 +40,7 @@ export default function InvoiceClient({ initialData }: InvoicePageProps) {
   async function handleRefresh() {
     setIsRefreshing(true);
     try {
-      const freshData = await getInvoiceDailyData(selectedDate);
+      const freshData = await getInvoiceDailyData(dateRange.from, dateRange.to);
       setData(freshData);
       toast.success('Data konsumsi berhasil diperbarui.');
     } catch (err) {
@@ -52,8 +56,8 @@ export default function InvoiceClient({ initialData }: InvoicePageProps) {
       {/* 1. Header with Actions & Date Filter */}
       <InvoiceHeader
         data={data}
-        selectedDate={selectedDate}
-        onDateChange={handleDateChange}
+        dateRange={dateRange}
+        onDateRangeChange={handleDateRangeChange}
         onOpenPrintModal={() => setIsPrintModalOpen(true)}
         isRefreshing={isRefreshing}
         onRefresh={handleRefresh}

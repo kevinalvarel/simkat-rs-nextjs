@@ -8,6 +8,7 @@ import type {
 } from '@/types/dpmptypes';
 import { getDpmpData } from '@/servers/dpmp.service';
 import DpmpHeader from './DpmpHeader';
+import type { WaktuMakanType } from './DpmpDateWaktuPicker';
 import DpmpStatsCards from './DpmpStatsCards';
 import RuanganCardGrid from './RuanganCardGrid';
 import RuanganDetailDialog from './RuanganDetailDialog';
@@ -16,31 +17,47 @@ import { toast } from 'sonner';
 
 export default function DpmpClient({ initialData }: DpmpPageProps) {
   const [data, setData] = useState<DpmpSummaryData>(initialData);
-  const [selectedBatchId, setSelectedBatchId] = useState<number | undefined>(
-    initialData.batch?.id,
+  const [selectedDate, setSelectedDate] = useState<string>(
+    initialData.selectedDate ||
+      initialData.batch?.tanggal_produksi ||
+      new Date().toISOString().slice(0, 10),
+  );
+  const [selectedWaktu, setSelectedWaktu] = useState<WaktuMakanType>(
+    (
+      initialData.selectedWaktu ||
+      initialData.batch?.waktu_makan ||
+      'PAGI'
+    ).toUpperCase() as WaktuMakanType,
   );
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   // 1. Room Detail Modal state
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
-  const [activeRuanganName, setActiveRuanganName] = useState<string | null>(null);
-  const [activeRuanganPatients, setActiveRuanganPatients] = useState<DpmpPatientItem[]>([]);
+  const [activeRuanganName, setActiveRuanganName] = useState<string | null>(
+    null,
+  );
+  const [activeRuanganPatients, setActiveRuanganPatients] = useState<
+    DpmpPatientItem[]
+  >([]);
 
   // 2. Print modal state
   const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
   const [patientsToPrint, setPatientsToPrint] = useState<DpmpPatientItem[]>([]);
-  const [printDocumentTitle, setPrintDocumentTitle] = useState<string | undefined>(undefined);
+  const [printDocumentTitle, setPrintDocumentTitle] = useState<
+    string | undefined
+  >(undefined);
 
-  // 3. Batch & Data Fetching Handlers
-  async function handleBatchChange(batchId: number) {
-    setSelectedBatchId(batchId);
+  // 3. Date & Meal Time Data Fetching Handlers
+  async function handleFilterChange(date: string, waktu: WaktuMakanType) {
+    setSelectedDate(date);
+    setSelectedWaktu(waktu);
     setIsRefreshing(true);
     try {
-      const freshData = await getDpmpData(batchId);
+      const freshData = await getDpmpData(date, waktu);
       setData(freshData);
     } catch (err) {
-      console.error('Error changing batch:', err);
-      toast.error('Gagal memuat data batch snapshot DPMP.');
+      console.error('Error changing DPMP filter:', err);
+      toast.error('Gagal memuat data DPMP.');
     } finally {
       setIsRefreshing(false);
     }
@@ -49,7 +66,7 @@ export default function DpmpClient({ initialData }: DpmpPageProps) {
   async function handleRefresh() {
     setIsRefreshing(true);
     try {
-      const freshData = await getDpmpData(selectedBatchId);
+      const freshData = await getDpmpData(selectedDate, selectedWaktu);
       setData(freshData);
       toast.success('Data DPMP berhasil diperbarui.');
     } catch (err) {
@@ -61,30 +78,43 @@ export default function DpmpClient({ initialData }: DpmpPageProps) {
   }
 
   // 4. Modal Handlers
-  function handleOpenRuanganModal(ruanganName: string, patientList: DpmpPatientItem[]) {
+  function handleOpenRuanganModal(
+    ruanganName: string,
+    patientList: DpmpPatientItem[],
+  ) {
     setActiveRuanganName(ruanganName);
     setActiveRuanganPatients(patientList);
     setIsRoomModalOpen(true);
   }
 
   // 5. Print Handlers
-  function handleQuickPrintRuangan(ruanganName: string, patientList: DpmpPatientItem[]) {
+  function handleQuickPrintRuangan(
+    ruanganName: string,
+    patientList: DpmpPatientItem[],
+  ) {
     if (patientList.length === 0) {
       toast.error(`Tidak ada data pasien di ${ruanganName}.`);
       return;
     }
     setPatientsToPrint(patientList);
-    setPrintDocumentTitle(`DPMP_${ruanganName}_${data.batch?.batch_code || 'Batch'}`);
+    setPrintDocumentTitle(
+      `DPMP_${ruanganName}_${data.batch?.batch_code || 'Batch'}`,
+    );
     setIsPrintModalOpen(true);
   }
 
-  function handlePrintFromRoomModal(selectedPatients: DpmpPatientItem[], ruanganTitle: string) {
+  function handlePrintFromRoomModal(
+    selectedPatients: DpmpPatientItem[],
+    ruanganTitle: string,
+  ) {
     if (selectedPatients.length === 0) {
       toast.error('Pilih minimal 1 pasien untuk dicetak.');
       return;
     }
     setPatientsToPrint(selectedPatients);
-    setPrintDocumentTitle(`DPMP_${ruanganTitle}_${data.batch?.batch_code || 'Batch'}`);
+    setPrintDocumentTitle(
+      `DPMP_${ruanganTitle}_${data.batch?.batch_code || 'Batch'}`,
+    );
     setIsPrintModalOpen(true);
   }
 
@@ -94,17 +124,20 @@ export default function DpmpClient({ initialData }: DpmpPageProps) {
       return;
     }
     setPatientsToPrint(data.patients);
-    setPrintDocumentTitle(`DPMP_Semua_Ruangan_${data.batch?.batch_code || 'Batch'}`);
+    setPrintDocumentTitle(
+      `DPMP_Semua_Ruangan_${data.batch?.batch_code || 'Batch'}`,
+    );
     setIsPrintModalOpen(true);
   }
 
   return (
     <div className='flex flex-1 flex-col gap-6 p-4 sm:p-6 md:p-8 max-w-7xl mx-auto w-full min-w-0 overflow-x-hidden'>
-      {/* 1. Header with Batch Selection & Actions */}
+      {/* 1. Header with Calendar Date & Meal Time Selection & Actions */}
       <DpmpHeader
         data={data}
-        selectedBatchId={selectedBatchId}
-        onBatchChange={handleBatchChange}
+        selectedDate={selectedDate}
+        selectedWaktu={selectedWaktu}
+        onFilterChange={handleFilterChange}
         onOpenPrintModal={handlePrintAllRooms}
         isRefreshing={isRefreshing}
         onRefresh={handleRefresh}
