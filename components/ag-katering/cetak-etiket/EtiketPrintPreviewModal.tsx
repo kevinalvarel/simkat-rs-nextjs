@@ -13,13 +13,14 @@ import {
 import { Button } from '@/components/ui/button';
 import { Printer, Tag } from 'lucide-react';
 import type { EtiketData } from '@/types/pemorsiantypes';
-import EtiketCard from '@/components/ag-katering/user/overview/pemorsian/ui/EtiketCard';
+import EtiketCard from '@/components/ag-katering/cetak-etiket/EtiketCard';
 
 interface EtiketPrintPreviewModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   etiketList: EtiketData[];
   title?: string;
+  onPrintSuccess?: () => void;
 }
 
 export default function EtiketPrintPreviewModal({
@@ -27,6 +28,7 @@ export default function EtiketPrintPreviewModal({
   onOpenChange,
   etiketList,
   title,
+  onPrintSuccess,
 }: EtiketPrintPreviewModalProps) {
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -37,9 +39,12 @@ export default function EtiketPrintPreviewModal({
       ? `Cetak ${etiketList?.length || 0} Etiket Makan`
       : `Cetak Etiket Makan - ${etiketList?.[0]?.nama || ''}`);
 
-  const handlePrint = useReactToPrint({
+  const triggerReactPrint = useReactToPrint({
     contentRef: printRef,
     documentTitle: modalTitle,
+    onAfterPrint: () => {
+      onPrintSuccess?.();
+    },
 
     pageStyle: `
       @page {
@@ -155,8 +160,11 @@ export default function EtiketPrintPreviewModal({
             </Button>
             <Button
               size='sm'
-              onClick={() => handlePrint()}
-              className='gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-xs font-semibold'
+              onClick={() => {
+                triggerReactPrint();
+                onPrintSuccess?.();
+              }}
+              className='gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-xs font-semibold cursor-pointer'
             >
               <Printer className='w-4 h-4' />
               {isBatch

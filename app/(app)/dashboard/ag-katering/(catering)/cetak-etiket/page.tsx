@@ -1,19 +1,19 @@
 import React from 'react';
 import type { Metadata } from 'next';
-import { getPemorsianData } from '@/servers/pemorsian.service';
-import PemorsianClient from '@/components/ag-katering/user/overview/pemorsian/layout/PemorsianClient';
+import { getLivePemorsianData } from '@/servers/pemorsian.service';
+import CetakEtiketClient from '@/components/ag-katering/user/cetak-etiket/layout/CetakEtiketClient';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export const metadata: Metadata = {
-  title: 'Pemorsian Makanan & Cetak Etiket - Ahli Gizi Katering',
+  title: 'Pemorsian & Cetak Etiket Makanan - Ahli Gizi Katering',
   description:
-    'Layar pemorsian makanan dan pencetakan etiket label pasien dari snapshot produksi saat ini.',
+    'Layar pemorsian makanan dan pencetakan etiket label pasien dari snapshot produksi & revisi susulan.',
 };
 
-export default async function PemorsianPage() {
-  const initialData = await getPemorsianData();
+export default async function CetakEtiketPage() {
+  const initialData = await getLivePemorsianData();
 
-  return <PemorsianClient initialData={initialData} />;
+  return <CetakEtiketClient initialData={initialData} />;
 }

@@ -257,10 +257,16 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
       .where(eq(masterSiklusTable.is_active, true))
       .orderBy(asc(masterSiklusTable.nomor_siklus));
 
-    // Determine cycle matching by assigned 'hari' or 10-day rotation
+    // Determine cycle matching by assigned 'tanggal', 'hari', or 10-day rotation
     let resolvedCycle = allMasterCycles.find(
-      (c) => c.hari?.trim().toUpperCase() === currentHari,
+      (c) => c.tanggal && c.tanggal === nextCycle.tanggalProduksi,
     );
+
+    if (!resolvedCycle) {
+      resolvedCycle = allMasterCycles.find(
+        (c) => c.hari?.trim().toUpperCase() === currentHari,
+      );
+    }
 
     if (!resolvedCycle && allMasterCycles.length > 0) {
       // 10-day cycle standard PGRS: Day of month % 10 (or 31)

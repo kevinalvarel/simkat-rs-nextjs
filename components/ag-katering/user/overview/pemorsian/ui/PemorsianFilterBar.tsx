@@ -8,7 +8,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Search, X, Filter } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import type { PemorsianFilterState } from '@/types/pemorsiantypes';
 
 interface PemorsianFilterBarProps {

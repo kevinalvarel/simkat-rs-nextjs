@@ -175,7 +175,6 @@ export default function EtiketCard({
         }
         className='group/rnd hover:ring-1 hover:ring-blue-500/60 hover:ring-dashed rounded-xs cursor-move z-10'
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
         <Image
           height={50}
           width={50}

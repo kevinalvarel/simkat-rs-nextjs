@@ -14,19 +14,21 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { format, parseISO, isValid } from 'date-fns';
+import { id } from 'date-fns/locale';
 import {
   Settings2,
   Loader2,
   Save,
   Trash2,
   AlertTriangle,
-  CalendarDays,
+  Calendar as CalendarIcon,
+  ChevronDown,
 } from 'lucide-react';
 import type { MasterSiklusItem } from '@/servers/siklus-menu.service';
 import {
@@ -43,16 +45,6 @@ interface KelolaSiklusDialogProps {
   onSuccessDelete: (deletedCycleNum: number) => void;
 }
 
-const HARI_OPTIONS = [
-  'SENIN',
-  'SELASA',
-  'RABU',
-  'KAMIS',
-  'JUMAT',
-  'SABTU',
-  'MINGGU',
-];
-
 export default function KelolaSiklusDialog({
   open,
   onOpenChange,
@@ -61,7 +53,8 @@ export default function KelolaSiklusDialog({
   onSuccessDelete,
 }: KelolaSiklusDialogProps) {
   const [namaSiklus, setNamaSiklus] = useState('');
-  const [hari, setHari] = useState('SENIN');
+  const [tanggal, setTanggal] = useState<Date | undefined>(undefined);
+  const [isDateOpen, setIsDateOpen] = useState(false);
   const [deskripsi, setDeskripsi] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -70,10 +63,18 @@ export default function KelolaSiklusDialog({
 
   useEffect(() => {
     if (open && cycle) {
-      setNamaSiklus(cycle.nama_siklus);
-      setHari(cycle.hari || 'SENIN');
-      setDeskripsi(cycle.deskripsi || '');
-      setIsConfirmDeleteOpen(false);
+      const timer = setTimeout(() => {
+        setNamaSiklus(cycle.nama_siklus);
+        if (cycle.tanggal) {
+          const parsed = parseISO(cycle.tanggal);
+          setTanggal(isValid(parsed) ? parsed : new Date());
+        } else {
+          setTanggal(new Date());
+        }
+        setDeskripsi(cycle.deskripsi || '');
+        setIsConfirmDeleteOpen(false);
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [open, cycle]);
 
@@ -90,9 +91,22 @@ export default function KelolaSiklusDialog({
 
     setIsUpdating(true);
     try {
+      const isoDate = tanggal ? format(tanggal, 'yyyy-MM-dd') : null;
+      const dayNames = [
+        'MINGGU',
+        'SENIN',
+        'SELASA',
+        'RABU',
+        'KAMIS',
+        'JUMAT',
+        'SABTU',
+      ];
+      const assignedDay = tanggal ? dayNames[tanggal.getDay()] : null;
+
       const res = await updateMasterSiklus(cycle.nomor_siklus, {
         nama_siklus: namaSiklus.trim(),
-        hari: hari || null,
+        tanggal: isoDate,
+        hari: assignedDay,
         deskripsi: deskripsi.trim() || null,
       });
 
@@ -151,7 +165,7 @@ export default function KelolaSiklusDialog({
               Pengaturan Siklus Menu
             </DialogTitle>
             <DialogDescription className='text-xs text-muted-foreground'>
-              Sesuaikan label penamaan, hari rotasi, keterangan, atau hapus
+              Sesuaikan label penamaan, tanggal rotasi, keterangan, atau hapus
               siklus dari sistem.
             </DialogDescription>
           </DialogHeader>
@@ -172,22 +186,38 @@ export default function KelolaSiklusDialog({
               </div>
 
               <div className='space-y-1.5'>
-                <Label className='text-xs font-semibold'>Hari Rotasi</Label>
-                <Select
-                  value={hari}
-                  onValueChange={(val) => val && setHari(val)}
-                >
-                  <SelectTrigger className='h-9 text-xs bg-background font-medium'>
-                    <SelectValue placeholder='Pilih hari...' />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {HARI_OPTIONS.map((h) => (
-                      <SelectItem key={h} value={h}>
-                        {h}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label className='text-xs font-semibold'>Tanggal Rotasi</Label>
+                <Popover open={isDateOpen} onOpenChange={setIsDateOpen}>
+                  <PopoverTrigger
+                    type='button'
+                    className='flex items-center justify-between w-full h-9 px-3 text-xs bg-background font-medium border rounded-md shadow-2xs cursor-pointer hover:bg-muted/80 select-none'
+                  >
+                    <span className='flex items-center gap-1.5 truncate'>
+                      <CalendarIcon className='w-3.5 h-3.5 text-primary shrink-0' />
+                      {tanggal
+                        ? format(tanggal, 'd MMM yyyy', { locale: id })
+                        : 'Pilih tanggal...'}
+                    </span>
+                    <ChevronDown className='w-3 h-3 text-muted-foreground opacity-70 shrink-0' />
+                  </PopoverTrigger>
+                  <PopoverContent
+                    align='start'
+                    side='bottom'
+                    sideOffset={4}
+                    className='w-auto p-0 rounded-2xl shadow-xl border border-border bg-popover text-popover-foreground overflow-hidden z-50'
+                  >
+                    <Calendar
+                      mode='single'
+                      selected={tanggal}
+                      onSelect={(d) => {
+                        if (d) {
+                          setTanggal(d);
+                          setIsDateOpen(false);
+                        }
+                      }}
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
 
             </div>

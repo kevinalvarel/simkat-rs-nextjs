@@ -7,7 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import {
   CalendarDays,
   CalendarCheck2,
-  Plus,
+  Calendar as CalendarIcon,
+  ChevronDown,
   Search,
   Copy,
   Download,
@@ -28,12 +29,13 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { format, parseISO, isValid } from 'date-fns';
+import { id } from 'date-fns/locale';
 import type {
   SiklusMenuItem,
   MasterSiklusItem,
@@ -42,7 +44,7 @@ import {
   deleteAllItemSiklusMenu,
   getSiklusMenuList,
   getMasterSiklusList,
-  applyStartDayRotation,
+  applyStartDateRotation,
 } from '@/servers/siklus-menu.service';
 import SiklusStats from './SiklusStats';
 import SiklusMenuMatrixTable from './SiklusMenuMatrixTable';
@@ -55,15 +57,41 @@ import KelolaSiklusDialog from './KelolaSiklusDialog';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 
-const HARI_ROTASI_OPTIONS = [
-  'SENIN',
-  'SELASA',
-  'RABU',
-  'KAMIS',
-  'JUMAT',
-  'SABTU',
-  'MINGGU',
-] as const;
+function parseCycleDate(dateStr?: string | null): Date | null {
+  if (!dateStr) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    const d = parseISO(dateStr);
+    return isValid(d) ? d : null;
+  }
+  const parsed = new Date(dateStr);
+  return isValid(parsed) ? parsed : null;
+}
+
+function formatDisplayTanggal(
+  tanggal?: string | null,
+  nomorSiklus?: number,
+): string {
+  const d = parseCycleDate(tanggal);
+  if (d) {
+    return format(d, 'd MMMM yyyy', { locale: id });
+  }
+  if (tanggal) return tanggal;
+  if (nomorSiklus) return `Tanggal ${nomorSiklus}`;
+  return '-';
+}
+
+function formatShortTanggal(
+  tanggal?: string | null,
+  nomorSiklus?: number,
+): string {
+  const d = parseCycleDate(tanggal);
+  if (d) {
+    return format(d, 'd MMM', { locale: id });
+  }
+  if (tanggal) return tanggal;
+  if (nomorSiklus) return `Tgl ${nomorSiklus}`;
+  return '-';
+}
 
 
 interface KonfigurasiSiklusMenuClientProps {
@@ -133,11 +161,13 @@ export default function KonfigurasiSiklusMenuClient({
     );
   }, [masterSiklusList, activeSiklus]);
 
-  // Current starting day for Cycle 1
-  const currentStartDay = useMemo(() => {
-    return (
-      masterSiklusList.find((c) => c.nomor_siklus === 1)?.hari || 'SENIN'
-    );
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+
+  // Current starting date for Cycle 1
+  const currentStartDate = useMemo(() => {
+    const cycle1 = masterSiklusList.find((c) => c.nomor_siklus === 1);
+    const parsed = parseCycleDate(cycle1?.tanggal);
+    return parsed || new Date();
   }, [masterSiklusList]);
 
   // Refresh master cycles list from server
@@ -164,11 +194,16 @@ export default function KonfigurasiSiklusMenuClient({
     }
   }
 
-  // Handle setting the starting day for Cycle 1
-  async function handleApplyStartDay(newStartDay: string) {
+  // Handle setting the starting date for Cycle 1
+  async function handleApplyStartDate(newStartDate: Date) {
     setIsApplyingRotation(true);
     try {
-      const res = await applyStartDayRotation(newStartDay);
+      const yyyy = newStartDate.getFullYear();
+      const mm = String(newStartDate.getMonth() + 1).padStart(2, '0');
+      const dd = String(newStartDate.getDate()).padStart(2, '0');
+      const isoDate = `${yyyy}-${mm}-${dd}`;
+
+      const res = await applyStartDateRotation(isoDate);
       if (res.success) {
         toast.success(res.message);
         await refreshMasterCycles();
@@ -176,8 +211,8 @@ export default function KonfigurasiSiklusMenuClient({
         toast.error(res.message);
       }
     } catch (err) {
-      console.error('Gagal mengatur hari rotasi siklus:', err);
-      toast.error('Gagal mengatur jadwal hari rotasi siklus.');
+      console.error('Gagal mengatur tanggal rotasi siklus:', err);
+      toast.error('Gagal mengatur jadwal tanggal rotasi siklus.');
     } finally {
       setIsApplyingRotation(false);
     }
@@ -288,7 +323,10 @@ export default function KonfigurasiSiklusMenuClient({
       const rows = items.map((item) => ({
         'Siklus Ke': item.siklus_ke,
         'Nama Siklus': activeCycleObj.nama_siklus,
-        'Hari Rotasi': activeCycleObj.hari || '-',
+        'Tanggal Rotasi': formatDisplayTanggal(
+          activeCycleObj.tanggal,
+          activeCycleObj.nomor_siklus,
+        ),
         Kelas: item.kelas,
         'Jenis Makanan': item.jenis_makanan,
         'Waktu Makan': item.waktu_makan,
@@ -321,13 +359,12 @@ export default function KonfigurasiSiklusMenuClient({
   }, [masterSiklusList]);
 
   return (
-    <div className='p-6 space-y-6 max-w-7xl mx-auto'>
-      {/* Header Page */}
-      <div className='flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b pb-5'>
+    <div className='flex flex-1 flex-col gap-6 p-4 sm:p-6 md:p-8 max-w-7xl mx-auto w-full'>
+      {/* Header Banner */}
+      <div className='flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-5 rounded-2xl border border-primary/20 shadow-xs'>
         <div className='space-y-1'>
           <div className='flex items-center gap-2.5 flex-wrap'>
-            <h1 className='text-2xl font-bold tracking-tight text-foreground flex items-center gap-2'>
-              <CalendarDays className='w-6 h-6 text-primary' />
+            <h1 className='text-xl sm:text-2xl font-bold tracking-tight text-foreground'>
               Konfigurasi Siklus Menu
             </h1>
             <Badge
@@ -338,7 +375,7 @@ export default function KonfigurasiSiklusMenuClient({
             </Badge>
           </div>
           <p className='text-xs sm:text-sm text-muted-foreground'>
-            Kelola matriks hidangan per siklus menu, penentuan hari rotasi,
+            Kelola matriks hidangan per siklus menu, penentuan tanggal rotasi,
             tingkatan kelas, waktu makan (Pagi, Siang, Sore, Saring Siang), dan
             tag diet pasien secara dinamis.
           </p>
@@ -400,14 +437,16 @@ export default function KonfigurasiSiklusMenuClient({
               Pilih Siklus Menu:
             </span>
 
-            {activeCycleObj.hari && (
-              <Badge
-                variant='secondary'
-                className='text-[11px] font-mono font-bold bg-primary/10 text-primary border border-primary/20 gap-1 px-2 py-0.5'
-              >
-                📅 Hari: {activeCycleObj.hari}
-              </Badge>
-            )}
+            <Badge
+              variant='secondary'
+              className='text-[11px] font-mono font-bold bg-primary/10 text-primary border border-primary/20 gap-1 px-2 py-0.5'
+            >
+              📅 Tanggal:{' '}
+              {formatDisplayTanggal(
+                activeCycleObj.tanggal,
+                activeCycleObj.nomor_siklus,
+              )}
+            </Badge>
 
             {activeCycleObj.deskripsi && (
               <span className='text-[11px] text-muted-foreground italic hidden sm:inline'>
@@ -418,38 +457,52 @@ export default function KonfigurasiSiklusMenuClient({
 
           {/* Rotation Schedule Configuration & Action buttons */}
           <div className='flex items-center gap-2 flex-wrap'>
-            {/* Start Day of Cycle 1 Selector */}
+            {/* Start Date of Cycle 1 DatePicker (Shadcn Popover + Calendar) */}
             <div className='flex items-center gap-1.5 bg-muted/60 px-2.5 py-1 rounded-xl border border-border/80'>
               <span className='text-[11px] font-semibold text-muted-foreground whitespace-nowrap flex items-center gap-1'>
                 <CalendarCheck2 className='w-3.5 h-3.5 text-primary' />
                 Siklus #1 Mulai:
               </span>
-              <Select
-                value={currentStartDay}
-                onValueChange={(val) => val && handleApplyStartDay(val)}
-                disabled={isApplyingRotation}
+              <Popover
+                open={isDatePickerOpen}
+                onOpenChange={setIsDatePickerOpen}
               >
-
-                <SelectTrigger className='h-7 w-[105px] text-xs bg-background font-bold border-primary/30'>
+                <PopoverTrigger
+                  disabled={isApplyingRotation}
+                  className='inline-flex items-center gap-1.5 h-7 px-2.5 text-xs bg-background font-bold border border-primary/30 rounded-lg shadow-2xs cursor-pointer hover:bg-muted/80 select-none text-foreground'
+                >
                   {isApplyingRotation ? (
                     <Loader2 className='w-3 h-3 animate-spin text-primary mx-auto' />
                   ) : (
-                    <SelectValue />
+                    <>
+                      <CalendarIcon className='w-3 h-3 text-primary' />
+                      <span>
+                        {format(currentStartDate, 'd MMMM yyyy', {
+                          locale: id,
+                        })}
+                      </span>
+                      <ChevronDown className='w-3 h-3 text-muted-foreground ml-0.5 opacity-70' />
+                    </>
                   )}
-                </SelectTrigger>
-                <SelectContent>
-                  {HARI_ROTASI_OPTIONS.map((hari) => (
-                    <SelectItem
-                      key={hari}
-                      value={hari}
-                      className='text-xs font-semibold'
-                    >
-                      {hari}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-
-              </Select>
+                </PopoverTrigger>
+                <PopoverContent
+                  align='end'
+                  side='bottom'
+                  sideOffset={6}
+                  className='w-auto p-0 rounded-2xl shadow-xl border border-border bg-popover text-popover-foreground overflow-hidden z-50'
+                >
+                  <Calendar
+                    mode='single'
+                    selected={currentStartDate}
+                    onSelect={(d) => {
+                      if (d) {
+                        handleApplyStartDate(d);
+                        setIsDatePickerOpen(false);
+                      }
+                    }}
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
 
             <Button
@@ -457,7 +510,7 @@ export default function KonfigurasiSiklusMenuClient({
               size='xs'
               onClick={() => setIsKelolaSiklusOpen(true)}
               className='text-[11px] text-muted-foreground hover:text-foreground gap-1'
-              title='Ubah nama, hari, atau deskripsi siklus ini'
+              title='Ubah nama, tanggal, atau deskripsi siklus ini'
             >
               <Settings2 className='w-3.5 h-3.5 text-primary' /> Pengaturan
               Siklus #{activeSiklus}
@@ -492,17 +545,15 @@ export default function KonfigurasiSiklusMenuClient({
                 }`}
               >
                 <span>{cycle.nama_siklus}</span>
-                {cycle.hari && (
-                  <span
-                    className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold tracking-wide transition-colors ${
-                      isActive
-                        ? 'bg-primary-foreground/20 text-primary-foreground'
-                        : 'bg-muted-foreground/15 text-foreground/80'
-                    }`}
-                  >
-                    {cycle.hari}
-                  </span>
-                )}
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold tracking-wide transition-colors ${
+                    isActive
+                      ? 'bg-primary-foreground/20 text-primary-foreground'
+                      : 'bg-muted-foreground/15 text-foreground/80'
+                  }`}
+                >
+                  {formatShortTanggal(cycle.tanggal, cycle.nomor_siklus)}
+                </span>
                 {isActive && (
                   <span className='w-1.5 h-1.5 rounded-full bg-primary-foreground animate-pulse' />
                 )}
@@ -595,7 +646,7 @@ export default function KonfigurasiSiklusMenuClient({
         onSuccessUpdate={async () => {
           await refreshMasterCycles();
         }}
-        onSuccessDelete={async (deletedNum) => {
+        onSuccessDelete={async () => {
           await refreshMasterCycles();
         }}
       />
@@ -606,7 +657,7 @@ export default function KonfigurasiSiklusMenuClient({
         onOpenChange={setIsDeleteCycleOpen}
         currentSiklus={activeSiklus}
         availableCycles={masterSiklusList}
-        onSuccess={async (deletedCycleNum) => {
+        onSuccess={async () => {
           await refreshMasterCycles();
         }}
       />

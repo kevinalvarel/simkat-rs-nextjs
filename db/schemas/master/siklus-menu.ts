@@ -17,6 +17,9 @@ export const masterSiklusTable = pgTable('master_siklus', {
   /** Hari penugasan rotasi siklus (misal "SENIN", "SELASA", "RABU", "KAMIS", "JUMAT", "SABTU", "MINGGU") */
   hari: text('hari'),
 
+  /** Tanggal penugasan rotasi siklus (misal format ISO "2026-09-01" atau "1 September 2026") */
+  tanggal: text('tanggal'),
+
   /** Keterangan / catatan rotasi siklus */
   deskripsi: text('deskripsi'),
 

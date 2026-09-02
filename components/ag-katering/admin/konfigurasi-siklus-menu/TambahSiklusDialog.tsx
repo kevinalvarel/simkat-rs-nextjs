@@ -20,7 +20,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { PlusCircle, Loader2, Sparkles, Copy, FilePlus } from 'lucide-react';
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { format, parseISO, isValid, addDays } from 'date-fns';
+import { id } from 'date-fns/locale';
+import {
+  PlusCircle,
+  Loader2,
+  Sparkles,
+  Copy,
+  FilePlus,
+  Calendar as CalendarIcon,
+  ChevronDown,
+} from 'lucide-react';
 import type { MasterSiklusItem } from '@/servers/siklus-menu.service';
 import { createMasterSiklus } from '@/servers/siklus-menu.service';
 import { toast } from 'sonner';
@@ -32,16 +48,6 @@ interface TambahSiklusDialogProps {
   onSuccess: (newCycleNumber: number) => void;
 }
 
-const HARI_OPTIONS = [
-  'SENIN',
-  'SELASA',
-  'RABU',
-  'KAMIS',
-  'JUMAT',
-  'SABTU',
-  'MINGGU',
-];
-
 export default function TambahSiklusDialog({
   open,
   onOpenChange,
@@ -50,13 +56,14 @@ export default function TambahSiklusDialog({
 }: TambahSiklusDialogProps) {
   const [nomorSiklus, setNomorSiklus] = useState<number>(1);
   const [namaSiklus, setNamaSiklus] = useState<string>('');
-  const [hari, setHari] = useState<string>('SENIN');
+  const [tanggal, setTanggal] = useState<Date | undefined>(new Date());
+  const [isDateOpen, setIsDateOpen] = useState(false);
   const [deskripsi, setDeskripsi] = useState<string>('');
   const [initMode, setInitMode] = useState<'EMPTY' | 'COPY'>('EMPTY');
   const [copyFromSiklus, setCopyFromSiklus] = useState<number>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Auto-calculate smart default cycle number when dialog opens
+  // Auto-calculate smart default cycle number and date when dialog opens
   useEffect(() => {
     if (open) {
       const existingNums = existingCycles.map((c) => c.nomor_siklus);
@@ -65,12 +72,34 @@ export default function TambahSiklusDialog({
         nextNum++;
       }
 
-      setNomorSiklus(nextNum);
-      setNamaSiklus(`Siklus ${nextNum}`);
-      setHari(HARI_OPTIONS[(nextNum - 1) % 7]);
-      setDeskripsi(`Rotasi menu makanan siklus hari ke-${nextNum}`);
-      setInitMode('EMPTY');
-      setCopyFromSiklus(existingCycles[0]?.nomor_siklus || 1);
+      // Calculate next smart date
+      let nextDate = new Date();
+      if (existingCycles.length > 0) {
+        const sorted = [...existingCycles].sort(
+          (a, b) => a.nomor_siklus - b.nomor_siklus,
+        );
+        const lastCycle = sorted[sorted.length - 1];
+        if (lastCycle.tanggal) {
+          const parsed = parseISO(lastCycle.tanggal);
+          if (isValid(parsed)) {
+            nextDate = addDays(parsed, 1);
+          }
+        }
+      }
+
+      const timer = setTimeout(() => {
+        setNomorSiklus(nextNum);
+        setNamaSiklus(`Siklus ${nextNum}`);
+        setTanggal(nextDate);
+        setDeskripsi(
+          `Rotasi menu makanan siklus tanggal ${format(nextDate, 'd MMMM yyyy', {
+            locale: id,
+          })}`,
+        );
+        setInitMode('EMPTY');
+        setCopyFromSiklus(existingCycles[0]?.nomor_siklus || 1);
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [open, existingCycles]);
 
@@ -89,10 +118,23 @@ export default function TambahSiklusDialog({
 
     setIsSubmitting(true);
     try {
+      const isoDate = tanggal ? format(tanggal, 'yyyy-MM-dd') : null;
+      const dayNames = [
+        'MINGGU',
+        'SENIN',
+        'SELASA',
+        'RABU',
+        'KAMIS',
+        'JUMAT',
+        'SABTU',
+      ];
+      const assignedDay = tanggal ? dayNames[tanggal.getDay()] : null;
+
       const res = await createMasterSiklus({
         nomor_siklus: nomorSiklus,
         nama_siklus: namaSiklus.trim(),
-        hari: hari || null,
+        tanggal: isoDate,
+        hari: assignedDay,
         deskripsi: deskripsi.trim() || null,
         copyFromSiklus: initMode === 'COPY' ? copyFromSiklus : null,
       });
@@ -150,7 +192,6 @@ export default function TambahSiklusDialog({
                   const val = Number(e.target.value) || 1;
                   setNomorSiklus(val);
                   setNamaSiklus(`Siklus ${val}`);
-                  setHari(HARI_OPTIONS[(val - 1) % 7]);
                 }}
                 className='h-9 text-xs font-mono font-bold text-center'
                 required
@@ -173,24 +214,40 @@ export default function TambahSiklusDialog({
           </div>
 
           <div className='grid grid-cols-3 gap-3'>
-            {/* Hari Penugasan */}
+            {/* Tanggal Penugasan */}
             <div className='space-y-1.5'>
-              <Label className='text-xs font-semibold'>Hari Rotasi</Label>
-              <Select
-                value={hari}
-                onValueChange={(val) => val && setHari(val)}
-              >
-                <SelectTrigger className='h-9 text-xs bg-background font-medium'>
-                  <SelectValue placeholder='Pilih hari...' />
-                </SelectTrigger>
-                <SelectContent>
-                  {HARI_OPTIONS.map((h) => (
-                    <SelectItem key={h} value={h}>
-                      {h}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className='text-xs font-semibold'>Tanggal Rotasi</Label>
+              <Popover open={isDateOpen} onOpenChange={setIsDateOpen}>
+                <PopoverTrigger
+                  type='button'
+                  className='flex items-center justify-between w-full h-9 px-3 text-xs bg-background font-medium border rounded-md shadow-2xs cursor-pointer hover:bg-muted/80 select-none'
+                >
+                  <span className='flex items-center gap-1.5 truncate'>
+                    <CalendarIcon className='w-3.5 h-3.5 text-primary shrink-0' />
+                    {tanggal
+                      ? format(tanggal, 'd MMM yyyy', { locale: id })
+                      : 'Pilih tanggal...'}
+                  </span>
+                  <ChevronDown className='w-3 h-3 text-muted-foreground opacity-70 shrink-0' />
+                </PopoverTrigger>
+                <PopoverContent
+                  align='start'
+                  side='bottom'
+                  sideOffset={4}
+                  className='w-auto p-0 rounded-2xl shadow-xl border border-border bg-popover text-popover-foreground overflow-hidden z-50'
+                >
+                  <Calendar
+                    mode='single'
+                    selected={tanggal}
+                    onSelect={(d) => {
+                      if (d) {
+                        setTanggal(d);
+                        setIsDateOpen(false);
+                      }
+                    }}
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
 
 
@@ -200,7 +257,7 @@ export default function TambahSiklusDialog({
               <Input
                 value={deskripsi}
                 onChange={(e) => setDeskripsi(e.target.value)}
-                placeholder='contoh: Menu khusus hari rotasi'
+                placeholder='contoh: Menu khusus tanggal rotasi'
                 className='h-9 text-xs'
               />
             </div>

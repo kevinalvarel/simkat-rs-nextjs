@@ -28,7 +28,8 @@ export interface MasterSiklusItem {
   id: number;
   nomor_siklus: number;
   nama_siklus: string;
-  hari: string | null;
+  hari?: string | null;
+  tanggal?: string | null;
   deskripsi: string | null;
   is_active: boolean;
   created_at: Date;
@@ -39,6 +40,7 @@ export type CreateMasterSiklusPayload = {
   nomor_siklus: number;
   nama_siklus: string;
   hari?: string | null;
+  tanggal?: string | null;
   deskripsi?: string | null;
   copyFromSiklus?: number | null;
 };
@@ -46,6 +48,7 @@ export type CreateMasterSiklusPayload = {
 export type UpdateMasterSiklusPayload = {
   nama_siklus?: string;
   hari?: string | null;
+  tanggal?: string | null;
   deskripsi?: string | null;
   is_active?: boolean;
 };
@@ -134,9 +137,12 @@ async function ensureTableInitialized() {
       );
     `);
 
-    // Ensure hari column exists if created previously
+    // Ensure hari & tanggal columns exist if created previously
     await db.execute(sql`
       ALTER TABLE "master_siklus" ADD COLUMN IF NOT EXISTS "hari" text;
+    `);
+    await db.execute(sql`
+      ALTER TABLE "master_siklus" ADD COLUMN IF NOT EXISTS "tanggal" text;
     `);
 
     // 2. Ensure master_siklus_menu table exists
@@ -178,14 +184,76 @@ async function ensureTableInitialized() {
       ).sort((a, b) => a - b);
 
       await db.insert(masterSiklusTable).values(
-        defaultNumbers.map((num) => ({
-          nomor_siklus: num,
-          nama_siklus: `Siklus ${num}${num === 31 ? ' (Tgl 31)' : ''}`,
-          hari: HARI_ROTASI_LIST[(num - 1) % 7],
-          deskripsi: `Rotasi menu makanan hari ke-${num}`,
-          is_active: true,
-        })),
+        defaultNumbers.map((num) => {
+          const targetDate = new Date();
+          targetDate.setDate(targetDate.getDate() + (num - 1));
+          const yyyy = targetDate.getFullYear();
+          const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
+          const dd = String(targetDate.getDate()).padStart(2, '0');
+          const iso = `${yyyy}-${mm}-${dd}`;
+          const displayTarget = targetDate.toLocaleDateString('id-ID', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+          });
+          return {
+            nomor_siklus: num,
+            nama_siklus: `Siklus ${num}${num === 31 ? ' (Tgl 31)' : ''}`,
+            hari: HARI_ROTASI_LIST[(num - 1) % 7],
+            tanggal: iso,
+            deskripsi: `Rotasi menu makanan siklus tanggal ${displayTarget}`,
+            is_active: true,
+          };
+        }),
       );
+    } else {
+      // If table already has cycles but tanggal is null, initialize them
+      const nullTanggalCycles = await db
+        .select({
+          id: masterSiklusTable.id,
+          nomor_siklus: masterSiklusTable.nomor_siklus,
+        })
+        .from(masterSiklusTable)
+        .where(sql`"tanggal" IS NULL`)
+        .orderBy(asc(masterSiklusTable.nomor_siklus));
+
+      if (nullTanggalCycles.length > 0) {
+        const today = new Date();
+        const dayNames = [
+          'MINGGU',
+          'SENIN',
+          'SELASA',
+          'RABU',
+          'KAMIS',
+          'JUMAT',
+          'SABTU',
+        ];
+        for (let i = 0; i < nullTanggalCycles.length; i++) {
+          const row = nullTanggalCycles[i];
+          const targetDate = new Date(today);
+          targetDate.setDate(today.getDate() + (row.nomor_siklus - 1));
+          const yyyy = targetDate.getFullYear();
+          const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
+          const dd = String(targetDate.getDate()).padStart(2, '0');
+          const iso = `${yyyy}-${mm}-${dd}`;
+          const day = dayNames[targetDate.getDay()];
+          const displayTarget = targetDate.toLocaleDateString('id-ID', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+          });
+
+          await db
+            .update(masterSiklusTable)
+            .set({
+              tanggal: iso,
+              hari: day,
+              deskripsi: `Rotasi menu makanan siklus tanggal ${displayTarget}`,
+              updated_at: new Date(),
+            })
+            .where(eq(masterSiklusTable.id, row.id));
+        }
+      }
     }
   } catch (err) {
     console.error('Error ensuring master_siklus / menu tables exist:', err);
@@ -211,6 +279,7 @@ export async function getMasterSiklusList(): Promise<MasterSiklusItem[]> {
       nomor_siklus: row.nomor_siklus,
       nama_siklus: row.nama_siklus,
       hari: row.hari,
+      tanggal: row.tanggal,
       deskripsi: row.deskripsi,
       is_active: row.is_active,
       created_at: row.created_at,
@@ -223,6 +292,7 @@ export async function getMasterSiklusList(): Promise<MasterSiklusItem[]> {
       nomor_siklus: num,
       nama_siklus: `Siklus ${num}`,
       hari: HARI_ROTASI_LIST[(num - 1) % 7],
+      tanggal: null,
       deskripsi: null,
       is_active: true,
       created_at: new Date(),
@@ -270,6 +340,7 @@ export async function createMasterSiklus(
         nomor_siklus: payload.nomor_siklus,
         nama_siklus: namaSiklus,
         hari: payload.hari?.trim()?.toUpperCase() || null,
+        tanggal: payload.tanggal?.trim() || null,
         deskripsi: payload.deskripsi?.trim() || null,
         is_active: true,
       })
@@ -338,6 +409,9 @@ export async function updateMasterSiklus(
         ...(payload.hari !== undefined
           ? { hari: payload.hari?.trim()?.toUpperCase() || null }
           : {}),
+        ...(payload.tanggal !== undefined
+          ? { tanggal: payload.tanggal?.trim() || null }
+          : {}),
         ...(payload.deskripsi !== undefined
           ? { deskripsi: payload.deskripsi?.trim() || null }
           : {}),
@@ -360,7 +434,100 @@ export async function updateMasterSiklus(
 }
 
 /**
- * Automatically set rotation schedule starting from a chosen Day for Cycle 1
+ * Automatically set rotation schedule starting from a chosen Date for Cycle 1
+ */
+export async function applyStartDateRotation(
+  startDateInput: Date | string,
+): Promise<MutationResult> {
+  try {
+    await ensureTableInitialized();
+
+    const startDate =
+      typeof startDateInput === 'string'
+        ? new Date(startDateInput)
+        : startDateInput;
+
+    if (isNaN(startDate.getTime())) {
+      return {
+        success: false,
+        message: 'Tanggal mulai rotasi siklus tidak valid.',
+      };
+    }
+
+    const cycles = await db
+      .select()
+      .from(masterSiklusTable)
+      .orderBy(asc(masterSiklusTable.nomor_siklus));
+
+    if (!cycles || cycles.length === 0) {
+      return {
+        success: false,
+        message: 'Tidak ada data siklus menu yang terdaftar.',
+      };
+    }
+
+    const dayNames = [
+      'MINGGU',
+      'SENIN',
+      'SELASA',
+      'RABU',
+      'KAMIS',
+      'JUMAT',
+      'SABTU',
+    ];
+
+    for (let i = 0; i < cycles.length; i++) {
+      const cycle = cycles[i];
+      const targetDate = new Date(startDate);
+      targetDate.setDate(startDate.getDate() + i);
+
+      const yyyy = targetDate.getFullYear();
+      const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
+      const dd = String(targetDate.getDate()).padStart(2, '0');
+      const isoDate = `${yyyy}-${mm}-${dd}`;
+      const assignedDay = dayNames[targetDate.getDay()];
+      const displayTargetDate = targetDate.toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      });
+
+      await db
+        .update(masterSiklusTable)
+        .set({
+          tanggal: isoDate,
+          hari: assignedDay,
+          deskripsi: `Rotasi menu makanan siklus tanggal ${displayTargetDate}`,
+          updated_at: new Date(),
+        })
+        .where(eq(masterSiklusTable.nomor_siklus, cycle.nomor_siklus));
+    }
+
+    try {
+      revalidatePath('/dashboard/ag-katering/admin/konfigurasi-siklus-menu');
+    } catch {}
+
+    const displayDate = startDate.toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+
+    return {
+      success: true,
+      message: `Jadwal rotasi siklus berhasil diperbarui: Siklus #1 dimulai pada tanggal ${displayDate}.`,
+    };
+  } catch (error) {
+    console.error('Error applying start date rotation:', error);
+    return {
+      success: false,
+      message: 'Gagal mengatur jadwal tanggal rotasi siklus.',
+    };
+  }
+}
+
+/**
+ * Backwards-compatible day-based rotation setting
  */
 export async function applyStartDayRotation(
   startDay: string,

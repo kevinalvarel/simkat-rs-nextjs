@@ -1,21 +1,20 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type {
   PemorsianSummaryData,
   PemorsianPatientItem,
   PemorsianRevisiItem,
-  PemorsianFilterState,
   EtiketData,
 } from '@/types/pemorsiantypes';
-import { getPemorsianData } from '@/servers/pemorsian.service';
-import PemorsianHeader from '@/components/ag-katering/user/overview/pemorsian/layout/PemorsianHeader';
-import PemorsianStatsCard from '@/components/ag-katering/user/overview/pemorsian/ui/PemorsianStatsCard';
-import PemorsianFilterBar from '@/components/ag-katering/user/overview/pemorsian/ui/PemorsianFilterBar';
-import PemorsianTableSection from '@/components/ag-katering/user/overview/pemorsian/layout/PemorsianTableSection';
-import PemorsianRevisiTableSection from '@/components/ag-katering/user/overview/pemorsian/layout/PemorsianRevisiTableSection';
-import EtiketPrintPreviewModal from '@/components/ag-katering/user/overview/pemorsian/layout/EtiketPrintPreviewModal';
-import { Layers, History } from 'lucide-react';
+import { getLivePemorsianData } from '@/servers/pemorsian.service';
+import { listenProductionUpdate } from '@/lib/realtime-sync';
+import { useEtiketPrintedSync } from '@/hooks/useEtiketPrintedSync';
+import PemorsianStatsCards from '../ui/PemorsianStatsCards';
+import PemorsianRevisiTableSection from './PemorsianRevisiTableSection';
+import EtiketPrintPreviewModal from '../../../../cetak-etiket/EtiketPrintPreviewModal';
+
+const AUTO_SYNC_INTERVAL_MS = 60000; // 60s background keep-fresh interval
 
 interface PemorsianClientProps {
   initialData: PemorsianSummaryData;
@@ -23,200 +22,239 @@ interface PemorsianClientProps {
 
 export default function PemorsianClient({ initialData }: PemorsianClientProps) {
   const [data, setData] = useState<PemorsianSummaryData>(initialData);
-  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'utama' | 'revisi'>('utama');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isAutoSyncEnabled, setIsAutoSyncEnabled] = useState<boolean>(true);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string>(
+    initialData.lastUpdated || new Date().toLocaleTimeString('id-ID'),
+  );
 
-  // Selection states
-  const [selectedSnapshotIds, setSelectedSnapshotIds] = useState<Set<number>>(
+  // Status Filter: 'ALL' | 'BELUM_DICETAK' | 'SUDAH_DICETAK' | 'BUTUH_REVISI'
+  const [activeStatusFilter, setActiveStatusFilter] = useState<string>('ALL');
+
+  // Selected Card & Revision IDs for batch actions
+  const [selectedCardIds, setSelectedCardIds] = useState<Set<number>>(
     new Set(),
   );
   const [selectedRevisiIds, setSelectedRevisiIds] = useState<Set<number>>(
     new Set(),
   );
 
-  // Filter State
-  const [filter, setFilter] = useState<PemorsianFilterState>({
-    search: '',
-    gedung: 'ALL',
-    ruangan: 'ALL',
-    diet: 'ALL',
-    status: 'ALL',
-  });
-
   // Modal Preview State
   const [modalOpen, setModalOpen] = useState<boolean>(false);
   const [modalTitle, setModalTitle] = useState<string>('');
   const [previewEtiketList, setPreviewEtiketList] = useState<EtiketData[]>([]);
+  const pendingPrintIdsRef = useRef<number[]>([]);
 
-  // 1. Dynamic Filter Options derived from patients list
-  const { gedungOptions, ruanganOptions, dietOptions } = useMemo(() => {
-    const gedungs = new Set<string>();
-    const ruangans = new Set<string>();
-    const diets = new Set<string>();
+  // Prevent concurrent fetch calls
+  const isFetchingRef = useRef(false);
 
-    data.patients.forEach((p) => {
-      if (p.gedung) gedungs.add(p.gedung);
-      if (p.ruangan) ruangans.add(p.ruangan);
-      if (p.diet) diets.add(p.diet);
+  // 2. Synchronized Printed Status (shared with Cetak Etiket)
+  const { printedPatientIds, savePrintedIds } = useEtiketPrintedSync(
+    data.batchCode,
+  );
+
+  // 3. Enrich patients with dynamic printed status
+  const enrichedPatients: PemorsianPatientItem[] = useMemo(() => {
+    return data.patients.map((p) => {
+      // If patient is in Butuh Revisi, retain status
+      if (p.print_status === 'BUTUH_REVISI') {
+        return p;
+      }
+
+      // Check if printed in localStorage
+      if (printedPatientIds.has(p.id)) {
+        return {
+          ...p,
+          print_status: 'SUDAH_DICETAK',
+        };
+      }
+
+      return {
+        ...p,
+        print_status: 'BELUM_DICETAK',
+      };
     });
+  }, [data.patients, printedPatientIds]);
 
-    data.revisiItems.forEach((r) => {
-      if (r.gedung) gedungs.add(r.gedung);
-      if (r.ruangan) ruangans.add(r.ruangan);
-      if (r.data_baru?.diet) diets.add(r.data_baru.diet);
-    });
+  // Calculate dynamic status counts
+  const { belumDicetakCount, sudahDicetakCount, butuhRevisiCount } =
+    useMemo(() => {
+      let belum = 0;
+      let sudah = 0;
+      enrichedPatients.forEach((p) => {
+        if (p.print_status === 'BELUM_DICETAK') belum++;
+        else if (p.print_status === 'SUDAH_DICETAK') sudah++;
+      });
+      return {
+        belumDicetakCount: belum,
+        sudahDicetakCount: sudah,
+        butuhRevisiCount: data.revisiItems.length,
+      };
+    }, [enrichedPatients, data.revisiItems.length]);
 
-    return {
-      gedungOptions: Array.from(gedungs).sort(),
-      ruanganOptions: Array.from(ruangans).sort(),
-      dietOptions: Array.from(diets).sort(),
+  // 4. Data fetching helper (manual and silent background sync)
+  const fetchLiveData = useCallback(
+    async (batchId?: number, isManual = false) => {
+      if (isFetchingRef.current) return;
+      isFetchingRef.current = true;
+
+      if (isManual) setIsRefreshing(true);
+
+      try {
+        const targetBatchId = batchId !== undefined ? batchId : data.batch?.id;
+        const live = await getLivePemorsianData(targetBatchId);
+        if (live && live.success !== false) {
+          setData(live);
+          setLastSyncedAt(
+            live.lastUpdated || new Date().toLocaleTimeString('id-ID'),
+          );
+        }
+      } catch (err) {
+        console.error('Error fetching live pemorsian data:', err);
+      } finally {
+        isFetchingRef.current = false;
+        if (isManual) setIsRefreshing(false);
+      }
+    },
+    [data.batch],
+  );
+
+  // Keep state synchronized if RSC passes updated initialData
+  const lastInitialUpdateRef = useRef(initialData?.lastUpdated);
+  useEffect(() => {
+    if (
+      initialData &&
+      initialData.lastUpdated !== lastInitialUpdateRef.current
+    ) {
+      lastInitialUpdateRef.current = initialData.lastUpdated;
+      const timer = setTimeout(() => {
+        setData(initialData);
+        setLastSyncedAt(
+          initialData.lastUpdated || new Date().toLocaleTimeString('id-ID'),
+        );
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, [initialData]);
+
+  // 5. Periodic Background Auto-Sync Polling (every 60s)
+  useEffect(() => {
+    if (!isAutoSyncEnabled) return;
+
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchLiveData(undefined, false);
+      }
+    }, AUTO_SYNC_INTERVAL_MS);
+
+    return () => clearInterval(interval);
+  }, [isAutoSyncEnabled, fetchLiveData]);
+
+  // 6. Tab Visibility & Window Focus Auto-Sync
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchLiveData(undefined, false);
+      }
     };
-  }, [data.patients, data.revisiItems]);
 
-  // 2. Filtered Snapshot Patients
-  const filteredPatients = useMemo(() => {
-    return data.patients.filter((p) => {
-      // Search
-      if (filter.search.trim()) {
-        const q = filter.search.toLowerCase();
-        const matchName = p.nama_pasien.toLowerCase().includes(q);
-        const matchRm = p.no_rm.toLowerCase().includes(q);
-        if (!matchName && !matchRm) return false;
-      }
+    const handleWindowFocus = () => {
+      fetchLiveData(undefined, false);
+    };
 
-      // Gedung
-      if (filter.gedung !== 'ALL' && p.gedung !== filter.gedung) {
-        return false;
-      }
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleWindowFocus);
 
-      // Ruangan
-      if (filter.ruangan !== 'ALL' && p.ruangan !== filter.ruangan) {
-        return false;
-      }
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleWindowFocus);
+    };
+  }, [fetchLiveData]);
 
-      // Diet
-      if (filter.diet !== 'ALL' && p.diet !== filter.diet) {
-        return false;
-      }
-
-      // Status
-      if (filter.status !== 'ALL') {
-        const normStatus = (p.status || '').toUpperCase();
-        if (
-          filter.status === 'EMERGENT' &&
-          !p.is_emergent &&
-          normStatus !== 'EMERGENT'
-        ) {
-          return false;
-        }
-        if (
-          filter.status === 'NPO' &&
-          normStatus !== 'NPO' &&
-          !p.diet.toLowerCase().includes('npo')
-        ) {
-          return false;
-        }
-        if (
-          filter.status === 'AKTIF' &&
-          (normStatus === 'NPO' || p.is_emergent)
-        ) {
-          return false;
-        }
-      }
-
-      return true;
+  // 7. Cross-Tab Synchronization (BroadcastChannel)
+  useEffect(() => {
+    const unsubscribe = listenProductionUpdate((msg) => {
+      console.debug('Received real-time production update in Pemorsian:', msg);
+      fetchLiveData(undefined, false);
     });
-  }, [data.patients, filter]);
 
-  // 3. Filtered Revisi Items
-  const filteredRevisiItems = useMemo(() => {
-    return data.revisiItems.filter((r) => {
-      if (filter.search.trim()) {
-        const q = filter.search.toLowerCase();
-        const matchName = r.nama_pasien.toLowerCase().includes(q);
-        const matchRm = r.no_rm.toLowerCase().includes(q);
-        if (!matchName && !matchRm) return false;
-      }
+    return () => {
+      unsubscribe();
+    };
+  }, [fetchLiveData]);
 
-      if (filter.gedung !== 'ALL' && r.gedung !== filter.gedung) {
-        return false;
-      }
-
-      if (filter.ruangan !== 'ALL' && r.ruangan !== filter.ruangan) {
-        return false;
-      }
-
-      return true;
-    });
-  }, [data.revisiItems, filter]);
-
-  // 4. Selection Handlers for Tab Utama (Snapshot)
-  const isAllSnapshotSelected =
-    filteredPatients.length > 0 &&
-    filteredPatients.every((p) => selectedSnapshotIds.has(p.id));
-
-  function handleToggleSnapshotSelect(id: number) {
-    setSelectedSnapshotIds((prev) => {
+  // 8. Card Selection Handlers
+  function handleToggleCardSelect(id: number) {
+    setSelectedCardIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }
 
-  function handleToggleSnapshotSelectAll() {
-    if (isAllSnapshotSelected) {
-      setSelectedSnapshotIds((prev) => {
-        const next = new Set(prev);
-        filteredPatients.forEach((p) => next.delete(p.id));
-        return next;
-      });
+  function handleToggleCardSelectAll() {
+    const activeCards = enrichedPatients.filter(
+      (p) => p.print_status !== 'BUTUH_REVISI',
+    );
+    const isAll =
+      activeCards.length > 0 &&
+      activeCards.every((p) => selectedCardIds.has(p.id));
+
+    if (isAll) {
+      setSelectedCardIds(new Set());
     } else {
-      setSelectedSnapshotIds((prev) => {
-        const next = new Set(prev);
-        filteredPatients.forEach((p) => next.add(p.id));
-        return next;
-      });
+      setSelectedCardIds(new Set(activeCards.map((p) => p.id)));
     }
   }
 
-  // 5. Selection Handlers for Tab Revisi
-  const isAllRevisiSelected =
-    filteredRevisiItems.length > 0 &&
-    filteredRevisiItems.every((r) => selectedRevisiIds.has(r.id));
-
+  // 9. Revisi Selection Handlers
   function handleToggleRevisiSelect(id: number) {
     setSelectedRevisiIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }
 
   function handleToggleRevisiSelectAll() {
-    if (isAllRevisiSelected) {
-      setSelectedRevisiIds((prev) => {
-        const next = new Set(prev);
-        filteredRevisiItems.forEach((r) => next.delete(r.id));
-        return next;
-      });
+    const isAll =
+      data.revisiItems.length > 0 &&
+      data.revisiItems.every((r) => selectedRevisiIds.has(r.id));
+
+    if (isAll) {
+      setSelectedRevisiIds(new Set());
     } else {
-      setSelectedRevisiIds((prev) => {
-        const next = new Set(prev);
-        filteredRevisiItems.forEach((r) => next.add(r.id));
-        return next;
-      });
+      setSelectedRevisiIds(new Set(data.revisiItems.map((r) => r.id)));
     }
   }
 
-  // 6. Print Handlers
+  // 10. Status Toggle Handlers (Manual status update)
+  function handleTogglePrintedStatus(id: number, currentStatus: string) {
+    const next = new Set(printedPatientIds);
+    if (currentStatus === 'SUDAH_DICETAK') {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    savePrintedIds(next);
+  }
+
+  function handleBatchMarkStatus(
+    ids: number[],
+    newStatus: 'SUDAH_DICETAK' | 'BELUM_DICETAK',
+  ) {
+    const next = new Set(printedPatientIds);
+    ids.forEach((id) => {
+      if (newStatus === 'SUDAH_DICETAK') next.add(id);
+      else next.delete(id);
+    });
+    savePrintedIds(next);
+    setSelectedCardIds(new Set());
+  }
+
+  // 11. Etiket Mapping Helpers
   function mapPatientToEtiket(p: PemorsianPatientItem): EtiketData {
     return {
       nama: p.nama_pasien,
@@ -242,196 +280,115 @@ export default function PemorsianClient({ initialData }: PemorsianClientProps) {
       kelas: r.data_baru?.kelas || r.kelas,
       gedung: r.data_baru?.gedung || r.gedung,
       is_revisi: true,
-      keterangan_revisi: r.dampak_dapur,
+      keterangan_revisi: r.dampak_dapur || 'Revisi Diet',
     };
   }
 
+  // 12. Print Action Handlers
   function handlePrintSinglePatient(patient: PemorsianPatientItem) {
     const etiket = mapPatientToEtiket(patient);
+    pendingPrintIdsRef.current = [patient.id];
     setPreviewEtiketList([etiket]);
     setModalTitle(`Cetak Etiket - ${patient.nama_pasien}`);
     setModalOpen(true);
   }
 
-  function handlePrintBatchPatients() {
-    const selectedPatients = data.patients.filter((p) =>
-      selectedSnapshotIds.has(p.id),
-    );
-    if (selectedPatients.length === 0) return;
+  function handlePrintBatchPatients(patientList?: PemorsianPatientItem[]) {
+    const targetPatients =
+      patientList || enrichedPatients.filter((p) => selectedCardIds.has(p.id));
 
-    const etikets = selectedPatients.map(mapPatientToEtiket);
-    const isAll = selectedPatients.length === filteredPatients.length;
+    if (targetPatients.length === 0) return;
+
+    const etikets = targetPatients.map(mapPatientToEtiket);
+    pendingPrintIdsRef.current = targetPatients.map((p) => p.id);
 
     setPreviewEtiketList(etikets);
-    setModalTitle(
-      isAll
-        ? `Cetak Semua Etiket (${selectedPatients.length} Pasien)`
-        : `Cetak ${selectedPatients.length} Etiket Terpilih`,
-    );
+    setModalTitle(`Cetak ${targetPatients.length} Etiket Makan Pasien`);
     setModalOpen(true);
   }
 
   function handlePrintSingleRevisi(revisi: PemorsianRevisiItem) {
     const etiket = mapRevisiToEtiket(revisi);
+    pendingPrintIdsRef.current = [revisi.id];
     setPreviewEtiketList([etiket]);
     setModalTitle(`Cetak Etiket Revisi - ${revisi.nama_pasien}`);
     setModalOpen(true);
   }
 
-  function handlePrintBatchRevisi() {
-    const selectedItems = data.revisiItems.filter((r) =>
-      selectedRevisiIds.has(r.id),
-    );
-    if (selectedItems.length === 0) return;
+  function handlePrintBatchRevisi(items?: PemorsianRevisiItem[]) {
+    const targetItems =
+      items || data.revisiItems.filter((r) => selectedRevisiIds.has(r.id));
 
-    const etikets = selectedItems.map(mapRevisiToEtiket);
-    const isAll = selectedItems.length === filteredRevisiItems.length;
+    if (targetItems.length === 0) return;
+
+    const etikets = targetItems.map(mapRevisiToEtiket);
+    pendingPrintIdsRef.current = targetItems.map((r) => r.id);
 
     setPreviewEtiketList(etikets);
-    setModalTitle(
-      isAll
-        ? `Cetak Semua Etiket Revisi (${selectedItems.length} Pasien)`
-        : `Cetak ${selectedItems.length} Etiket Revisi Terpilih`,
-    );
+    setModalTitle(`Cetak ${targetItems.length} Etiket Revisi Pasien`);
     setModalOpen(true);
   }
 
-  // 7. Filter Update & Reset
-  function handleFilterChange(newFilter: Partial<PemorsianFilterState>) {
-    setFilter((prev) => ({ ...prev, ...newFilter }));
-  }
-
-  function handleResetFilter() {
-    setFilter({
-      search: '',
-      gedung: 'ALL',
-      ruangan: 'ALL',
-      diet: 'ALL',
-      status: 'ALL',
-    });
-  }
-
-  // 8. Batch & Refresh Handlers
-  async function handleBatchChange(batchId: number) {
-    setIsRefreshing(true);
-    try {
-      const refreshed = await getPemorsianData(batchId);
-      setData(refreshed);
-      setSelectedSnapshotIds(new Set());
+  // When print succeeds, mark the pending printed IDs in localStorage
+  function handlePrintSuccess() {
+    const ids = pendingPrintIdsRef.current;
+    if (ids && ids.length > 0) {
+      const next = new Set(printedPatientIds);
+      ids.forEach((id) => next.add(id));
+      savePrintedIds(next);
+      setSelectedCardIds(new Set());
       setSelectedRevisiIds(new Set());
-    } catch (err) {
-      console.error('Error changing snapshot batch:', err);
-    } finally {
-      setIsRefreshing(false);
     }
   }
 
-  async function handleRefresh() {
-    setIsRefreshing(true);
-    try {
-      const refreshed = await getPemorsianData(data.batch?.id);
-      setData(refreshed);
-    } catch (err) {
-      console.error('Error refreshing pemorsian data:', err);
-    } finally {
-      setIsRefreshing(false);
+  // 13. Filter status navigation (from sidebar or tabs)
+  function handleStatusFilterClick(
+    status: 'ALL' | 'BELUM_DICETAK' | 'SUDAH_DICETAK' | 'BUTUH_REVISI',
+  ) {
+    setActiveStatusFilter(status);
+    if (status === 'BUTUH_REVISI') {
+      // Smooth scroll to dedicated revisi section
+      const section = document.getElementById('section-revisi-pemorsian');
+      if (section) {
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     }
   }
-
-  const currentSelectedCount =
-    activeTab === 'utama' ? selectedSnapshotIds.size : selectedRevisiIds.size;
 
   return (
     <div className='flex flex-1 flex-col gap-6 p-4 sm:p-6 md:p-8 max-w-7xl mx-auto w-full min-w-0 overflow-x-hidden'>
-      {/* 1. Header with Title & Batch Selector */}
-      <PemorsianHeader
-        currentBatch={data.batch}
-        availableBatches={data.availableBatches}
-        onBatchChange={handleBatchChange}
-        onRefresh={handleRefresh}
-        isRefreshing={isRefreshing}
+      {/* 2. 3 Card Keterangan: Sudah Dicetak, Belum Tercetak, Perlu Direvisi (Shadcn) */}
+      <PemorsianStatsCards
+        sudahDicetakCount={sudahDicetakCount}
+        belumDicetakCount={belumDicetakCount}
+        butuhRevisiCount={butuhRevisiCount}
+        activeStatusFilter={activeStatusFilter}
+        onFilterStatusClick={handleStatusFilterClick}
       />
 
-      {/* 2. Stats Metrics Card */}
-      <PemorsianStatsCard
-        totalCount={data.totalCount}
-        activeCount={data.activeCount}
-        npoCount={data.npoCount}
-        selectedCount={currentSelectedCount}
-      />
-
-      {/* 3. Tab Switcher Navigation */}
-      <div className='flex items-center gap-2 border-b border-border pb-1'>
-        <button
-          onClick={() => setActiveTab('utama')}
-          className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-t-xl transition-all border-b-2 ${
-            activeTab === 'utama'
-              ? 'border-primary text-primary bg-primary/5'
-              : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30'
-          }`}
-        >
-          <Layers className='w-4 h-4' />
-          <span>Tab Utama (Snapshot Saat Ini)</span>
-          <span className='ml-1 px-2 py-0.5 text-xs rounded-full bg-primary/10 text-primary font-bold'>
-            {filteredPatients.length}
-          </span>
-        </button>
-
-        <button
-          onClick={() => setActiveTab('revisi')}
-          className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-t-xl transition-all border-b-2 ${
-            activeTab === 'revisi'
-              ? 'border-amber-600 text-amber-700 dark:text-amber-400 bg-amber-500/5'
-              : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30'
-          }`}
-        >
-          <History className='w-4 h-4' />
-          <span>Tab Revisi (Perubahan Susulan)</span>
-          <span className='ml-1 px-2 py-0.5 text-xs rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-300 font-bold'>
-            {filteredRevisiItems.length}
-          </span>
-        </button>
-      </div>
-
-      {/* 4. Search & Filter Bar */}
-      <PemorsianFilterBar
-        filter={filter}
-        onFilterChange={handleFilterChange}
-        onReset={handleResetFilter}
-        gedungOptions={gedungOptions}
-        ruanganOptions={ruanganOptions}
-        dietOptions={dietOptions}
-      />
-
-      {/* 5. Active Tab Table Content */}
-      {activeTab === 'utama' ? (
-        <PemorsianTableSection
-          patients={filteredPatients}
-          selectedIds={selectedSnapshotIds}
-          onToggleSelect={handleToggleSnapshotSelect}
-          onToggleSelectAll={handleToggleSnapshotSelectAll}
-          onPrintSingle={handlePrintSinglePatient}
-          onPrintBatch={handlePrintBatchPatients}
-          isAllSelected={isAllSnapshotSelected}
-        />
-      ) : (
+      {/* 4. Dedicated Section: Table Perubahan Data (Status: Butuh Revisi) */}
+      <div id='section-revisi-pemorsian' className='w-full pt-2'>
         <PemorsianRevisiTableSection
-          revisiItems={filteredRevisiItems}
+          revisiItems={data.revisiItems}
           selectedIds={selectedRevisiIds}
           onToggleSelect={handleToggleRevisiSelect}
           onToggleSelectAll={handleToggleRevisiSelectAll}
           onPrintSingle={handlePrintSingleRevisi}
           onPrintBatch={handlePrintBatchRevisi}
-          isAllSelected={isAllRevisiSelected}
+          isAllSelected={
+            data.revisiItems.length > 0 &&
+            selectedRevisiIds.size === data.revisiItems.length
+          }
         />
-      )}
+      </div>
 
-      {/* 6. Etiket Print Preview Dialog */}
+      {/* 5. Etiket Print Preview Modal Dialog */}
       <EtiketPrintPreviewModal
         open={modalOpen}
         onOpenChange={setModalOpen}
         etiketList={previewEtiketList}
         title={modalTitle}
+        onPrintSuccess={handlePrintSuccess}
       />
     </div>
   );

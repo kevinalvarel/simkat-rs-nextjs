@@ -60,26 +60,29 @@ export default function SiklusSlotEditorDialog({
 
   useEffect(() => {
     if (open && slotContext) {
-      if (slotContext.existingItems.length > 0) {
-        setItems(
-          slotContext.existingItems.map((item, idx) => ({
-            id: item.id,
-            nama_makanan: item.nama_makanan,
-            kategori_menu: item.kategori_menu || '',
-            catatan: item.catatan || '',
-            urutan: item.urutan || idx + 1,
-          }))
-        );
-      } else {
-        setItems([
-          {
-            nama_makanan: '',
-            kategori_menu: 'B',
-            catatan: '',
-            urutan: 1,
-          },
-        ]);
-      }
+      const timer = setTimeout(() => {
+        if (slotContext.existingItems.length > 0) {
+          setItems(
+            slotContext.existingItems.map((item, idx) => ({
+              id: item.id,
+              nama_makanan: item.nama_makanan,
+              kategori_menu: item.kategori_menu || '',
+              catatan: item.catatan || '',
+              urutan: item.urutan || idx + 1,
+            }))
+          );
+        } else {
+          setItems([
+            {
+              nama_makanan: '',
+              kategori_menu: 'B',
+              catatan: '',
+              urutan: 1,
+            },
+          ]);
+        }
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [open, slotContext]);
 

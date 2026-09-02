@@ -16,6 +16,12 @@ export interface PemorsianPatientItem {
   extra?: string | null;
   buah?: string | null;
   snack?: string | null;
+
+  // Print & Revision Tracking
+  print_status?: 'BELUM_DICETAK' | 'SUDAH_DICETAK' | 'BUTUH_REVISI';
+  printed_at?: string | null;
+  diet_lama?: string | null;
+  revisi_note?: string | null;
 }
 
 export interface PemorsianBatchOption {
@@ -72,14 +78,36 @@ export interface PemorsianRevisiItem {
 export interface PemorsianSummaryData {
   success: boolean;
   batch: PemorsianBatchOption | null;
+  batchId?: number | null;
+  batchCode?: string;
+  waktuMakan?: string;
+  tanggalProduksi?: string;
+  statusBatch?: 'LIVE' | 'LOCKED';
+  cutoffTime?: string;
+
+  // Cycle & Day Info (consistent with Live Produksi)
+  siklusKe?: number;
+  namaSiklus?: string;
+  hari?: string;
+  tanggalFormatted?: string;
+  deskripsiSiklus?: string;
+
   availableBatches: PemorsianBatchOption[];
   patients: PemorsianPatientItem[];
   revisiItems: PemorsianRevisiItem[];
+
   totalCount: number;
+  totalPasien?: number;
   revisiCount: number;
   dietSummary: PemorsianDietCount[];
   activeCount: number;
   npoCount: number;
+
+  // 3-Status Counts
+  belumDicetakCount?: number;
+  sudahDicetakCount?: number;
+  butuhRevisiCount?: number;
+
   lastUpdated: string;
 }
 

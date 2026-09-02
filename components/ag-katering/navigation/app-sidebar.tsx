@@ -45,7 +45,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             >
               <div className='flex flex-row items-center gap-2'>
                 <Image
-                  src='/logo-rsud.webp'
+                  src='/icons/logo-rsud.webp'
                   alt='Logo'
                   width={50}
                   height={50}

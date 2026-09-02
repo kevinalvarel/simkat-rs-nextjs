@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Printer, CheckSquare, Square, UtensilsCrossed } from 'lucide-react';
-import type { PemorsianPatientItem, EtiketData } from '@/types/pemorsiantypes';
+import type { PemorsianPatientItem } from '@/types/pemorsiantypes';
 import PemorsianStatusBadge from '@/components/ag-katering/user/overview/pemorsian/ui/PemorsianStatusBadge';
 
 interface PemorsianTableSectionProps {
