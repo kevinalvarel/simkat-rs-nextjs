@@ -1,22 +1,22 @@
 'use client';
 
 import React from 'react';
-import { Card, CardContent } from '@/components/ui/card';
-import { 
-  Utensils, 
-  Building2, 
-  Users, 
-  Sparkles, 
+import {
+  Utensils,
+  Building2,
+  Users,
   HeartHandshake,
-  CheckCircle2
 } from 'lucide-react';
 import type { TabulasiHospitalData } from '@/types/tabulasitypes';
+import TabulasiStatCard from '../ui/TabulasiStatCard';
 
 interface TabulasiStatsCardsProps {
   hospitalData: TabulasiHospitalData;
 }
 
-export default function TabulasiStatsCards({ hospitalData }: TabulasiStatsCardsProps) {
+export default function TabulasiStatsCards({
+  hospitalData,
+}: TabulasiStatsCardsProps) {
   const cards = [
     {
       title: 'Total Porsi Makan',
@@ -71,41 +71,20 @@ export default function TabulasiStatsCards({ hospitalData }: TabulasiStatsCardsP
   ];
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5 no-print">
-      {cards.map((c, i) => {
-        const Icon = c.icon;
-        return (
-          <Card
-            key={i}
-            className={`border ${c.border} bg-card rounded-2xl shadow-2xs transition-all hover:shadow-xs`}
-          >
-            <CardContent className="p-4 flex flex-col justify-between h-full gap-2">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider line-clamp-1">
-                  {c.title}
-                </span>
-                <div className={`p-1.5 rounded-xl ${c.bg} ${c.color} shrink-0`}>
-                  <Icon className="w-4 h-4" />
-                </div>
-              </div>
-
-              <div className="space-y-0.5">
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-xl sm:text-2xl font-extrabold font-mono text-foreground tracking-tight">
-                    {c.value.toLocaleString('id-ID')}
-                  </span>
-                  <span className="text-xs font-semibold text-muted-foreground">
-                    {c.unit}
-                  </span>
-                </div>
-                <p className="text-[11px] text-muted-foreground line-clamp-1">
-                  {c.subtext}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        );
-      })}
+    <div className='grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5 no-print'>
+      {cards.map((c) => (
+        <TabulasiStatCard
+          key={c.title}
+          title={c.title}
+          value={c.value}
+          unit={c.unit}
+          subtext={c.subtext}
+          icon={c.icon}
+          color={c.color}
+          bg={c.bg}
+          border={c.border}
+        />
+      ))}
     </div>
   );
 }
