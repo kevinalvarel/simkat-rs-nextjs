@@ -13,7 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Printer, Tag } from 'lucide-react';
 import type { EtiketData } from '@/types/pemorsiantypes';
-import EtiketCard from '@/components/ag-katering/cetak-etiket/EtiketCard';
+import EtiketCard from '@/components/ag-katering/user/cetak-etiket/layout/EtiketCard';
 
 interface EtiketPrintPreviewModalProps {
   open: boolean;

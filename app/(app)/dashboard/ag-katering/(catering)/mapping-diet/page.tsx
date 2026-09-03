@@ -2,6 +2,7 @@ import React from 'react';
 import type { Metadata } from 'next';
 import {
   getUnmappedDietItems,
+  getMappedDietItems,
   getKategoriMenuOptions,
   getMappingDietStats,
 } from '@/servers/mapping-diet.service';
@@ -16,13 +17,19 @@ export const metadata: Metadata = {
 };
 
 export default async function MappingDietPage() {
-  const [items, options] = await Promise.all([
+  const [unmappedItems, mappedItems, options] = await Promise.all([
     getUnmappedDietItems(),
+    getMappedDietItems(),
     getKategoriMenuOptions(),
   ]);
-  const stats = await getMappingDietStats(items);
+  const stats = await getMappingDietStats(unmappedItems, mappedItems);
 
   return (
-    <MappingDietClient initialItems={items} options={options} stats={stats} />
+    <MappingDietClient
+      initialUnmappedItems={unmappedItems}
+      initialMappedItems={mappedItems}
+      options={options}
+      stats={stats}
+    />
   );
 }

@@ -143,6 +143,8 @@ export async function getAvailablePemorsianBatches(): Promise<
  */
 export async function getLivePemorsianData(
   batchId?: number,
+  filterDate?: string,
+  filterWaktuMakan?: string,
 ): Promise<PemorsianSummaryData> {
   try {
     // 1. Fetch time configs & resolve current cycle
@@ -154,11 +156,19 @@ export async function getLivePemorsianData(
 
     // 3. Resolve Target Batch:
     // If batchId is provided, use that batch.
-    // If not provided, check if current cycle (tanggalProduksi + waktuMakan) has a locked batch.
+    // If filterDate and filterWaktuMakan are provided, find matching batch.
+    // Otherwise, check if current cycle (tanggalProduksi + waktuMakan) has a locked batch.
     let selectedBatch: PemorsianBatchOption | null = null;
 
     if (batchId) {
       selectedBatch = availableBatches.find((b) => b.id === batchId) || null;
+    } else if (filterDate && filterWaktuMakan) {
+      selectedBatch =
+        availableBatches.find(
+          (b) =>
+            b.tanggal_produksi === filterDate &&
+            b.waktu_makan.toUpperCase() === filterWaktuMakan.toUpperCase(),
+        ) || null;
     } else {
       const activeBatchForCycle = availableBatches.find(
         (b) =>
@@ -172,7 +182,10 @@ export async function getLivePemorsianData(
     }
 
     // 4. Resolve Active Master Siklus for the target date
-    const targetDateStr = selectedBatch?.tanggal_produksi || nextCycle.tanggalProduksi;
+    const targetDateStr =
+      selectedBatch?.tanggal_produksi || filterDate || nextCycle.tanggalProduksi;
+    const targetWaktuMakan =
+      selectedBatch?.waktu_makan || filterWaktuMakan || nextCycle.waktuMakan;
     const targetDateObj = new Date(targetDateStr);
     const dayIndex = isNaN(targetDateObj.getDay()) ? 1 : targetDateObj.getDay();
     const currentHari = HARI_INDONESIA[dayIndex] || 'SENIN';
@@ -239,9 +252,7 @@ export async function getLivePemorsianData(
     let patientItems: PemorsianPatientItem[] = [];
     const revisiItems: PemorsianRevisiItem[] = [];
 
-    const currentWaktuTitle = formatWaktuTitle(
-      selectedBatch?.waktu_makan || nextCycle.waktuMakan,
-    );
+    const currentWaktuTitle = formatWaktuTitle(targetWaktuMakan);
 
     // ─── SCENARIO A: SNAPSHOT IS LOCKED ──────────────────────────────────
     if (selectedBatch && selectedBatch.id > 0) {
@@ -512,8 +523,8 @@ export async function getLivePemorsianData(
       (p) => p.print_status === 'SUDAH_DICETAK',
     ).length;
 
-    const dateStr = (selectedBatch?.tanggal_produksi || nextCycle.tanggalProduksi).replace(/-/g, '');
-    const currentWaktuCode = selectedBatch?.waktu_makan || nextCycle.waktuMakan;
+    const dateStr = targetDateStr.replace(/-/g, '');
+    const currentWaktuCode = targetWaktuMakan;
     const resolvedBatchCode =
       selectedBatch?.batch_code ||
       `BATCH-${dateStr}-${currentWaktuCode}-LIVE`;
@@ -524,7 +535,7 @@ export async function getLivePemorsianData(
       batchId: selectedBatch?.id || null,
       batchCode: resolvedBatchCode,
       waktuMakan: currentWaktuCode,
-      tanggalProduksi: selectedBatch?.tanggal_produksi || nextCycle.tanggalProduksi,
+      tanggalProduksi: targetDateStr,
       statusBatch: selectedBatch ? 'LOCKED' : 'LIVE',
       cutoffTime: selectedBatch?.cutoff_time || nextCycle.cutoffTime,
 
@@ -595,6 +606,8 @@ export async function getLivePemorsianData(
  */
 export async function getPemorsianData(
   batchId?: number,
+  filterDate?: string,
+  filterWaktuMakan?: string,
 ): Promise<PemorsianSummaryData> {
-  return getLivePemorsianData(batchId);
+  return getLivePemorsianData(batchId, filterDate, filterWaktuMakan);
 }

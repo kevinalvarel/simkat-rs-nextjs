@@ -12,7 +12,7 @@ import { listenProductionUpdate } from '@/lib/realtime-sync';
 import { useEtiketPrintedSync } from '@/hooks/useEtiketPrintedSync';
 import PemorsianStatsCards from '../ui/PemorsianStatsCards';
 import PemorsianRevisiTableSection from './PemorsianRevisiTableSection';
-import EtiketPrintPreviewModal from '../../../../cetak-etiket/EtiketPrintPreviewModal';
+import EtiketPrintPreviewModal from '../../../cetak-etiket/layout/EtiketPrintPreviewModal';
 
 const AUTO_SYNC_INTERVAL_MS = 60000; // 60s background keep-fresh interval
 

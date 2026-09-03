@@ -18,6 +18,7 @@ interface MappingDietFilterBarProps {
   selectedStatus: string;
   onStatusChange: (s: string) => void;
   onReset: () => void;
+  tab?: 'UNMAPPED' | 'MAPPED';
 }
 
 export default function MappingDietFilterBar({
@@ -26,6 +27,7 @@ export default function MappingDietFilterBar({
   selectedStatus,
   onStatusChange,
   onReset,
+  tab = 'UNMAPPED',
 }: MappingDietFilterBarProps) {
   const isFiltered = searchQuery !== '' || selectedStatus !== 'ALL';
 
@@ -36,7 +38,11 @@ export default function MappingDietFilterBar({
         <Search className='absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground' />
         <Input
           type='text'
-          placeholder='Cari diet RS raw... (mis. "RG Lunak", "DM 1700")'
+          placeholder={
+            tab === 'MAPPED'
+              ? 'Cari raw text di Master Mapping... (mis. "BN TKTP", "NPO")'
+              : 'Cari diet RS raw... (mis. "RG Lunak", "DM 1700")'
+          }
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           className='pl-9 text-xs sm:text-sm rounded-lg bg-background w-full'
@@ -53,12 +59,24 @@ export default function MappingDietFilterBar({
           <SelectTrigger className='h-9 text-xs bg-background min-w-[150px]'>
             <SelectValue placeholder='Semua Status' />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className='w-full'>
             <SelectItem value='ALL'>Semua Status</SelectItem>
-            <SelectItem value='UNMAPPED'>UNMAPPED (Belum Dipetakan)</SelectItem>
-            <SelectItem value='PARTIAL'>
-              PARTIAL (Sebagian Dipetakan)
-            </SelectItem>
+            {tab === 'UNMAPPED' ? (
+              <>
+                <SelectItem value='UNMAPPED'>
+                  UNMAPPED (Belum Dipetakan)
+                </SelectItem>
+                <SelectItem value='PARTIAL'>
+                  PARTIAL (Sebagian Dipetakan)
+                </SelectItem>
+              </>
+            ) : (
+              <>
+                <SelectItem value='STANDARD'>Menu Standar Siklus</SelectItem>
+                <SelectItem value='NPO'>NPO / Puasa</SelectItem>
+                <SelectItem value='KATERING'>Alihkan ke AG Katering</SelectItem>
+              </>
+            )}
           </SelectContent>
         </Select>
 

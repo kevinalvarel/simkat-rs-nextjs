@@ -140,8 +140,8 @@ export async function getUnmappedDietItems(): Promise<UnmappedDietItem[]> {
       const existing = mappingByRaw.get(rawDiet);
       const statusMapping = existing?.status_mapping ?? 'UNMAPPED';
 
-      // Skip fully MAPPED ones
-      if (statusMapping === 'MAPPED') continue;
+      // Skip fully MAPPED or KATERING ones
+      if (statusMapping === 'MAPPED' || statusMapping === 'KATERING') continue;
 
       const kelasList = Array.from(kelasMap.get(rawDiet) || []).sort();
 
@@ -190,6 +190,122 @@ export async function getUnmappedDietItems(): Promise<UnmappedDietItem[]> {
 }
 
 /**
+ * Fetch all diet strings that have been successfully mapped (status MAPPED or KATERING).
+ * Also maps with active patient counts and classes.
+ */
+export async function getMappedDietItems(): Promise<UnmappedDietItem[]> {
+  try {
+    // 1. Fetch active patients to compute real-time impact
+    const pendingRevisions = await db
+      .select({
+        pasien_id: otorisasiPerubahanDietTable.pasien_id,
+        jenis_perubahan: otorisasiPerubahanDietTable.jenis_perubahan,
+      })
+      .from(otorisasiPerubahanDietTable)
+      .where(eq(otorisasiPerubahanDietTable.status, 'PENDING'));
+
+    const pendingNewPatientIds = new Set(
+      pendingRevisions
+        .filter((r) => r.jenis_perubahan === 'NEW_PATIENT')
+        .map((r) => r.pasien_id),
+    );
+
+    const allPatients = await db
+      .select({
+        id: pasienTable.id,
+        diet: pasienTable.diet,
+        kelas: pasienTable.kelas,
+      })
+      .from(pasienTable)
+      .where(
+        and(
+          ne(pasienTable.status_pasien, 'PULANG'),
+          ne(pasienTable.status_pasien, 'PENDING_REVISI'),
+        ),
+      );
+
+    const validPatients = allPatients.filter(
+      (p) => !pendingNewPatientIds.has(p.id),
+    );
+
+    const countMap = new Map<string, number>();
+    const kelasMap = new Map<string, Set<string>>();
+    for (const p of validPatients) {
+      const key = (p.diet || '').trim();
+      if (!key) continue;
+      countMap.set(key.toLowerCase(), (countMap.get(key.toLowerCase()) ?? 0) + 1);
+
+      if (p.kelas) {
+        if (!kelasMap.has(key.toLowerCase())) {
+          kelasMap.set(key.toLowerCase(), new Set<string>());
+        }
+        kelasMap.get(key.toLowerCase())!.add(p.kelas.trim());
+      }
+    }
+
+    // 2. Fetch all mapped records from master_diet_mapping
+    const mappedRecords = await db
+      .select()
+      .from(dietMappingTable)
+      .where(
+        and(
+          eq(dietMappingTable.is_active, true),
+          inArray(dietMappingTable.status_mapping, ['MAPPED', 'KATERING']),
+        ),
+      )
+      .orderBy(asc(dietMappingTable.diet_rs_raw));
+
+    const results: UnmappedDietItem[] = [];
+    for (const m of mappedRecords) {
+      const key = m.diet_rs_raw.trim().toLowerCase();
+      const jumlahPasien = countMap.get(key) ?? 0;
+      const kelasList = Array.from(kelasMap.get(key) || []).sort();
+
+      let nabati: string | null = null;
+      let sayur: string | null = null;
+      if (m.extra) {
+        const parts = m.extra.split(',').map((s) => s.trim());
+        if (parts.length >= 2) {
+          nabati = parts[0];
+          sayur = parts[1];
+        } else if (parts.length === 1 && parts[0]) {
+          nabati = parts[0];
+        }
+      }
+
+      results.push({
+        diet_rs_raw: m.diet_rs_raw,
+        jumlah_pasien: jumlahPasien,
+        kelas_list: kelasList,
+        mapping_id: m.id,
+        status_mapping: m.status_mapping,
+        bentuk_makanan: m.bentuk_makanan,
+        kategori_diet: m.kategori_diet,
+        nabati,
+        sayur,
+        extra: m.extra,
+        buah: m.buah,
+        snack: m.snack,
+        is_active: m.is_active,
+      });
+    }
+
+    // Sort: records with active patients first (descending), then alphabetically
+    results.sort((a, b) => {
+      if (b.jumlah_pasien !== a.jumlah_pasien) {
+        return b.jumlah_pasien - a.jumlah_pasien;
+      }
+      return a.diet_rs_raw.localeCompare(b.diet_rs_raw);
+    });
+
+    return results;
+  } catch (error) {
+    console.error('Error fetching mapped diet items:', error);
+    return [];
+  }
+}
+
+/**
  * Fetch all active kategori menu options from master database (kategori_menu table).
  */
 export async function getKategoriMenuOptions(): Promise<KategoriMenuOption[]> {
@@ -222,17 +338,21 @@ export async function getKategoriMenuOptions(): Promise<KategoriMenuOption[]> {
 export type MappingDietStats = {
   unmappedCount: number;
   partialCount: number;
+  mappedCount: number;
   totalPatientAffected: number;
 };
 
 export async function getMappingDietStats(
-  items?: UnmappedDietItem[],
+  unmappedItems?: UnmappedDietItem[],
+  mappedItems?: UnmappedDietItem[],
 ): Promise<MappingDietStats> {
-  const data = items ?? (await getUnmappedDietItems());
+  const unmapped = unmappedItems ?? (await getUnmappedDietItems());
+  const mapped = mappedItems ?? (await getMappedDietItems());
   return {
-    unmappedCount: data.filter((i) => i.status_mapping === 'UNMAPPED').length,
-    partialCount: data.filter((i) => i.status_mapping === 'PARTIAL').length,
-    totalPatientAffected: data.reduce((sum, i) => sum + i.jumlah_pasien, 0),
+    unmappedCount: unmapped.filter((i) => i.status_mapping === 'UNMAPPED').length,
+    partialCount: unmapped.filter((i) => i.status_mapping === 'PARTIAL').length,
+    mappedCount: mapped.length,
+    totalPatientAffected: unmapped.reduce((sum, i) => sum + i.jumlah_pasien, 0),
   };
 }
 
@@ -247,11 +367,14 @@ export type SaveMappingPayload = {
   extra?: string | null;
   buah?: string | null;
   snack?: string | null;
+  status_mapping?: string | null;
+  mode?: 'STANDARD' | 'NPO' | 'KATERING';
   mapped_by?: string;
 };
 
 /**
  * Upsert a diet mapping record. Creates if new, updates if already exists.
+ * Supports STANDARD, NPO (auto-fills all to NPO), and KATERING (Alihkan ke AG Katering).
  */
 export async function saveDietMapping(
   payload: SaveMappingPayload,
@@ -260,66 +383,118 @@ export async function saveDietMapping(
     return { success: false, message: 'Diet RS Raw tidak boleh kosong.' };
   }
 
-  const extraCombined =
+  const raw = payload.diet_rs_raw.trim();
+  let bentuk_makanan = payload.bentuk_makanan?.trim() || null;
+  let kategori_diet = payload.kategori_diet?.trim() || null;
+  let nabati = payload.nabati?.trim() || null;
+  let sayur = payload.sayur?.trim() || null;
+  let buah = payload.buah?.trim() || null;
+  let snack = payload.snack?.trim() || null;
+  let extraCombined =
     payload.extra !== undefined
       ? payload.extra
-      : [payload.nabati, payload.sayur].filter(Boolean).join(', ') || null;
+      : [nabati, sayur].filter(Boolean).join(', ') || null;
 
-  const isMapped = Boolean(
-    payload.bentuk_makanan?.trim() && payload.kategori_diet?.trim(),
-  );
-  const isPartial = Boolean(
-    payload.bentuk_makanan?.trim() ||
-      payload.kategori_diet?.trim() ||
-      extraCombined?.trim() ||
-      payload.buah?.trim() ||
-      payload.snack?.trim(),
-  );
-  const status_mapping = isMapped ? 'MAPPED' : isPartial ? 'PARTIAL' : 'UNMAPPED';
+  let status_mapping: string = 'UNMAPPED';
+
+  // Mode 1: NPO / Puasa
+  if (
+    payload.mode === 'NPO' ||
+    (bentuk_makanan === 'NPO' && kategori_diet === 'NPO') ||
+    raw.toUpperCase() === 'NPO'
+  ) {
+    bentuk_makanan = 'NPO';
+    kategori_diet = 'NPO';
+    nabati = 'NPO';
+    sayur = 'NPO';
+    extraCombined = 'NPO, NPO';
+    buah = 'NPO';
+    snack = 'NPO';
+    status_mapping = 'MAPPED';
+  }
+  // Mode 2: Alihkan ke AG Katering
+  else if (
+    payload.mode === 'KATERING' ||
+    payload.status_mapping === 'KATERING' ||
+    bentuk_makanan === 'KATERING' ||
+    kategori_diet === 'KATERING'
+  ) {
+    bentuk_makanan = 'KATERING';
+    kategori_diet = 'KATERING';
+    extraCombined = null;
+    buah = null;
+    snack = null;
+    status_mapping = 'KATERING';
+  }
+  // Mode 3: Standard mapping
+  else {
+    const isMapped = Boolean(bentuk_makanan && kategori_diet);
+    const isPartial = Boolean(
+      bentuk_makanan ||
+        kategori_diet ||
+        extraCombined?.trim() ||
+        buah ||
+        snack,
+    );
+    status_mapping = isMapped ? 'MAPPED' : isPartial ? 'PARTIAL' : 'UNMAPPED';
+  }
 
   try {
     const existing = await db
       .select()
       .from(dietMappingTable)
-      .where(eq(dietMappingTable.diet_rs_raw, payload.diet_rs_raw.trim()));
+      .where(eq(dietMappingTable.diet_rs_raw, raw));
 
     if (existing && existing.length > 0) {
       await db
         .update(dietMappingTable)
         .set({
-          bentuk_makanan: payload.bentuk_makanan || null,
-          kategori_diet: payload.kategori_diet || null,
+          bentuk_makanan,
+          kategori_diet,
           extra: extraCombined,
-          buah: payload.buah || null,
-          snack: payload.snack || null,
-          status_mapping: status_mapping,
+          buah,
+          snack,
+          status_mapping,
           updated_by: payload.mapped_by || 'Admin Gizi',
           updated_at: new Date(),
           is_active: true,
         })
-        .where(eq(dietMappingTable.diet_rs_raw, payload.diet_rs_raw.trim()));
+        .where(eq(dietMappingTable.diet_rs_raw, raw));
     } else {
       await db.insert(dietMappingTable).values({
-        diet_rs_raw: payload.diet_rs_raw.trim(),
-        bentuk_makanan: payload.bentuk_makanan || null,
-        kategori_diet: payload.kategori_diet || null,
+        diet_rs_raw: raw,
+        bentuk_makanan,
+        kategori_diet,
         extra: extraCombined,
-        buah: payload.buah || null,
-        snack: payload.snack || null,
-        status_mapping: status_mapping,
+        buah,
+        snack,
+        status_mapping,
         created_by: payload.mapped_by || 'Admin Gizi',
         updated_by: payload.mapped_by || 'Admin Gizi',
         is_active: true,
       });
     }
 
-    revalidatePath('/dashboard/ag-katering/mapping-diet');
-    revalidatePath('/dashboard/ag-katering/overview');
-    revalidatePath('/dashboard/ag-katering/overview/produksi');
-    revalidatePath('/dashboard/ag-katering/overview/pemorsian');
+    try {
+      revalidatePath('/dashboard/ag-katering/mapping-diet');
+      revalidatePath('/dashboard/ag-katering/overview');
+      revalidatePath('/dashboard/ag-katering/overview/produksi');
+      revalidatePath('/dashboard/ag-katering/overview/pemorsian');
+      revalidatePath('/dashboard/ag-katering/overview/katering');
+    } catch {
+      // Safe fallback when executed outside Next.js request context
+    }
+
+    const labelMode =
+      status_mapping === 'KATERING'
+        ? 'dialihkan ke AG Katering'
+        : bentuk_makanan === 'NPO'
+        ? 'diset NPO (Puasa)'
+        : 'berhasil disimpan';
+
     return {
       success: true,
-      message: `Mapping diet untuk "${payload.diet_rs_raw}" berhasil disimpan.`,
+      message: `Mapping diet untuk "${raw}" ${labelMode}.`,
     };
   } catch (error) {
     console.error('Error saving diet mapping:', error);
@@ -344,10 +519,16 @@ export async function bulkSaveDietMapping(
     if (res.success) successCount++;
   }
 
-  revalidatePath('/dashboard/ag-katering/mapping-diet');
-  revalidatePath('/dashboard/ag-katering/overview');
-  revalidatePath('/dashboard/ag-katering/overview/produksi');
-  revalidatePath('/dashboard/ag-katering/overview/pemorsian');
+  try {
+    revalidatePath('/dashboard/ag-katering/mapping-diet');
+    revalidatePath('/dashboard/ag-katering/overview');
+    revalidatePath('/dashboard/ag-katering/overview/produksi');
+    revalidatePath('/dashboard/ag-katering/overview/pemorsian');
+    revalidatePath('/dashboard/ag-katering/overview/katering');
+  } catch {
+    // Safe fallback
+  }
+
   return {
     success: true,
     message: `${successCount} dari ${dietRawList.length} mapping berhasil disimpan.`,

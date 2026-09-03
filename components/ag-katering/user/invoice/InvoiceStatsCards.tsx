@@ -8,7 +8,10 @@ import {
   Sunrise,
   Sun,
   Moon,
+  Camera,
+  UserPlus,
   Cookie,
+  Layers,
 } from 'lucide-react';
 import type { InvoiceDailySummary } from '@/types/invoicetypes';
 
@@ -18,8 +21,69 @@ interface InvoiceStatsCardsProps {
 
 export default function InvoiceStatsCards({ data }: InvoiceStatsCardsProps) {
   const isRange = Boolean(data.isRange);
+  const isPerSnapshot = Boolean(data.isPerSnapshot);
 
-  const cards = [
+  // Cards layout for Per-Snapshot Mode
+  const snapshotCards = [
+    {
+      title: `Total Porsi Tagihan (${data.waktuMakan || 'Snapshot'})`,
+      value: data.grandTotalPorsi,
+      unit: 'Porsi',
+      description: 'Akumulasi Baseline + Revisi Susulan',
+      icon: UtensilsCrossed,
+      iconColor: 'text-emerald-600 dark:text-emerald-400',
+      bgIcon: 'bg-emerald-500/10 dark:bg-emerald-950/40',
+      borderColor: 'border-emerald-500/30',
+      highlight: true,
+    },
+    {
+      title: 'Baseline Snapshot Awal',
+      value: data.baselineTotalPorsi ?? data.grandTotalPorsi,
+      unit: 'Porsi',
+      description: data.cutoffTime
+        ? `Cut-off ${data.cutoffTime} WIB`
+        : 'Data saat cut-off snapshot',
+      icon: Camera,
+      iconColor: 'text-blue-600 dark:text-blue-400',
+      bgIcon: 'bg-blue-500/10 dark:bg-blue-950/40',
+      borderColor: 'border-blue-500/20',
+    },
+    {
+      title: 'Revisi Tambah Pasien',
+      value: data.revisiTambahPasienCount ?? 0,
+      unit: 'Pasien (+Porsi)',
+      description: 'Pasien baru pasca-cut-off (Approved)',
+      icon: UserPlus,
+      iconColor: 'text-amber-600 dark:text-amber-400',
+      bgIcon: 'bg-amber-500/10 dark:bg-amber-950/40',
+      borderColor: 'border-amber-500/20',
+      badgeNotice:
+        (data.revisiTambahPasienCount ?? 0) > 0 ? '+Bertambah' : undefined,
+    },
+    {
+      title: 'Total Pasien Terlayani',
+      value: data.grandTotalPasien,
+      unit: 'Pasien',
+      description: 'Jumlah pasien aktif di snapshot ini',
+      icon: Users,
+      iconColor: 'text-purple-600 dark:text-purple-400',
+      bgIcon: 'bg-purple-500/10 dark:bg-purple-950/40',
+      borderColor: 'border-purple-500/20',
+    },
+    {
+      title: 'Extra / Buah / Snack',
+      value: data.grandTotalExtra,
+      unit: 'Porsi',
+      description: 'Konsumsi tambahan di luar menu standar',
+      icon: Cookie,
+      iconColor: 'text-orange-600 dark:text-orange-400',
+      bgIcon: 'bg-orange-500/10 dark:bg-orange-950/40',
+      borderColor: 'border-orange-500/20',
+    },
+  ];
+
+  // Cards layout for Full-Day or Range Mode
+  const aggregatedCards = [
     {
       title: isRange ? 'Total Pasien-Hari' : 'Total Pasien Terlayani',
       value: data.grandTotalPasien,
@@ -39,7 +103,7 @@ export default function InvoiceStatsCards({ data }: InvoiceStatsCardsProps) {
       value: data.grandTotalPorsi,
       unit: 'Porsi',
       description: isRange
-        ? `Akumulasi porsi periode ${data.tanggalFormatted}`
+        ? `Akumulasi periode ${data.tanggalFormatted}`
         : 'Akumulasi seluruh waktu makan',
       icon: UtensilsCrossed,
       iconColor: 'text-emerald-600 dark:text-emerald-400',
@@ -79,6 +143,8 @@ export default function InvoiceStatsCards({ data }: InvoiceStatsCardsProps) {
     },
   ];
 
+  const cards = isPerSnapshot ? snapshotCards : aggregatedCards;
+
   return (
     <div className='grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5 w-full'>
       {cards.map((card, idx) => {
@@ -88,7 +154,11 @@ export default function InvoiceStatsCards({ data }: InvoiceStatsCardsProps) {
             key={idx}
             className={`border rounded-2xl shadow-2xs transition-all hover:shadow-xs ${
               card.borderColor
-            } ${card.highlight ? 'bg-emerald-500/5 dark:bg-emerald-950/20 ring-1 ring-emerald-500/20' : 'bg-card'}`}
+            } ${
+              card.highlight
+                ? 'bg-emerald-500/5 dark:bg-emerald-950/20 ring-1 ring-emerald-500/20'
+                : 'bg-card'
+            }`}
           >
             <CardContent className='p-4 space-y-2'>
               <div className='flex items-center justify-between'>
@@ -111,7 +181,7 @@ export default function InvoiceStatsCards({ data }: InvoiceStatsCardsProps) {
                 </span>
               </div>
 
-              <p className='text-[10px] text-muted-foreground truncate'>
+              <p className='text-[11px] text-muted-foreground line-clamp-1'>
                 {card.description}
               </p>
             </CardContent>

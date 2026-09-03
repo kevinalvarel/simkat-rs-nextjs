@@ -12,8 +12,8 @@ import type {
 } from '@/types/cetaketikettypes';
 import { getLivePemorsianData } from '@/servers/pemorsian.service';
 import { useEtiketPrintedSync } from '@/hooks/useEtiketPrintedSync';
-import EtiketPrintPreviewModal from '@/components/ag-katering/cetak-etiket/EtiketPrintPreviewModal';
-import CetakEtiketHeader from './CetakEtiketHeader';
+import EtiketPrintPreviewModal from '@/components/ag-katering/user/cetak-etiket/layout/EtiketPrintPreviewModal';
+import CetakEtiketHeader, { type WaktuMakanType } from './CetakEtiketHeader';
 import CetakEtiketStats from './CetakEtiketStats';
 import CetakEtiketTabs from './CetakEtiketTabs';
 import CetakEtiketFilters from './CetakEtiketFilters';
@@ -31,6 +31,15 @@ export default function CetakEtiketClient({
   const [data, setData] = useState<PemorsianSummaryData>(initialData);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<CetakEtiketTab>('UTAMA');
+
+  // Snapshot Date, Waktu, & Live Mode States (Live Snapshot as default!)
+  const [isLive, setIsLive] = useState(true);
+  const [selectedDate, setSelectedDate] = useState<string>(
+    initialData.tanggalProduksi || new Date().toISOString().slice(0, 10),
+  );
+  const [selectedWaktu, setSelectedWaktu] = useState<WaktuMakanType>(
+    (initialData.waktuMakan as WaktuMakanType) || 'SIANG',
+  );
 
   // Search and Filter States
   const [searchQuery, setSearchQuery] = useState('');
@@ -55,20 +64,18 @@ export default function CetakEtiketClient({
     data.batchCode,
   );
 
-  // Fetch / Refresh Data helper
+  // Fetch / Refresh Data helper with date & mealtime filter
   const fetchData = useCallback(
-    async (batchId?: number) => {
+    async (batchId?: number, date?: string, waktu?: string) => {
       setIsRefreshing(true);
       try {
-        const res = await getLivePemorsianData(
-          batchId ?? (data.batch?.id || undefined),
-        );
+        const res = await getLivePemorsianData(batchId, date, waktu);
         if (res && res.success !== false) {
           setData(res);
           setSelectedIds(new Set());
-          toast.success('Data snapshot etiket berhasil diperbarui.');
+          toast.success('Data snapshot etiket berhasil dimuat.');
         } else {
-          toast.error('Gagal memperbarui data snapshot.');
+          toast.error('Gagal memuat data snapshot.');
         }
       } catch (err) {
         console.error('Error fetching data:', err);
@@ -77,8 +84,60 @@ export default function CetakEtiketClient({
         setIsRefreshing(false);
       }
     },
-    [data.batch],
+    [],
   );
+
+  function handleSelectLive() {
+    setIsLive(true);
+    fetchData();
+  }
+
+  function handleDateChange(newDate: string) {
+    setSelectedDate(newDate);
+    setIsLive(false);
+
+    const matching = data.availableBatches.find(
+      (b) =>
+        b.tanggal_produksi === newDate &&
+        b.waktu_makan.toUpperCase() === selectedWaktu.toUpperCase(),
+    );
+
+    if (matching) {
+      fetchData(matching.id, newDate, selectedWaktu);
+    } else {
+      fetchData(undefined, newDate, selectedWaktu);
+    }
+  }
+
+  function handleWaktuChange(newWaktu: WaktuMakanType) {
+    setSelectedWaktu(newWaktu);
+    setIsLive(false);
+
+    const matching = data.availableBatches.find(
+      (b) =>
+        b.tanggal_produksi === selectedDate &&
+        b.waktu_makan.toUpperCase() === newWaktu.toUpperCase(),
+    );
+
+    if (matching) {
+      fetchData(matching.id, selectedDate, newWaktu);
+    } else {
+      fetchData(undefined, selectedDate, newWaktu);
+    }
+  }
+
+  function handleRefresh() {
+    if (isLive) {
+      fetchData();
+    } else {
+      const matching = data.availableBatches.find(
+        (b) =>
+          b.tanggal_produksi === selectedDate &&
+          b.waktu_makan.toUpperCase() === selectedWaktu.toUpperCase(),
+      );
+      fetchData(matching?.id, selectedDate, selectedWaktu);
+    }
+  }
 
   // Dynamic filter dropdown options
   const filterOptions: CetakEtiketFilterOptions = useMemo(() => {
@@ -290,9 +349,15 @@ export default function CetakEtiketClient({
         batch={data.batch}
         availableBatches={data.availableBatches}
         waktuMakan={data.waktuMakan}
+        tanggalProduksi={data.tanggalProduksi}
+        selectedDate={selectedDate}
+        selectedWaktu={selectedWaktu}
+        isLive={isLive}
         isRefreshing={isRefreshing}
-        onSelectBatch={(batchId) => fetchData(batchId)}
-        onRefresh={() => fetchData()}
+        onSelectLive={handleSelectLive}
+        onDateChange={handleDateChange}
+        onWaktuChange={handleWaktuChange}
+        onRefresh={handleRefresh}
       />
 
       {/* 2. 4 Summary Stats Cards */}

@@ -94,15 +94,42 @@ export function SelectField({
             {hasValue && allowClear && (
               <SelectItem
                 value={CLEAR_SENTINEL}
-                className='text-muted-foreground italic text-xs border-b pb-1.5 mb-1 text-rose-600 dark:text-rose-400 font-medium'
+                className='text-muted-foreground italic text-xs border-b pb-1.5 mb-1 text-rose-600 dark:text-rose-400 font-medium cursor-pointer'
               >
                 ❌ -- Kosongkan / Batal Pilih --
               </SelectItem>
             )}
 
+            {/* Khusus: Pilihan NPO (Puasa) & Alihkan ke AG Katering */}
+            <div className='px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider bg-muted/40 rounded-sm mb-1'>
+              Opsi Khusus
+            </div>
+            <SelectItem
+              value='NPO'
+              className='text-xs font-bold text-purple-700 dark:text-purple-300 cursor-pointer bg-purple-500/5 hover:bg-purple-500/10 mb-0.5'
+            >
+              <span className='font-mono font-bold mr-1.5 px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 text-[10px]'>
+                NPO
+              </span>
+              <span>Puasa / NPO (Tidak Makan)</span>
+            </SelectItem>
+            <SelectItem
+              value='KATERING'
+              className='text-xs font-bold text-blue-700 dark:text-blue-300 cursor-pointer bg-blue-500/5 hover:bg-blue-500/10 mb-1 border-b pb-1.5'
+            >
+              <span className='font-mono font-bold mr-1.5 px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 text-[10px]'>
+                KATERING
+              </span>
+              <span>Alihkan ke AG Katering</span>
+            </SelectItem>
+
+            <div className='px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider bg-muted/40 rounded-sm mb-1'>
+              Pilihan Standar Menu
+            </div>
+
             {options.length === 0 ? (
               <div className='p-2 text-xs text-muted-foreground italic text-center'>
-                Tidak ada pilihan
+                Tidak ada pilihan standar
               </div>
             ) : (
               options.map((opt) => (

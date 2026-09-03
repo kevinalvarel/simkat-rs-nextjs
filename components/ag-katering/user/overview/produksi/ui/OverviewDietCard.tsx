@@ -4,7 +4,10 @@ import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ArrowUpRight, ArrowDownRight, Minus, Sparkles } from 'lucide-react';
-import type { MonitoringCardData, MenuCategoryGroup } from '@/types/monitoringtypes';
+import type {
+  MonitoringCardData,
+  MenuCategoryGroup,
+} from '@/types/monitoringtypes';
 
 interface OverviewDietCardProps {
   card: MonitoringCardData;
@@ -131,16 +134,10 @@ export default function OverviewDietCard({ card }: OverviewDietCardProps) {
     >
       {/* Header with Category Badge & Dish Name */}
       <div className='border-b border-border/60 p-2.5 text-left bg-muted/30 space-y-1.5'>
-        <div className='flex items-center justify-between gap-1 flex-wrap'>
-          <span
-            className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border ${categoryStyle.bgBadge} ${categoryStyle.borderBadge}`}
-          >
-            {categoryStyle.label}
-          </span>
-
+        <div className='flex items-center justify-center gap-1 flex-wrap'>
           {/* Special Diet or Kelas Tag */}
           {card.dietTag && (
-            <span className='inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-mono font-semibold bg-primary/10 text-primary border border-primary/20'>
+            <span className='inline-flex items-center px-1.5 py-0.2 rounded text-[16px] font-mono font-semibold bg-primary/10 text-primary border border-primary/20'>
               {card.dietTag}
             </span>
           )}
@@ -148,7 +145,7 @@ export default function OverviewDietCard({ card }: OverviewDietCardProps) {
 
         {/* Dish Name */}
         <h4
-          className='font-bold text-xs sm:text-sm text-foreground tracking-tight leading-snug line-clamp-2 min-h-[2rem]'
+          className='font-bold text-xs sm:text-sm text-foreground tracking-tight leading-snug line-clamp-2 min-h-[2rem] text-center'
           title={card.name}
         >
           {card.name}

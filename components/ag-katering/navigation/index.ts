@@ -18,15 +18,6 @@ export const routeDataProduksi = {
       ],
     },
     {
-      title: 'Monitoring Snapshot',
-      items: [
-        {
-          title: 'Snapshot & Waktu Kunci',
-          url: '/dashboard/ag-katering/status-snapshot',
-        },
-      ],
-    },
-    {
       title: 'Master Data',
       items: [
         {
@@ -72,14 +63,9 @@ export const routeDataSupervisor = {
           title: 'Live Pemorsian',
           url: '/dashboard/ag-katering/overview/pemorsian',
         },
-      ],
-    },
-    {
-      title: 'Monitoring Snapshot',
-      items: [
         {
-          title: 'Snapshot & Waktu Kunci',
-          url: '/dashboard/ag-katering/status-snapshot',
+          title: 'Live Katering',
+          url: '/dashboard/ag-katering/overview/katering',
         },
       ],
     },
@@ -102,20 +88,20 @@ export const routeDataSupervisor = {
           title: 'Cetak DPMP',
           url: '/dashboard/ag-katering/cetak-dpmp',
         },
-      ],
-    },
-    {
-      title: 'Produksi & Tabulasi',
-      items: [
         {
           title: 'Tabulasi Rekapitulasi',
           url: '/dashboard/ag-katering/tabulasi',
         },
       ],
     },
+
     {
       title: 'Riwayat & Approval (Admin)',
       items: [
+        {
+          title: 'Snapshot & Waktu Kunci',
+          url: '/dashboard/ag-katering/admin/status-snapshot',
+        },
         {
           title: 'Riwayat Diet Pasien',
           url: '/dashboard/ag-katering/admin/riwayat',

@@ -5,14 +5,21 @@ import type { MonitoringCardData } from '@/types/monitoringtypes';
 import OverviewDietCard from '@/components/ag-katering/user/overview/produksi/ui/OverviewDietCard';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Search, Utensils, Filter } from 'lucide-react';
+import { Search, Utensils } from 'lucide-react';
 
 interface OverviewProductionCardsGridProps {
   cards: MonitoringCardData[];
   cutoffTime: string;
 }
 
-type FilterTab = 'ALL' | 'POKOK' | 'HEWANI' | 'NABATI' | 'SAYUR' | 'EXTRA_BUAH' | 'NPO';
+type FilterTab =
+  | 'ALL'
+  | 'POKOK'
+  | 'HEWANI'
+  | 'NABATI'
+  | 'SAYUR'
+  | 'EXTRA_BUAH'
+  | 'NPO';
 
 export default function OverviewProductionCardsGrid({
   cards,
@@ -173,7 +180,10 @@ export default function OverviewProductionCardsGrid({
       {filteredCards.length > 0 ? (
         <div className='grid grid-cols-2 min-[480px]:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 xl:grid-cols-4 gap-3.5 w-full'>
           {filteredCards.map((card, idx) => (
-            <OverviewDietCard key={`${card.code}-${card.name}-${idx}`} card={card} />
+            <OverviewDietCard
+              key={`${card.code}-${card.name}-${idx}`}
+              card={card}
+            />
           ))}
         </div>
       ) : (
@@ -191,7 +201,9 @@ export default function OverviewProductionCardsGrid({
       {/* Target Cutoff Footer */}
       <div className='text-xs text-muted-foreground text-center lg:text-left font-medium pt-2 border-t border-dashed border-border/80 flex flex-col sm:flex-row items-center justify-between gap-2'>
         <span>
-          * Angka di atas merupakan akumulasi porsi hidangan dari <strong>Siklus Menu</strong> aktif yang disesuaikan dengan diet & kelas pasien.
+          * Angka di atas merupakan akumulasi porsi hidangan dari{' '}
+          <strong>Siklus Menu</strong> aktif yang disesuaikan dengan diet &
+          kelas pasien.
         </span>
         <span className='shrink-0'>
           Target Kunci Batch:{' '}

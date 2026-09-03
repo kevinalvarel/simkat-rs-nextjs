@@ -489,6 +489,15 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
         continue;
       }
 
+      // Check if mapped to AG KATERING (Alihkan ke AG Katering) -> skip live production entirely
+      const isKateringMapped =
+        bentukCodes.some((c) => c.toUpperCase() === 'KATERING') ||
+        kategoriCodes.some((c) => c.toUpperCase() === 'KATERING');
+
+      if (isKateringMapped) {
+        continue;
+      }
+
       // A. Makanan Pokok / Bentuk Makanan (e.g. BN -> Nasi Biasa, BL/TIM -> Nasi Tim, SAR -> Bubur Saring, CAIR -> Cair)
       if (bentukCodes.length > 0) {
         for (const code of bentukCodes) {
@@ -764,6 +773,15 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
             category: 'NPO',
             dietTag: 'NPO',
           });
+          continue;
+        }
+
+        // Check if mapped to AG KATERING (Alihkan ke AG Katering) -> skip live production snapshot entirely
+        const isKateringMapped =
+          bentukCodes.some((c) => c.toUpperCase() === 'KATERING') ||
+          kategoriCodes.some((c) => c.toUpperCase() === 'KATERING');
+
+        if (isKateringMapped) {
           continue;
         }
 
@@ -1047,6 +1065,138 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
       totalPorsi: 0,
 
       cards: [],
+      lastUpdated: new Date().toLocaleTimeString('id-ID'),
+    };
+  }
+}
+
+export interface LiveKateringPatient {
+  id: number;
+  nama_pasien: string;
+  no_rm?: string | null;
+  diet_raw: string;
+  gedung?: string | null;
+  ruangan?: string | null;
+  bed?: string | null;
+  kelas: string;
+  status_mapping: string;
+}
+
+export interface LiveKateringSummary {
+  success: boolean;
+  totalPasien: number;
+  dietRawList: { diet_raw: string; count: number }[];
+  patients: LiveKateringPatient[];
+  lastUpdated: string;
+}
+
+/**
+ * Fetch active patients whose diets are diverted to AG Katering (e.g. Bubur Saring, Sonde, or mapped to KATERING).
+ * Uses original raw text for patient display as required.
+ */
+export async function getLiveKateringData(): Promise<LiveKateringSummary> {
+  try {
+    // 1. Fetch pending revisions
+    const pendingRevisions = await db
+      .select({
+        pasien_id: otorisasiPerubahanDietTable.pasien_id,
+        jenis_perubahan: otorisasiPerubahanDietTable.jenis_perubahan,
+      })
+      .from(otorisasiPerubahanDietTable)
+      .where(eq(otorisasiPerubahanDietTable.status, 'PENDING'));
+
+    const pendingNewPatientIds = new Set(
+      pendingRevisions
+        .filter((r) => r.jenis_perubahan === 'NEW_PATIENT')
+        .map((r) => r.pasien_id),
+    );
+
+    // 2. Fetch all active patients
+    const allPatients = await db
+      .select()
+      .from(pasienTable)
+      .where(
+        and(
+          ne(pasienTable.status_pasien, 'PULANG'),
+          ne(pasienTable.status_pasien, 'PENDING_REVISI'),
+        ),
+      );
+
+    const activePatients = allPatients.filter(
+      (p) => !pendingNewPatientIds.has(p.id),
+    );
+
+    // 3. Fetch Master Diet Mappings
+    const masterMappings = await db
+      .select()
+      .from(dietMappingTable)
+      .where(eq(dietMappingTable.is_active, true));
+
+    const mappingByRaw = new Map<string, typeof dietMappingTable.$inferSelect>();
+    for (const m of masterMappings) {
+      mappingByRaw.set(m.diet_rs_raw.trim().toLowerCase(), m);
+    }
+
+    // 4. Identify patients for AG Katering
+    const kateringPatients: LiveKateringPatient[] = [];
+    const countMap = new Map<string, number>();
+
+    for (const p of activePatients) {
+      const raw = (p.diet || '').trim();
+      if (!raw) continue;
+
+      const mapped = mappingByRaw.get(raw.toLowerCase());
+      const isExplicitKatering =
+        mapped?.status_mapping === 'KATERING' ||
+        mapped?.bentuk_makanan === 'KATERING' ||
+        mapped?.kategori_diet === 'KATERING';
+
+      const lowerRaw = raw.toLowerCase();
+      const isKeywordKatering =
+        lowerRaw.includes('bubur saring') ||
+        lowerRaw.includes('saring') ||
+        lowerRaw.includes('sonde') ||
+        lowerRaw.includes('enteral') ||
+        lowerRaw.includes('cair khusus');
+
+      if (isExplicitKatering || isKeywordKatering) {
+        kateringPatients.push({
+          id: p.id,
+          nama_pasien: p.nama_pasien,
+          no_rm: p.no_rm,
+          diet_raw: raw, // Always use original raw text
+          gedung: p.gedung,
+          ruangan: p.ruangan,
+          bed: p.bed,
+          kelas: p.kelas || 'Kelas 1',
+          status_mapping: mapped?.status_mapping || 'UNMAPPED (RAW)',
+        });
+
+        countMap.set(raw, (countMap.get(raw) ?? 0) + 1);
+      }
+    }
+
+    const dietRawList = Array.from(countMap.entries())
+      .map(([diet_raw, count]) => ({
+        diet_raw,
+        count,
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    return {
+      success: true,
+      totalPasien: kateringPatients.length,
+      dietRawList,
+      patients: kateringPatients,
+      lastUpdated: new Date().toLocaleTimeString('id-ID'),
+    };
+  } catch (err) {
+    console.error('Error fetching live katering data:', err);
+    return {
+      success: false,
+      totalPasien: 0,
+      dietRawList: [],
+      patients: [],
       lastUpdated: new Date().toLocaleTimeString('id-ID'),
     };
   }

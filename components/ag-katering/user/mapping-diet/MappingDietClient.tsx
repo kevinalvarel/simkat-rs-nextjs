@@ -7,20 +7,32 @@ import type {
   MappingDietStats as MappingDietStatsType,
 } from '@/servers/mapping-diet.service';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Layers, GitMerge, Info } from 'lucide-react';
+import {
+  RefreshCw,
+  Layers,
+  GitMerge,
+  Info,
+  AlertCircle,
+  CheckCircle2,
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import MappingDietStats from './MappingDietStats';
 import MappingDietFilterBar from './MappingDietFilterBar';
 import MappingDietTable from './MappingDietTable';
 import MappingDietBulkDialog from './MappingDietBulkDialog';
+import MappingDietEditDialog from './MappingDietEditDialog';
 
 interface MappingDietClientProps {
-  initialItems: UnmappedDietItem[];
+  initialUnmappedItems?: UnmappedDietItem[];
+  initialMappedItems?: UnmappedDietItem[];
+  initialItems?: UnmappedDietItem[]; // fallback
   options: KategoriMenuOption[];
   stats: MappingDietStatsType;
 }
 
 export default function MappingDietClient({
+  initialUnmappedItems,
+  initialMappedItems = [],
   initialItems,
   options,
   stats,
@@ -28,20 +40,40 @@ export default function MappingDietClient({
   const router = useRouter();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  // Tab state: 'UNMAPPED' (Belum Termapping) vs 'MAPPED' (Sudah Termapping)
+  const [activeTab, setActiveTab] = useState<'UNMAPPED' | 'MAPPED'>('UNMAPPED');
+
   // Filter state
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('ALL');
 
-  // Selection state
+  // Selection state (for bulk mapping)
   const [selectedRaws, setSelectedRaws] = useState<string[]>([]);
 
-  // Bulk Dialog state
+  // Dialog states
   const [isBulkOpen, setIsBulkOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<UnmappedDietItem | null>(null);
+
+  const unmappedList = useMemo(
+    () => initialUnmappedItems ?? initialItems ?? [],
+    [initialUnmappedItems, initialItems],
+  );
+  const mappedList = useMemo(
+    () => initialMappedItems ?? [],
+    [initialMappedItems],
+  );
 
   function handleRefresh() {
     setIsRefreshing(true);
     router.refresh();
     setTimeout(() => setIsRefreshing(false), 600);
+  }
+
+  function handleTabChange(tab: 'UNMAPPED' | 'MAPPED') {
+    setActiveTab(tab);
+    setSelectedRaws([]);
+    setSelectedStatus('ALL');
   }
 
   function handleResetFilters() {
@@ -50,21 +82,51 @@ export default function MappingDietClient({
     setSelectedRaws([]);
   }
 
-  // Filtered items
+  function handleOpenEdit(item: UnmappedDietItem) {
+    setEditingItem(item);
+    setIsEditOpen(true);
+  }
+
+  // Filtered items based on activeTab, searchQuery, and selectedStatus
   const filteredItems = useMemo(() => {
-    return initialItems.filter((item) => {
+    const sourceList = activeTab === 'UNMAPPED' ? unmappedList : mappedList;
+
+    return sourceList.filter((item) => {
+      // 1. Search Query Filter
       if (
         searchQuery.trim() !== '' &&
         !item.diet_rs_raw.toLowerCase().includes(searchQuery.toLowerCase())
       ) {
         return false;
       }
-      if (selectedStatus !== 'ALL' && item.status_mapping !== selectedStatus) {
-        return false;
+
+      // 2. Status Filter
+      if (selectedStatus !== 'ALL') {
+        if (activeTab === 'UNMAPPED') {
+          if (item.status_mapping !== selectedStatus) {
+            return false;
+          }
+        } else {
+          // In MAPPED tab:
+          const isNpo =
+            item.bentuk_makanan === 'NPO' ||
+            item.kategori_diet === 'NPO' ||
+            item.diet_rs_raw.trim().toUpperCase() === 'NPO';
+
+          const isKatering =
+            item.status_mapping === 'KATERING' ||
+            item.bentuk_makanan === 'KATERING' ||
+            item.kategori_diet === 'KATERING';
+
+          if (selectedStatus === 'NPO' && !isNpo) return false;
+          if (selectedStatus === 'KATERING' && !isKatering) return false;
+          if (selectedStatus === 'STANDARD' && (isNpo || isKatering))
+            return false;
+        }
       }
       return true;
     });
-  }, [initialItems, searchQuery, selectedStatus]);
+  }, [activeTab, unmappedList, mappedList, searchQuery, selectedStatus]);
 
   function handleToggleSelect(raw: string) {
     setSelectedRaws((prev) =>
@@ -98,13 +160,13 @@ export default function MappingDietClient({
             </span>
           </div>
           <p className='text-xs sm:text-sm text-muted-foreground'>
-            Petakan diet free-text dari RS ke standar kategori diet katering
-            untuk laporan dan etiket makanan pasien.
+            Petakan diet free-text dari RS ke standar kategori katering,
+            otomatisasi NPO, atau alihkan ke Live Katering.
           </p>
         </div>
 
         <div className='flex items-center gap-2 self-start sm:self-auto shrink-0 flex-wrap'>
-          {/* Bulk Mapping Button */}
+          {/* Bulk Mapping Button (Available in both tabs) */}
           {selectedRaws.length > 1 && (
             <Button
               size='sm'
@@ -139,11 +201,13 @@ export default function MappingDietClient({
             Tentang Mapping Diet:
           </strong>
           <span className='ml-1'>
-            Diet yang tulis bebas oleh dokter/perawat (<em>free-text RS</em>)
-            perlu dipetakan ke standar kategori katering agar etiket makanan
-            dapat dicetak dengan benar. Data <strong>UNMAPPED</strong> artinya
-            belum pernah dipetakan. <strong>PARTIAL</strong> artinya sudah
-            sebagian dipetakan.
+            Diet tulis bebas oleh dokter/perawat (<em>free-text RS</em>) perlu
+            dipetakan agar etiket makanan dan porsi produksi tercetak akurat.
+            Jika raw text berstatus <strong>NPO</strong>, seluruh kriteria
+            otomatis terisi NPO. Jika dipilih{' '}
+            <strong>Alihkan ke AG Katering</strong> (misal Bubur Saring, Sonde),
+            diet tidak masuk ke dapur produksi umum, melainkan langsung
+            dialihkan ke halaman Live Katering.
           </span>
         </div>
       </div>
@@ -151,21 +215,80 @@ export default function MappingDietClient({
       {/* ── 3. Stats Cards ────────────────────────────────────────────────── */}
       <MappingDietStats stats={stats} />
 
-      {/* ── 4. Filter Bar ─────────────────────────────────────────────────── */}
+      {/* ── 4. Main Tab Navigation ────────────────────────────────────────── */}
+      <div className='flex items-center gap-2 sm:gap-6 border-b border-border/80 px-1 overflow-x-auto'>
+        {/* Tab 1: Belum Termapping */}
+        <button
+          type='button'
+          onClick={() => handleTabChange('UNMAPPED')}
+          className={`flex items-center gap-2 pb-3 text-xs sm:text-sm font-bold transition-all cursor-pointer relative whitespace-nowrap ${
+            activeTab === 'UNMAPPED'
+              ? 'text-rose-600 dark:text-rose-400'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <AlertCircle className='w-4 h-4' />
+          <span>Belum Termapping (Perlu Tindakan)</span>
+          <span
+            className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-bold ${
+              activeTab === 'UNMAPPED'
+                ? 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                : 'bg-muted text-muted-foreground'
+            }`}
+          >
+            {unmappedList.length}
+          </span>
+          {activeTab === 'UNMAPPED' && (
+            <span className='absolute bottom-0 left-0 right-0 h-0.5 bg-rose-600 dark:bg-rose-400 rounded-full' />
+          )}
+        </button>
+
+        {/* Tab 2: Sudah Termapping */}
+        <button
+          type='button'
+          onClick={() => handleTabChange('MAPPED')}
+          className={`flex items-center gap-2 pb-3 text-xs sm:text-sm font-bold transition-all cursor-pointer relative whitespace-nowrap ${
+            activeTab === 'MAPPED'
+              ? 'text-emerald-600 dark:text-emerald-400'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <CheckCircle2 className='w-4 h-4' />
+          <span>Sudah Termapping </span>
+          <span
+            className={`px-2 py-0.5 rounded-full text-[11px] font-mono font-bold ${
+              activeTab === 'MAPPED'
+                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                : 'bg-muted text-muted-foreground'
+            }`}
+          >
+            {mappedList.length}
+          </span>
+          {activeTab === 'MAPPED' && (
+            <span className='absolute bottom-0 left-0 right-0 h-0.5 bg-emerald-600 dark:bg-emerald-400 rounded-full' />
+          )}
+        </button>
+      </div>
+
+      {/* ── 5. Filter Bar ─────────────────────────────────────────────────── */}
       <MappingDietFilterBar
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         selectedStatus={selectedStatus}
         onStatusChange={setSelectedStatus}
         onReset={handleResetFilters}
+        tab={activeTab}
       />
 
-      {/* ── 5. Results Count ──────────────────────────────────────────────── */}
+      {/* ── 6. Results Count & Bulk Action ───────────────────────────────── */}
       <div className='flex items-center justify-between text-xs text-muted-foreground px-1'>
         <span>
           Menampilkan{' '}
           <strong className='text-foreground'>{filteredItems.length}</strong>{' '}
-          dari {initialItems.length} item
+          dari{' '}
+          {activeTab === 'UNMAPPED' ? unmappedList.length : mappedList.length}{' '}
+          diet (
+          {activeTab === 'UNMAPPED' ? 'Belum Termapping' : 'Sudah Termapping'})
           {selectedRaws.length > 0 && (
             <span className='ml-2 text-primary font-semibold'>
               ({selectedRaws.length} dipilih)
@@ -184,7 +307,7 @@ export default function MappingDietClient({
         )}
       </div>
 
-      {/* ── 6. Main Table ─────────────────────────────────────────────────── */}
+      {/* ── 7. Main Table ─────────────────────────────────────────────────── */}
       <MappingDietTable
         items={filteredItems}
         options={options}
@@ -192,8 +315,20 @@ export default function MappingDietClient({
         onToggleSelect={handleToggleSelect}
         onToggleSelectAll={handleToggleSelectAll}
         onRefresh={handleRefresh}
+        onEditItem={handleOpenEdit}
+        isMappedTab={activeTab === 'MAPPED'}
       />
 
+      {/* ── 8. Single Edit Dialog ─────────────────────────────────────────── */}
+      <MappingDietEditDialog
+        open={isEditOpen}
+        onOpenChange={setIsEditOpen}
+        item={editingItem}
+        options={options}
+        onSuccess={handleRefresh}
+      />
+
+      {/* ── 9. Bulk Mapping Dialog ────────────────────────────────────────── */}
       <MappingDietBulkDialog
         selectedRaws={selectedRaws}
         options={options}

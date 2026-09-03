@@ -11,6 +11,10 @@ export const auth = betterAuth({
     provider: 'pg',
     schema,
   }),
+  rateLimit: {
+    window: 10, // time window in seconds
+    max: 100, // max requests in the window
+  },
   emailAndPassword: {
     enabled: true,
   },

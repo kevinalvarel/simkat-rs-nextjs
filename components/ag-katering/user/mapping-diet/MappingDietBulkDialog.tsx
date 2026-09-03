@@ -18,6 +18,9 @@ import { broadcastProductionUpdate } from '@/lib/realtime-sync';
 import { toast } from 'sonner';
 import { SelectField, KATEGORI_LABEL } from './ui/SelectField';
 
+import MappingDietConfirmDialog from './MappingDietConfirmDialog';
+import { Utensils, Sparkles, Send } from 'lucide-react';
+
 interface MappingDietBulkDialogProps {
   selectedRaws: string[];
   options: KategoriMenuOption[];
@@ -47,12 +50,14 @@ export default function MappingDietBulkDialog({
   onOpenChange,
   onSuccess,
 }: MappingDietBulkDialogProps) {
+  const [mode, setMode] = useState<'STANDARD' | 'NPO' | 'KATERING'>('STANDARD');
   const [karbo, setKarbo] = useState('');
   const [hewani, setHewani] = useState('');
   const [nabati, setNabati] = useState('');
   const [sayur, setSayur] = useState('');
   const [buah, setBuah] = useState('');
   const [snack, setSnack] = useState('');
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const grouped = useMemo(() => groupByKategori(options), [options]);
@@ -64,19 +69,52 @@ export default function MappingDietBulkDialog({
   const buahOptions = grouped['BUAH'] ?? [];
   const snackOptions = grouped['SNACK'] ?? [];
 
-  async function handleSubmit() {
-    if (!karbo || !hewani) {
-      toast.error('Karbohidrat dan Lauk Hewani wajib diisi.');
-      return;
+  function handleModeChange(newMode: 'STANDARD' | 'NPO' | 'KATERING') {
+    setMode(newMode);
+    if (newMode === 'NPO') {
+      setKarbo('NPO');
+      setHewani('NPO');
+      setNabati('NPO');
+      setSayur('NPO');
+      setBuah('NPO');
+      setSnack('NPO');
+    } else if (newMode === 'KATERING') {
+      setKarbo('KATERING');
+      setHewani('KATERING');
+      setNabati('');
+      setSayur('');
+      setBuah('');
+      setSnack('');
+    } else {
+      setKarbo('');
+      setHewani('');
+      setNabati('');
+      setSayur('');
+      setBuah('');
+      setSnack('');
     }
+  }
 
+  function handlePreSubmit() {
+    if (mode === 'STANDARD') {
+      if (!karbo || !hewani) {
+        toast.error('Karbohidrat dan Lauk Hewani wajib diisi untuk mapping standar.');
+        return;
+      }
+    }
+    setIsConfirmOpen(true);
+  }
+
+  async function handleFinalSave() {
     setIsSubmitting(true);
     try {
       const extraCombined = [nabati, sayur].filter(Boolean).join(', ');
 
       const res = await bulkSaveDietMapping(selectedRaws, {
-        bentuk_makanan: karbo,
-        kategori_diet: hewani,
+        mode,
+        status_mapping: mode === 'KATERING' ? 'KATERING' : undefined,
+        bentuk_makanan: karbo || null,
+        kategori_diet: hewani || null,
         extra: extraCombined || undefined,
         buah: buah || undefined,
         snack: snack || undefined,
@@ -86,8 +124,10 @@ export default function MappingDietBulkDialog({
       if (res.success) {
         toast.success(res.message);
         broadcastProductionUpdate('SYNC_NOW', 'mapping-diet');
-        onSuccess();
+        setIsConfirmOpen(false);
         onOpenChange(false);
+        onSuccess();
+        setMode('STANDARD');
         setKarbo('');
         setHewani('');
         setNabati('');
@@ -106,7 +146,8 @@ export default function MappingDietBulkDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className='sm:max-w-md max-h-[90vh] overflow-y-auto p-6'>
         <DialogHeader className='gap-1 border-b pb-4'>
           <div className='flex items-center gap-2'>
@@ -145,36 +186,103 @@ export default function MappingDietBulkDialog({
             </div>
           </div>
 
+          {/* Mode Switcher */}
+          <div className='space-y-1.5'>
+            <label className='text-xs font-bold text-foreground block'>
+              Pilih Mode Mapping Massal:
+            </label>
+            <div className='grid grid-cols-1 sm:grid-cols-3 gap-2'>
+              <button
+                type='button'
+                onClick={() => handleModeChange('STANDARD')}
+                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col gap-0.5 ${
+                  mode === 'STANDARD'
+                    ? 'border-primary bg-primary/10 shadow-xs ring-1 ring-primary'
+                    : 'border-border bg-background hover:bg-muted/40'
+                }`}
+              >
+                <div className='flex items-center gap-1.5 font-bold text-foreground text-xs'>
+                  <Utensils className='w-3.5 h-3.5 text-primary' />
+                  <span>Menu Standar</span>
+                </div>
+                <p className='text-[10px] text-muted-foreground'>
+                  Pilih kategori menu siklus
+                </p>
+              </button>
+
+              <button
+                type='button'
+                onClick={() => handleModeChange('NPO')}
+                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col gap-0.5 ${
+                  mode === 'NPO'
+                    ? 'border-purple-600 bg-purple-500/15 shadow-xs ring-1 ring-purple-600 text-purple-950 dark:text-purple-200'
+                    : 'border-border bg-background hover:bg-purple-500/5'
+                }`}
+              >
+                <div className='flex items-center gap-1.5 font-bold text-xs text-purple-700 dark:text-purple-300'>
+                  <Sparkles className='w-3.5 h-3.5' />
+                  <span>NPO / Puasa</span>
+                </div>
+                <p className='text-[10px] text-muted-foreground'>
+                  Semua kriteria otomatis NPO
+                </p>
+              </button>
+
+              <button
+                type='button'
+                onClick={() => handleModeChange('KATERING')}
+                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col gap-0.5 ${
+                  mode === 'KATERING'
+                    ? 'border-blue-600 bg-blue-500/15 shadow-xs ring-1 ring-blue-600 text-blue-950 dark:text-blue-200'
+                    : 'border-border bg-background hover:bg-blue-500/5'
+                }`}
+              >
+                <div className='flex items-center gap-1.5 font-bold text-xs text-blue-700 dark:text-blue-300'>
+                  <Send className='w-3.5 h-3.5' />
+                  <span>AG Katering</span>
+                </div>
+                <p className='text-[10px] text-muted-foreground'>
+                  Alihkan ke Live Katering
+                </p>
+              </button>
+            </div>
+          </div>
+
           {/* Warning */}
           <div className='flex items-start gap-2 bg-amber-500/5 p-3 rounded-xl border border-amber-200 dark:border-amber-900 text-xs text-amber-900 dark:text-amber-200'>
             <AlertTriangle className='w-4 h-4 text-amber-500 shrink-0 mt-0.5' />
             <p>
               Nilai mapping ini akan diterapkan ke{' '}
               <strong>semua {selectedRaws.length} diet</strong> yang dipilih.
-              Pilihan diambil langsung dari Database Master Konfigurasi Menu.
             </p>
           </div>
 
           {/* Mapping Fields */}
-          <div className='grid grid-cols-1 sm:grid-cols-2 gap-3.5'>
+          <div
+            className={`grid grid-cols-1 sm:grid-cols-2 gap-3.5 ${
+              mode !== 'STANDARD' ? 'opacity-70 pointer-events-none' : ''
+            }`}
+          >
             {/* 1. KARBO */}
             <SelectField
               label={KATEGORI_LABEL['KARBO']}
-              required
+              required={mode === 'STANDARD'}
               value={karbo}
               onChange={setKarbo}
               placeholder='Pilih Karbohidrat...'
               options={karboOptions}
+              disabled={mode !== 'STANDARD'}
             />
 
             {/* 2. HEWANI */}
             <SelectField
               label={KATEGORI_LABEL['HEWANI']}
-              required
+              required={mode === 'STANDARD'}
               value={hewani}
               onChange={setHewani}
               placeholder='Pilih Lauk Hewani...'
               options={hewaniOptions}
+              disabled={mode !== 'STANDARD'}
             />
 
             {/* 3. NABATI */}
@@ -184,6 +292,7 @@ export default function MappingDietBulkDialog({
               onChange={setNabati}
               placeholder='Pilih Lauk Nabati...'
               options={nabatiOptions}
+              disabled={mode !== 'STANDARD'}
             />
 
             {/* 4. SAYUR */}
@@ -193,6 +302,7 @@ export default function MappingDietBulkDialog({
               onChange={setSayur}
               placeholder='Pilih Sayur...'
               options={sayurOptions}
+              disabled={mode !== 'STANDARD'}
             />
 
             {/* 5. BUAH */}
@@ -202,6 +312,7 @@ export default function MappingDietBulkDialog({
               onChange={setBuah}
               placeholder='Pilih Buah...'
               options={buahOptions}
+              disabled={mode !== 'STANDARD'}
             />
 
             {/* 6. SNACK */}
@@ -211,6 +322,7 @@ export default function MappingDietBulkDialog({
               onChange={setSnack}
               placeholder='Pilih Snack...'
               options={snackOptions}
+              disabled={mode !== 'STANDARD'}
             />
           </div>
         </div>
@@ -221,29 +333,40 @@ export default function MappingDietBulkDialog({
             size='sm'
             onClick={() => onOpenChange(false)}
             disabled={isSubmitting}
+            className='text-xs'
           >
             Batal
           </Button>
           <Button
             size='sm'
-            onClick={handleSubmit}
-            disabled={isSubmitting || !karbo || !hewani}
-            className='gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground'
+            onClick={handlePreSubmit}
+            disabled={isSubmitting || (mode === 'STANDARD' && (!karbo || !hewani))}
+            className='gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground text-xs'
           >
-            {isSubmitting ? (
-              <>
-                <Loader2 className='w-4 h-4 animate-spin' />
-                Menyimpan...
-              </>
-            ) : (
-              <>
-                <Save className='w-4 h-4' />
-                Simpan {selectedRaws.length} Mapping
-              </>
-            )}
+            <Save className='w-4 h-4' />
+            Simpan {selectedRaws.length} Mapping
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <MappingDietConfirmDialog
+      open={isConfirmOpen}
+      onOpenChange={setIsConfirmOpen}
+      diet_rs_raw={`${selectedRaws.length} Diet Terpilih (${selectedRaws.slice(0, 3).join(', ')}${selectedRaws.length > 3 ? '...' : ''})`}
+      mode={mode}
+      values={{
+        karbo,
+        hewani,
+        nabati,
+        sayur,
+        buah,
+        snack,
+      }}
+      jumlahPasien={selectedRaws.length}
+      isSubmitting={isSubmitting}
+      onConfirm={handleFinalSave}
+    />
+    </>
   );
 }
