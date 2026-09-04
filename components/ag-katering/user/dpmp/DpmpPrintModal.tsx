@@ -13,6 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Printer } from 'lucide-react';
 import type { DpmpPatientItem, DpmpSummaryData } from '@/types/dpmptypes';
+import { isNpoPatient } from '@/lib/npo-utils';
 
 interface DpmpPrintModalProps {
   open: boolean;
@@ -31,13 +32,13 @@ export default function DpmpPrintModal({
 }: DpmpPrintModalProps) {
   const printRef = useRef<HTMLDivElement>(null);
 
-  const isSingle = patientsToPrint.length === 1;
-  const singlePatient = isSingle ? patientsToPrint[0] : null;
-
-  // Group patients by Ruangan so each Ruangan gets its own formal hospital DPMP sheet
+  // Group patients by Ruangan so each Ruangan gets its own formal hospital DPMP sheet (strictly feeding patients only)
   const groupedByRuangan = useMemo(() => {
+    const feedingOnly = patientsToPrint.filter(
+      (p) => !isNpoPatient(p) && p.status !== 'NPO',
+    );
     const map = new Map<string, DpmpPatientItem[]>();
-    patientsToPrint.forEach((p) => {
+    feedingOnly.forEach((p) => {
       const r = p.ruangan || 'Ruangan';
       if (!map.has(r)) {
         map.set(r, []);
@@ -56,6 +57,16 @@ export default function DpmpPrintModal({
       };
     });
   }, [patientsToPrint]);
+
+  const totalPorsiToPrint = useMemo(() => {
+    return groupedByRuangan.reduce((sum, g) => sum + g.patients.length, 0);
+  }, [groupedByRuangan]);
+
+  const isSingle = totalPorsiToPrint === 1;
+  const singlePatient =
+    isSingle && groupedByRuangan[0]?.patients[0]
+      ? groupedByRuangan[0].patients[0]
+      : null;
 
   const docTitle =
     title ||
@@ -110,8 +121,8 @@ export default function DpmpPrintModal({
                 {isSingle
                   ? `Cetak DPMP - ${singlePatient?.nama_pasien}`
                   : groupedByRuangan.length === 1
-                    ? `Cetak DPMP - ${groupedByRuangan[0].ruanganName} (${patientsToPrint.length} Pasien)`
-                    : `Cetak DPMP Distribusi (${patientsToPrint.length} Pasien · ${groupedByRuangan.length} Ruangan)`}
+                    ? `Cetak DPMP - ${groupedByRuangan[0].ruanganName} (${totalPorsiToPrint} Porsi)`
+                    : `Cetak DPMP Distribusi (${totalPorsiToPrint} Porsi · ${groupedByRuangan.length} Ruangan)`}
               </DialogTitle>
               <DialogDescription className='text-xs text-muted-foreground'>
                 Pratinjau lembar Daftar Permintaan Makanan Pasien (DPMP) resmi
@@ -169,8 +180,9 @@ export default function DpmpPrintModal({
                   </div>
                 </div>
 
-                {/* 2. Metadata Ruangan & Jadwal (Hanya di Sisi Kiri) */}
-                <div className='pt-1'>
+                {/* 2. Metadata Ruangan & Jadwal (2 Kolom: Kiri & Kanan) */}
+                <div className='pt-1 flex items-start justify-between gap-6'>
+                  {/* Sisi Kiri: Ruangan, Hari/Tanggal, Jam Makan */}
                   <table className='text-xs font-bold leading-normal'>
                     <tbody>
                       <tr>
@@ -180,21 +192,37 @@ export default function DpmpPrintModal({
                         </td>
                       </tr>
                       <tr>
-                        <td className='py-0.5 text-black'>KELAS</td>
-                        <td className='py-0.5 text-black'>
-                          : {group.kelasListStr.toUpperCase()}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td className='py-0.5 text-black'>HARI/TANGGAL</td>
+                        <td className='w-32 py-0.5 text-black'>HARI/TANGGAL</td>
                         <td className='py-0.5 text-black'>
                           : {summaryData.tanggalFormatted.toUpperCase()}
                         </td>
                       </tr>
                       <tr>
-                        <td className='py-0.5 text-black'>JAM MAKAN</td>
+                        <td className='w-32 py-0.5 text-black'>JAM MAKAN</td>
                         <td className='py-0.5 text-black'>
                           : {summaryData.waktuMakanFormatted.toUpperCase()}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  {/* Sisi Kanan: Jumlah Pasien Utama & Kelas */}
+                  <table className='text-xs font-bold leading-normal'>
+                    <tbody>
+                      <tr>
+                        <td className='w-32 py-0.5 text-black'>
+                          JUMLAH PASIEN
+                        </td>
+                        <td className='py-0.5 text-black'>
+                          : {group.patients.length}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className='w-32 py-0.5 text-black align-top'>
+                          KELAS
+                        </td>
+                        <td className='py-0.5 text-black'>
+                          : {group.kelasListStr.toUpperCase()}
                         </td>
                       </tr>
                     </tbody>

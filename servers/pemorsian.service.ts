@@ -8,6 +8,7 @@ import { pasienTable } from '@/db/schemas/patient/pasien';
 import { waktuMakanTable } from '@/db/schemas/patient/waktu-makan';
 import { masterSiklusTable } from '@/db/schemas/master/siklus-menu';
 import { otorisasiPerubahanDietTable } from '@/db/schemas/snapshot/perizinan-revisi';
+import { isNpoPatient } from '@/lib/npo-utils';
 import type {
   PemorsianBatchOption,
   PemorsianPatientItem,
@@ -266,6 +267,12 @@ export async function getLivePemorsianData(
       for (const sd of snapshotDetails) {
         snapshotRmSet.add(sd.no_rm.trim());
         const liveP = livePatientMap.get(sd.no_rm.trim());
+        const sdIsNpo = isNpoPatient({
+          ...sd,
+          is_npo: sd.status_saat_snapshot === 'NPO',
+          status_pasien: sd.status_saat_snapshot,
+        });
+        const liveIsNpo = liveP ? isNpoPatient(liveP) : false;
 
         // Check for changes between snapshot baseline & current live state
         let isChanged = false;
@@ -276,8 +283,8 @@ export async function getLivePemorsianData(
           isChanged = true;
           changeType = 'DISCHARGE';
           note = 'Pasien sudah dipulangkan';
-        } else if (liveP.is_npo || liveP.status_pasien === 'NPO') {
-          if (sd.status_saat_snapshot !== 'NPO') {
+        } else if (liveIsNpo) {
+          if (!sdIsNpo) {
             isChanged = true;
             changeType = 'NPO';
             note = 'Pasien beralih puasa (NPO)';
@@ -333,7 +340,7 @@ export async function getLivePemorsianData(
               kelas: sd.kelas,
             },
             data_baru: {
-              diet: liveP?.diet || (liveP?.is_npo ? 'NPO (Puasa)' : 'Pasien Pulang'),
+              diet: liveP?.diet || (liveIsNpo ? 'NPO (Puasa)' : 'Pasien Pulang'),
               ruangan: liveP?.ruangan || sd.ruangan,
               bed: liveP?.bed || sd.no_bed,
               kelas: liveP?.kelas || sd.kelas,
@@ -363,9 +370,9 @@ export async function getLivePemorsianData(
             kamar: liveP?.gedung || sd.gedung || '',
             gedung: liveP?.gedung || sd.gedung,
             bed: liveP?.bed || sd.no_bed,
-            diet: liveP?.diet || sd.diet_rs_raw,
+            diet: liveIsNpo ? 'NPO (Puasa)' : liveP?.diet || sd.diet_rs_raw,
             waktu: currentWaktuTitle,
-            status: liveP?.is_npo ? 'NPO' : liveP?.status_pasien || 'AKTIF',
+            status: liveIsNpo ? 'NPO' : liveP?.status_pasien || 'AKTIF',
             kelas: liveP?.kelas || sd.kelas,
             batch_id: sd.batch_id,
             batch_code: selectedBatch.batch_code,
@@ -387,9 +394,9 @@ export async function getLivePemorsianData(
             kamar: sd.gedung || '',
             gedung: sd.gedung,
             bed: sd.no_bed,
-            diet: sd.diet_rs_raw || sd.bentuk_makanan || 'Diet Biasa',
+            diet: sdIsNpo ? 'NPO (Puasa)' : (sd.diet_rs_raw || sd.bentuk_makanan || 'Diet Biasa'),
             waktu: currentWaktuTitle,
-            status: sd.is_emergent ? 'EMERGENT' : sd.status_saat_snapshot || 'AKTIF',
+            status: sd.is_emergent ? 'EMERGENT' : (sdIsNpo ? 'NPO' : sd.status_saat_snapshot || 'AKTIF'),
             kelas: sd.kelas,
             batch_id: sd.batch_id,
             batch_code: selectedBatch.batch_code,
@@ -429,13 +436,16 @@ export async function getLivePemorsianData(
             },
             alasan: 'Pasien baru ditambahkan oleh AG RS pasca snapshot dikunci',
             status: 'APPROVED',
-            dampak_dapur: `Pasien Baru Susulan (+1 Porsi: ${p.diet})`,
+            dampak_dapur: isNpoPatient(p)
+              ? 'Pasien Baru Susulan (Puasa / NPO)'
+              : `Pasien Baru Susulan (+1 Porsi: ${p.diet})`,
             requested_by: p.updated_by || 'AG RS',
             requested_at: new Date().toLocaleTimeString('id-ID'),
             batch_id: selectedBatch.id,
             batch_code: selectedBatch.batch_code,
           });
 
+          const isNewNpo = isNpoPatient(p);
           patientItems.push({
             id: p.id,
             nama_pasien: p.nama_pasien,
@@ -444,9 +454,9 @@ export async function getLivePemorsianData(
             kamar: p.gedung || '',
             gedung: p.gedung,
             bed: p.bed,
-            diet: p.diet,
+            diet: isNewNpo ? 'NPO (Puasa)' : p.diet,
             waktu: currentWaktuTitle,
-            status: p.status_pasien,
+            status: isNewNpo ? 'NPO' : p.status_pasien,
             kelas: p.kelas,
             batch_id: selectedBatch.id,
             batch_code: selectedBatch.batch_code,
@@ -464,11 +474,7 @@ export async function getLivePemorsianData(
       );
 
       patientItems = activePatients.map((p) => {
-        const isNpo =
-          p.is_npo ||
-          p.status_pasien === 'NPO' ||
-          p.diet.toLowerCase().includes('npo') ||
-          p.diet.toLowerCase().includes('puasa');
+        const isNpo = isNpoPatient(p);
 
         return {
           id: p.id,
@@ -496,19 +502,15 @@ export async function getLivePemorsianData(
     let npoCount = 0;
 
     for (const p of patientItems) {
-      const isNpo =
-        p.status === 'NPO' ||
-        p.diet.toLowerCase().includes('npo') ||
-        p.diet.toLowerCase().includes('puasa');
+      const isNpo = isNpoPatient(p) || p.status === 'NPO';
 
       if (isNpo) {
         npoCount++;
       } else {
         activeCount++;
+        const dietKey = p.diet || 'Lain-Lain';
+        dietMap.set(dietKey, (dietMap.get(dietKey) || 0) + 1);
       }
-
-      const dietKey = p.diet || 'Lain-Lain';
-      dietMap.set(dietKey, (dietMap.get(dietKey) || 0) + 1);
     }
 
     const dietSummary: PemorsianDietCount[] = Array.from(dietMap.entries())
@@ -517,10 +519,16 @@ export async function getLivePemorsianData(
 
     const butuhRevisiCount = revisiItems.length;
     const belumDicetakCount = patientItems.filter(
-      (p) => p.print_status === 'BELUM_DICETAK',
+      (p) =>
+        p.print_status === 'BELUM_DICETAK' &&
+        !isNpoPatient(p) &&
+        p.status !== 'NPO',
     ).length;
     const sudahDicetakCount = patientItems.filter(
-      (p) => p.print_status === 'SUDAH_DICETAK',
+      (p) =>
+        p.print_status === 'SUDAH_DICETAK' &&
+        !isNpoPatient(p) &&
+        p.status !== 'NPO',
     ).length;
 
     const dateStr = targetDateStr.replace(/-/g, '');
@@ -551,7 +559,7 @@ export async function getLivePemorsianData(
       revisiItems,
 
       totalCount: patientItems.length,
-      totalPasien: patientItems.length,
+      totalPasien: activeCount,
       revisiCount: butuhRevisiCount,
       dietSummary,
       activeCount,

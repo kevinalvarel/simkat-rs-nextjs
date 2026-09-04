@@ -132,4 +132,9 @@ export interface EtiketData {
   kamar?: string;
   is_revisi?: boolean;
   keterangan_revisi?: string;
+  tgl_lahir?: string;
+  keterangan?: string;
+  exp_date?: string;
+  quote?: string;
+  catatan_alat?: string;
 }

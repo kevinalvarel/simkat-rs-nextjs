@@ -12,6 +12,7 @@ import type {
 } from '@/types/cetaketikettypes';
 import { getLivePemorsianData } from '@/servers/pemorsian.service';
 import { useEtiketPrintedSync } from '@/hooks/useEtiketPrintedSync';
+import { isNpoPatient } from '@/lib/npo-utils';
 import EtiketPrintPreviewModal from '@/components/ag-katering/user/cetak-etiket/layout/EtiketPrintPreviewModal';
 import CetakEtiketHeader, { type WaktuMakanType } from './CetakEtiketHeader';
 import CetakEtiketStats from './CetakEtiketStats';
@@ -218,6 +219,9 @@ export default function CetakEtiketClient({
 
   // Toggle selection for single patient
   function handleToggleSelect(id: number) {
+    const patient = data.patients.find((p) => p.id === id);
+    if (patient && (isNpoPatient(patient) || patient.status === 'NPO')) return;
+
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
@@ -229,17 +233,19 @@ export default function CetakEtiketClient({
     });
   }
 
-  // Toggle select all visible filtered patients
+  // Toggle select all visible filtered patients (feeding patients only)
   function handleToggleSelectAll() {
-    const allFilteredIds = filteredPatients.map((p) => p.id);
+    const allFeedingIds = filteredPatients
+      .filter((p) => !isNpoPatient(p) && p.status !== 'NPO')
+      .map((p) => p.id);
     const isAllSelected =
-      allFilteredIds.length > 0 &&
-      allFilteredIds.every((id) => selectedIds.has(id));
+      allFeedingIds.length > 0 &&
+      allFeedingIds.every((id) => selectedIds.has(id));
 
     if (isAllSelected) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(allFilteredIds));
+      setSelectedIds(new Set(allFeedingIds));
     }
   }
 
@@ -255,6 +261,8 @@ export default function CetakEtiketClient({
       diet: p.diet,
       waktu: p.waktu || data.waktuMakan || 'SIANG',
       is_revisi: false,
+      keterangan: p.kelas ? `Kelas ${p.kelas}` : '-',
+      exp_date: data.tanggalProduksi || undefined,
     };
   }
 
@@ -271,11 +279,17 @@ export default function CetakEtiketClient({
       waktu: r.waktu_makan || data.waktuMakan || 'SIANG',
       is_revisi: true,
       keterangan_revisi: r.alasan || r.jenis_perubahan || 'Revisi Diet',
+      keterangan: r.alasan || r.jenis_perubahan || 'Revisi Diet',
+      exp_date: data.tanggalProduksi || undefined,
     };
   }
 
   // Handle single patient print
   function handlePrintSingle(patient: PemorsianPatientItem) {
+    if (isNpoPatient(patient) || patient.status === 'NPO') {
+      toast.error('Pasien Puasa (NPO) tidak mendapatkan etiket baki makanan.');
+      return;
+    }
     const etiket = toEtiket(patient);
     setEtiketList([etiket]);
     setCurrentPrintTargetIds([patient.id]);
@@ -285,9 +299,11 @@ export default function CetakEtiketClient({
 
   // Handle batch print selected patients
   function handlePrintSelected() {
-    const targets = data.patients.filter((p) => selectedIds.has(p.id));
+    const targets = data.patients.filter(
+      (p) => selectedIds.has(p.id) && !isNpoPatient(p) && p.status !== 'NPO',
+    );
     if (targets.length === 0) {
-      toast.error('Pilih minimal satu pasien untuk dicetak.');
+      toast.error('Pilih minimal satu pasien makan untuk dicetak.');
       return;
     }
 
@@ -320,22 +336,27 @@ export default function CetakEtiketClient({
   const stats: CetakEtiketStatsData = useMemo(() => {
     let sudah = 0;
     let belum = 0;
+    let aktifCount = 0;
+    let puasaCount = 0;
+
     data.patients.forEach((p) => {
-      if (printedPatientIds.has(p.id)) {
-        sudah++;
+      const isNpo = isNpoPatient(p) || p.status === 'NPO';
+      if (isNpo) {
+        puasaCount++;
       } else {
-        belum++;
+        aktifCount++;
+        if (printedPatientIds.has(p.id)) {
+          sudah++;
+        } else {
+          belum++;
+        }
       }
     });
 
     return {
-      totalPasien: data.patients.length,
-      porsiDietAktif: data.patients.filter(
-        (p) => (p.status || '').toUpperCase() === 'AKTIF',
-      ).length,
-      pasienPuasa: data.patients.filter(
-        (p) => (p.status || '').toUpperCase() === 'NPO',
-      ).length,
+      totalPasien: aktifCount,
+      porsiDietAktif: aktifCount,
+      pasienPuasa: puasaCount,
       terpilihCount: selectedIds.size,
       sudahDicetakCount: sudah,
       belumDicetakCount: belum,

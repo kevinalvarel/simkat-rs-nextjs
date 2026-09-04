@@ -1,6 +1,6 @@
 'use server';
 
-import { eq, desc, and } from 'drizzle-orm';
+import { eq, desc, and, ne } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 
 import { db } from '@/drizzle';
@@ -8,6 +8,8 @@ import { snapshotBatchTable } from '@/db/schemas/snapshot/snapshot-batch';
 import { snapshotDetailTable } from '@/db/schemas/snapshot/snapshot-detail';
 import { pasienTable } from '@/db/schemas/patient/pasien';
 import { waktuMakanTable } from '@/db/schemas/patient/waktu-makan';
+import { dietMappingTable } from '@/db/schemas/master/mapping-diet';
+import { isNpoPatient } from '@/lib/npo-utils';
 
 import type { WaktuMakanConfig, MealCycleStatus } from '@/lib/snapshot-cycle';
 
@@ -285,13 +287,40 @@ export async function triggerManualSnapshot(
       .toString()
       .slice(-4)}`;
 
-    // 1. Fetch active patients
+    // 1. Fetch active patients and master diet mappings
     const activePatients = await db
       .select()
       .from(pasienTable)
-      .where(eq(pasienTable.status_pasien, 'AKTIF'));
+      .where(
+        and(
+          ne(pasienTable.status_pasien, 'PULANG'),
+          ne(pasienTable.status_pasien, 'PENDING_REVISI'),
+        ),
+      );
 
-    // 2. Create batch record
+    const masterMappings = await db
+      .select()
+      .from(dietMappingTable)
+      .where(eq(dietMappingTable.is_active, true));
+
+    const mappingByRaw = new Map<string, typeof masterMappings[0]>();
+    for (const m of masterMappings) {
+      mappingByRaw.set(m.diet_rs_raw.trim().toLowerCase(), m);
+    }
+
+    // Determine feeding patients (excluding NPO)
+    const feedingPatients = activePatients.filter((p) => {
+      const mapped = mappingByRaw.get((p.diet || '').trim().toLowerCase());
+      return !isNpoPatient({
+        is_npo: p.is_npo,
+        status_pasien: p.status_pasien,
+        diet: p.diet,
+        bentuk_makanan: mapped?.bentuk_makanan,
+        kategori_diet: mapped?.kategori_diet,
+      });
+    });
+
+    // 2. Create batch record with total_pasien reflecting feeding portions
     const [insertedBatch] = await db
       .insert(snapshotBatchTable)
       .values({
@@ -299,7 +328,7 @@ export async function triggerManualSnapshot(
         tanggal_produksi: prodDate,
         waktu_makan: waktuMakan,
         timestamp_snapshot: now,
-        total_pasien: activePatients.length,
+        total_pasien: feedingPatients.length,
         status_batch: 'LOCKED',
         created_by: 'Ahli Gizi Katering (Cut-off Lock)',
         cutoff_time: cutoffTime,
@@ -307,19 +336,36 @@ export async function triggerManualSnapshot(
       .returning({ id: snapshotBatchTable.id });
 
     if (insertedBatch && activePatients.length > 0) {
-      // 3. Insert snapshot detail records
-      const snapshotDetails = activePatients.map((p) => ({
-        batch_id: insertedBatch.id,
-        no_rm: p.no_rm,
-        nama_pasien: p.nama_pasien,
-        gedung: p.gedung,
-        ruangan: p.ruangan,
-        no_bed: p.bed,
-        kelas: p.kelas,
-        diet_rs_raw: p.diet,
-        status_saat_snapshot: p.status_pasien,
-        is_emergent: false,
-      }));
+      // 3. Insert snapshot detail records with exact mapped dietary fields and NPO status
+      const snapshotDetails = activePatients.map((p) => {
+        const rawDiet = (p.diet || '').trim();
+        const mapped = mappingByRaw.get(rawDiet.toLowerCase());
+        const isNpo = isNpoPatient({
+          is_npo: p.is_npo,
+          status_pasien: p.status_pasien,
+          diet: p.diet,
+          bentuk_makanan: mapped?.bentuk_makanan,
+          kategori_diet: mapped?.kategori_diet,
+        });
+
+        return {
+          batch_id: insertedBatch.id,
+          no_rm: p.no_rm,
+          nama_pasien: p.nama_pasien,
+          gedung: p.gedung,
+          ruangan: p.ruangan,
+          no_bed: p.bed,
+          kelas: p.kelas,
+          diet_rs_raw: p.diet,
+          bentuk_makanan: isNpo ? 'NPO' : mapped?.bentuk_makanan || null,
+          kategori_diet: isNpo ? 'NPO' : mapped?.kategori_diet || null,
+          extra: isNpo ? null : mapped?.extra || null,
+          buah: isNpo ? null : mapped?.buah || null,
+          snack: isNpo ? null : mapped?.snack || null,
+          status_saat_snapshot: isNpo ? 'NPO' : p.status_pasien,
+          is_emergent: false,
+        };
+      });
 
       await db.insert(snapshotDetailTable).values(snapshotDetails);
     }

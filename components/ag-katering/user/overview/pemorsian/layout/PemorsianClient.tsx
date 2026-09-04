@@ -10,6 +10,7 @@ import type {
 import { getLivePemorsianData } from '@/servers/pemorsian.service';
 import { listenProductionUpdate } from '@/lib/realtime-sync';
 import { useEtiketPrintedSync } from '@/hooks/useEtiketPrintedSync';
+import { isNpoPatient } from '@/lib/npo-utils';
 import PemorsianStatsCards from '../ui/PemorsianStatsCards';
 import PemorsianRevisiTableSection from './PemorsianRevisiTableSection';
 import EtiketPrintPreviewModal from '../../../cetak-etiket/layout/EtiketPrintPreviewModal';
@@ -76,12 +77,13 @@ export default function PemorsianClient({ initialData }: PemorsianClientProps) {
     });
   }, [data.patients, printedPatientIds]);
 
-  // Calculate dynamic status counts
+  // Calculate dynamic status counts (strictly for feeding patients)
   const { belumDicetakCount, sudahDicetakCount, butuhRevisiCount } =
     useMemo(() => {
       let belum = 0;
       let sudah = 0;
       enrichedPatients.forEach((p) => {
+        if (isNpoPatient(p) || p.status === 'NPO') return;
         if (p.print_status === 'BELUM_DICETAK') belum++;
         else if (p.print_status === 'SUDAH_DICETAK') sudah++;
       });
@@ -266,6 +268,8 @@ export default function PemorsianClient({ initialData }: PemorsianClientProps) {
       kelas: p.kelas,
       gedung: p.gedung,
       is_revisi: false,
+      keterangan: p.kelas ? `Kelas ${p.kelas}` : '-',
+      exp_date: data.tanggalProduksi || undefined,
     };
   }
 
@@ -280,12 +284,15 @@ export default function PemorsianClient({ initialData }: PemorsianClientProps) {
       kelas: r.data_baru?.kelas || r.kelas,
       gedung: r.data_baru?.gedung || r.gedung,
       is_revisi: true,
-      keterangan_revisi: r.dampak_dapur || 'Revisi Diet',
+      keterangan_revisi: r.alasan || r.jenis_perubahan || r.dampak_dapur || 'Revisi Diet',
+      keterangan: r.alasan || r.jenis_perubahan || r.dampak_dapur || 'Revisi Diet',
+      exp_date: data.tanggalProduksi || undefined,
     };
   }
 
   // 12. Print Action Handlers
   function handlePrintSinglePatient(patient: PemorsianPatientItem) {
+    if (isNpoPatient(patient) || patient.status === 'NPO') return;
     const etiket = mapPatientToEtiket(patient);
     pendingPrintIdsRef.current = [patient.id];
     setPreviewEtiketList([etiket]);
@@ -294,8 +301,11 @@ export default function PemorsianClient({ initialData }: PemorsianClientProps) {
   }
 
   function handlePrintBatchPatients(patientList?: PemorsianPatientItem[]) {
-    const targetPatients =
+    const rawTarget =
       patientList || enrichedPatients.filter((p) => selectedCardIds.has(p.id));
+    const targetPatients = rawTarget.filter(
+      (p) => !isNpoPatient(p) && p.status !== 'NPO',
+    );
 
     if (targetPatients.length === 0) return;
 

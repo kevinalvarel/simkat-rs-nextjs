@@ -13,6 +13,7 @@ import {
   masterSiklusMenuTable,
 } from '@/db/schemas/master/siklus-menu';
 import { otorisasiPerubahanDietTable } from '@/db/schemas/snapshot/perizinan-revisi';
+import { isNpoPatient } from '@/lib/npo-utils';
 
 import type {
   MonitoringCardData,
@@ -443,19 +444,12 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
     // Process each active patient
     // Process each active patient
     for (const p of activePatients) {
-      const rawDiet = (p.diet || '').trim();
-
-      // Explicit medical status flag from patient record
-      if (p.is_npo || p.status_pasien === 'NPO') {
-        addLiveDish({
-          code: 'NPO',
-          name: 'Puasa / NPO',
-          category: 'NPO',
-          dietTag: 'NPO',
-        });
+      // Explicit medical status flag: NPO completely excluded from kitchen production dishes
+      if (isNpoPatient(p)) {
         continue;
       }
 
+      const rawDiet = (p.diet || '').trim();
       if (!rawDiet) continue;
 
       // Lookup in master diet mapping
@@ -480,12 +474,6 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
         kategoriCodes.some((c) => c.toUpperCase() === 'NPO' || c.toUpperCase() === 'PUASA');
 
       if (isNpoMapped) {
-        addLiveDish({
-          code: 'NPO',
-          name: 'Puasa / NPO',
-          category: 'NPO',
-          dietTag: 'NPO',
-        });
         continue;
       }
 
@@ -720,18 +708,11 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
         .where(eq(snapshotDetailTable.batch_id, latestBatch.id));
 
       for (const sd of snapshotDetails) {
-        const rawDiet = (sd.diet_rs_raw || '').trim();
-
-        if (sd.status_saat_snapshot === 'NPO') {
-          addSnapshotDish({
-            code: 'NPO',
-            name: 'Puasa / NPO',
-            category: 'NPO',
-            dietTag: 'NPO',
-          });
+        if (isNpoPatient(sd)) {
           continue;
         }
 
+        const rawDiet = (sd.diet_rs_raw || '').trim();
         const pKelas = sd.kelas || 'Kelas 1';
         let bentukCodes = extractCodes(sd.bentuk_makanan);
         let kategoriCodes = extractCodes(sd.kategori_diet);
@@ -767,12 +748,6 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
           kategoriCodes.some((c) => c.toUpperCase() === 'NPO' || c.toUpperCase() === 'PUASA');
 
         if (isNpoMapped) {
-          addSnapshotDish({
-            code: 'NPO',
-            name: 'Puasa / NPO',
-            category: 'NPO',
-            dietTag: 'NPO',
-          });
           continue;
         }
 
@@ -983,7 +958,6 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
       BUAH: 7,
       SNACK: 8,
       LAINNYA: 9,
-      NPO: 10,
     };
 
     let totalPorsi = 0;
@@ -1040,7 +1014,7 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
       hari: currentHari,
       tanggalFormatted,
       deskripsiSiklus: activeCycleDeskripsi,
-      totalPasien: activePatients.length,
+      totalPasien: activePatients.filter((p) => !isNpoPatient(p)).length,
       totalPorsi,
 
       cards,

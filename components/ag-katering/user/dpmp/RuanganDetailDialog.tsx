@@ -31,6 +31,7 @@ import {
   Ban,
   AlertCircle,
 } from 'lucide-react';
+import { isNpoPatient } from '@/lib/npo-utils';
 import type { DpmpPatientItem, DpmpSummaryData } from '@/types/dpmptypes';
 
 interface RuanganDetailDialogProps {
@@ -98,13 +99,24 @@ export default function RuanganDetailDialog({
 }: RuanganDetailDialogProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(
-    () => new Set(patients.map((p) => p.id)),
+    () =>
+      new Set(
+        patients
+          .filter((p) => !isNpoPatient(p) && p.status !== 'NPO')
+          .map((p) => p.id),
+      ),
   );
 
-  // Sync selectedIds when patients list changes or modal opens
+  // Sync selectedIds when patients list changes or modal opens - exclude NPO
   React.useEffect(() => {
     if (open) {
-      setSelectedIds(new Set(patients.map((p) => p.id)));
+      setSelectedIds(
+        new Set(
+          patients
+            .filter((p) => !isNpoPatient(p) && p.status !== 'NPO')
+            .map((p) => p.id),
+        ),
+      );
       setSearchQuery('');
     }
   }, [open, patients]);
@@ -112,8 +124,10 @@ export default function RuanganDetailDialog({
   // Derived Room Stats
   const roomStats = useMemo(() => {
     const total = patients.length;
-    const active = patients.filter((p) => p.status === 'AKTIF').length;
-    const npo = patients.filter((p) => p.status === 'NPO').length;
+    const active = patients.filter(
+      (p) => !isNpoPatient(p) && p.status !== 'NPO',
+    ).length;
+    const npo = total - active;
     const cito = patients.filter(
       (p) => p.is_emergent || p.status === 'EMERGENT',
     ).length;
@@ -139,11 +153,18 @@ export default function RuanganDetailDialog({
     );
   }, [patients, searchQuery]);
 
-  const isAllSelected =
-    filteredPatients.length > 0 &&
-    filteredPatients.every((p) => selectedIds.has(p.id));
+  const feedingPatients = useMemo(
+    () =>
+      filteredPatients.filter((p) => !isNpoPatient(p) && p.status !== 'NPO'),
+    [filteredPatients],
+  );
 
-  function handleToggleSelect(id: number) {
+  const isAllSelected =
+    feedingPatients.length > 0 &&
+    feedingPatients.every((p) => selectedIds.has(p.id));
+
+  function handleToggleSelect(id: number, isNpo: boolean) {
+    if (isNpo) return;
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
@@ -159,25 +180,29 @@ export default function RuanganDetailDialog({
     if (isAllSelected) {
       setSelectedIds((prev) => {
         const next = new Set(prev);
-        filteredPatients.forEach((p) => next.delete(p.id));
+        feedingPatients.forEach((p) => next.delete(p.id));
         return next;
       });
     } else {
       setSelectedIds((prev) => {
         const next = new Set(prev);
-        filteredPatients.forEach((p) => next.add(p.id));
+        feedingPatients.forEach((p) => next.add(p.id));
         return next;
       });
     }
   }
 
   function handlePrintAction() {
-    const selectedPatients = patients.filter((p) => selectedIds.has(p.id));
+    const selectedPatients = patients.filter(
+      (p) => selectedIds.has(p.id) && !isNpoPatient(p) && p.status !== 'NPO',
+    );
     if (selectedPatients.length === 0) return;
     onPrintPatients(selectedPatients, ruanganName || 'Ruangan');
   }
 
-  const selectedCount = patients.filter((p) => selectedIds.has(p.id)).length;
+  const selectedCount = patients.filter(
+    (p) => selectedIds.has(p.id) && !isNpoPatient(p) && p.status !== 'NPO',
+  ).length;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -294,32 +319,50 @@ export default function RuanganDetailDialog({
               <TableBody>
                 {filteredPatients.length > 0 ? (
                   filteredPatients.map((p, idx) => {
-                    const isSelected = selectedIds.has(p.id);
+                    const isNpo = isNpoPatient(p) || p.status === 'NPO';
+                    const isSelected = selectedIds.has(p.id) && !isNpo;
 
                     return (
                       <TableRow
                         key={p.id}
-                        onClick={() => handleToggleSelect(p.id)}
-                        className={`transition-colors cursor-pointer hover:bg-muted/40 ${
-                          isSelected ? 'bg-primary/5 dark:bg-primary/10' : ''
+                        onClick={
+                          isNpo
+                            ? undefined
+                            : () => handleToggleSelect(p.id, false)
+                        }
+                        className={`transition-colors ${
+                          isNpo
+                            ? 'bg-amber-500/[0.04] dark:bg-amber-500/[0.07] border-l-4 border-l-amber-500/80 opacity-75 cursor-not-allowed hover:bg-amber-500/[0.06]'
+                            : isSelected
+                            ? 'bg-primary/5 dark:bg-primary/10 cursor-pointer hover:bg-muted/40'
+                            : 'cursor-pointer hover:bg-muted/40'
                         }`}
                       >
                         {/* Checkbox */}
                         <TableCell className='text-center px-2 py-3'>
-                          <button
-                            type='button'
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleToggleSelect(p.id);
-                            }}
-                            className='p-1 rounded hover:bg-muted text-foreground transition-colors cursor-pointer'
-                          >
-                            {isSelected ? (
-                              <CheckSquare className='w-4 h-4 text-primary' />
-                            ) : (
-                              <Square className='w-4 h-4 text-muted-foreground' />
-                            )}
-                          </button>
+                          {isNpo ? (
+                            <span
+                              className='p-1 inline-flex text-muted-foreground/30 cursor-not-allowed'
+                              title='Pasien Puasa (NPO) tidak mendapatkan baki makanan'
+                            >
+                              <Square className='w-4 h-4' />
+                            </span>
+                          ) : (
+                            <button
+                              type='button'
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggleSelect(p.id, false);
+                              }}
+                              className='p-1 rounded hover:bg-muted text-foreground transition-colors cursor-pointer'
+                            >
+                              {isSelected ? (
+                                <CheckSquare className='w-4 h-4 text-primary' />
+                              ) : (
+                                <Square className='w-4 h-4 text-muted-foreground' />
+                              )}
+                            </button>
+                          )}
                         </TableCell>
 
                         {/* No */}

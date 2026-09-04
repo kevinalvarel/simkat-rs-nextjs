@@ -20,6 +20,7 @@ import {
   Building,
   Layers,
 } from 'lucide-react';
+import { isNpoPatient } from '@/lib/npo-utils';
 import type { DpmpPatientItem } from '@/types/dpmptypes';
 
 interface DpmpTableProps {
@@ -123,22 +124,26 @@ export default function DpmpTable({
     });
 
     return Array.from(map.entries()).map(([ruangan, patientList]) => {
-      const activeCount = patientList.filter((p) => p.status === 'AKTIF').length;
-      const npoCount = patientList.filter((p) => p.status === 'NPO').length;
+      const feedingList = patientList.filter(
+        (p) => !isNpoPatient(p) && p.status !== 'NPO',
+      );
+      const activeCount = feedingList.length;
+      const npoCount = patientList.length - activeCount;
       const emergentCount = patientList.filter(
         (p) => p.is_emergent || p.status === 'EMERGENT',
       ).length;
 
       const allRuanganSelected =
-        patientList.length > 0 &&
-        patientList.every((p) => selectedIds.has(p.id));
+        feedingList.length > 0 &&
+        feedingList.every((p) => selectedIds.has(p.id));
 
       const someRuanganSelected =
-        patientList.some((p) => selectedIds.has(p.id)) && !allRuanganSelected;
+        feedingList.some((p) => selectedIds.has(p.id)) && !allRuanganSelected;
 
       return {
         ruangan,
         patientList,
+        feedingList,
         activeCount,
         npoCount,
         emergentCount,
@@ -243,6 +248,7 @@ export default function DpmpTable({
             ({
               ruangan,
               patientList,
+              feedingList,
               activeCount,
               npoCount,
               emergentCount,
@@ -259,7 +265,7 @@ export default function DpmpTable({
                       {/* Checkbox Select All in this Ruangan */}
                       <button
                         type='button'
-                        onClick={() => onToggleSelectRuangan(patientList)}
+                        onClick={() => onToggleSelectRuangan(feedingList)}
                         className='p-1 rounded hover:bg-muted text-foreground transition-colors cursor-pointer shrink-0'
                         title={
                           allRuanganSelected
@@ -315,7 +321,7 @@ export default function DpmpTable({
                       <Button
                         size='sm'
                         variant='outline'
-                        onClick={() => onPrintRuangan(ruangan, patientList)}
+                        onClick={() => onPrintRuangan(ruangan, feedingList)}
                         className='h-8 text-xs gap-1.5 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10 cursor-pointer font-semibold'
                         title={`Cetak Lembar DPMP untuk ${ruangan}`}
                       >
@@ -370,7 +376,8 @@ export default function DpmpTable({
 
                       <TableBody>
                         {patientList.map((p, idx) => {
-                          const isSelected = selectedIds.has(p.id);
+                          const isNpo = isNpoPatient(p) || p.status === 'NPO';
+                          const isSelected = selectedIds.has(p.id) && !isNpo;
                           const badgeStyle =
                             KELAS_BADGE_STYLE[p.kelas.toUpperCase()] ||
                             'bg-secondary text-secondary-foreground border-border';
@@ -378,25 +385,36 @@ export default function DpmpTable({
                           return (
                             <TableRow
                               key={p.id}
-                              className={`transition-colors hover:bg-muted/40 ${
-                                isSelected
-                                  ? 'bg-primary/5 dark:bg-primary/10'
-                                  : ''
+                              className={`transition-colors ${
+                                isNpo
+                                  ? 'bg-amber-500/[0.04] dark:bg-amber-500/[0.07] border-l-4 border-l-amber-500/80 opacity-75'
+                                  : isSelected
+                                  ? 'bg-primary/5 dark:bg-primary/10 hover:bg-muted/40'
+                                  : 'hover:bg-muted/40'
                               }`}
                             >
                               {/* Checkbox */}
                               <TableCell className='text-center px-2 py-3'>
-                                <button
-                                  type='button'
-                                  onClick={() => onToggleSelect(p.id)}
-                                  className='p-1 rounded hover:bg-muted text-foreground transition-colors cursor-pointer'
-                                >
-                                  {isSelected ? (
-                                    <CheckSquare className='w-4 h-4 text-primary' />
-                                  ) : (
-                                    <Square className='w-4 h-4 text-muted-foreground' />
-                                  )}
-                                </button>
+                                {isNpo ? (
+                                  <span
+                                    className='p-1 inline-flex text-muted-foreground/30 cursor-not-allowed'
+                                    title='Pasien Puasa (NPO) tidak mendapatkan porsi makanan'
+                                  >
+                                    <Square className='w-4 h-4' />
+                                  </span>
+                                ) : (
+                                  <button
+                                    type='button'
+                                    onClick={() => onToggleSelect(p.id)}
+                                    className='p-1 rounded hover:bg-muted text-foreground transition-colors cursor-pointer'
+                                  >
+                                    {isSelected ? (
+                                      <CheckSquare className='w-4 h-4 text-primary' />
+                                    ) : (
+                                      <Square className='w-4 h-4 text-muted-foreground' />
+                                    )}
+                                  </button>
+                                )}
                               </TableCell>
 
                               {/* No */}
@@ -482,16 +500,22 @@ export default function DpmpTable({
 
                               {/* Aksi */}
                               <TableCell className='text-right pr-4'>
-                                <Button
-                                  variant='ghost'
-                                  size='sm'
-                                  onClick={() => onPrintSingle(p)}
-                                  className='h-7 px-2 text-xs gap-1 text-primary hover:bg-primary/10 cursor-pointer rounded-lg'
-                                  title='Cetak Lembar DPMP Pasien Ini'
-                                >
-                                  <Printer className='w-3 h-3' />
-                                  Cetak
-                                </Button>
+                                {isNpo ? (
+                                  <span className='inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30'>
+                                    Puasa (NPO)
+                                  </span>
+                                ) : (
+                                  <Button
+                                    variant='ghost'
+                                    size='sm'
+                                    onClick={() => onPrintSingle(p)}
+                                    className='h-7 px-2 text-xs gap-1 text-primary hover:bg-primary/10 cursor-pointer rounded-lg'
+                                    title='Cetak Lembar DPMP Pasien Ini'
+                                  >
+                                    <Printer className='w-3 h-3' />
+                                    Cetak
+                                  </Button>
+                                )}
                               </TableCell>
                             </TableRow>
                           );

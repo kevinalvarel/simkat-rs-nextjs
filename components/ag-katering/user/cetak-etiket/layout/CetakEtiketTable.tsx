@@ -14,6 +14,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import PasienStatusBadge from '../ui/PasienStatusBadge';
+import { isNpoPatient } from '@/lib/npo-utils';
 import type { PemorsianPatientItem } from '@/types/cetaketikettypes';
 
 interface CetakEtiketTableProps {
@@ -37,8 +38,12 @@ export default function CetakEtiketTable({
   onPrintSingle,
   onPrintSelected,
 }: CetakEtiketTableProps) {
+  const feedingPatients = patients.filter(
+    (p) => !isNpoPatient(p) && p.status !== 'NPO',
+  );
   const isAllSelected =
-    patients.length > 0 && patients.every((p) => selectedIds.has(p.id));
+    feedingPatients.length > 0 &&
+    feedingPatients.every((p) => selectedIds.has(p.id));
 
   return (
     <div className='border rounded-2xl bg-card overflow-hidden shadow-2xs'>
@@ -93,24 +98,38 @@ export default function CetakEtiketTable({
             </TableRow>
           ) : (
             patients.map((patient, index) => {
-              const isSelected = selectedIds.has(patient.id);
+              const isNpo = isNpoPatient(patient) || patient.status === 'NPO';
+              const isSelected = selectedIds.has(patient.id) && !isNpo;
               const isPrinted = printedPatientIds.has(patient.id);
 
               return (
                 <TableRow
                   key={patient.id}
                   data-state={isSelected ? 'selected' : undefined}
-                  className={`hover:bg-muted/40 transition-colors text-xs ${
-                    isSelected ? 'bg-emerald-50/40' : ''
+                  className={`transition-colors text-xs ${
+                    isNpo
+                      ? 'bg-amber-500/[0.04] dark:bg-amber-500/[0.07] border-l-4 border-l-amber-500/80 opacity-75 cursor-not-allowed hover:bg-amber-500/[0.06]'
+                      : isSelected
+                      ? 'bg-emerald-50/40 hover:bg-muted/40'
+                      : 'hover:bg-muted/40'
                   }`}
                 >
                   {/* Checkbox */}
                   <TableCell className='pl-4'>
-                    <Checkbox
-                      checked={isSelected}
-                      onCheckedChange={() => onToggleSelect(patient.id)}
-                      aria-label={`Pilih ${patient.nama_pasien}`}
-                    />
+                    {isNpo ? (
+                      <Checkbox
+                        checked={false}
+                        disabled
+                        className='opacity-30 cursor-not-allowed'
+                        aria-label='Pasien Puasa (NPO)'
+                      />
+                    ) : (
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={() => onToggleSelect(patient.id)}
+                        aria-label={`Pilih ${patient.nama_pasien}`}
+                      />
+                    )}
                   </TableCell>
 
                   {/* No */}
@@ -169,7 +188,11 @@ export default function CetakEtiketTable({
                   <TableCell>
                     <div className='flex flex-col gap-1 items-start'>
                       <PasienStatusBadge status={patient.status} />
-                      {isPrinted ? (
+                      {isNpo ? (
+                        <span className='inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-100/80 dark:bg-amber-950/40 px-1.5 py-0.5 rounded'>
+                          Puasa (NPO)
+                        </span>
+                      ) : isPrinted ? (
                         <span className='inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-1.5 py-0.5 rounded'>
                           <CheckCircle2 className='w-2.5 h-2.5 text-emerald-600 shrink-0' />
                           Sudah Cetak
@@ -185,19 +208,25 @@ export default function CetakEtiketTable({
 
                   {/* Aksi Cetak */}
                   <TableCell className='text-right pr-4'>
-                    <Button
-                      variant={isPrinted ? 'outline' : 'default'}
-                      size='xs'
-                      onClick={() => onPrintSingle(patient)}
-                      className={`h-7 px-2.5 text-xs font-semibold gap-1.5 rounded-lg shadow-2xs ${
-                        isPrinted
-                          ? 'border-emerald-600/30 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800'
-                          : 'bg-emerald-600 text-white hover:bg-emerald-700'
-                      }`}
-                    >
-                      <Printer className='w-3.5 h-3.5' />
-                      {isPrinted ? 'Cetak Ulang' : 'Cetak'}
-                    </Button>
+                    {isNpo ? (
+                      <span className='inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30'>
+                        Puasa (NPO)
+                      </span>
+                    ) : (
+                      <Button
+                        variant={isPrinted ? 'outline' : 'default'}
+                        size='xs'
+                        onClick={() => onPrintSingle(patient)}
+                        className={`h-7 px-2.5 text-xs font-semibold gap-1.5 rounded-lg shadow-2xs ${
+                          isPrinted
+                            ? 'border-emerald-600/30 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800'
+                            : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                        }`}
+                      >
+                        <Printer className='w-3.5 h-3.5' />
+                        {isPrinted ? 'Cetak Ulang' : 'Cetak'}
+                      </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               );
@@ -208,7 +237,12 @@ export default function CetakEtiketTable({
 
       {/* Table Footer */}
       <div className='p-3 bg-muted/20 border-t flex items-center justify-between text-xs text-muted-foreground font-medium flex-wrap gap-2'>
-        <span>Menampilkan {patients.length} pasien</span>
+        <span>
+          Menampilkan {feedingPatients.length} pasien makan aktif
+          {patients.length > feedingPatients.length
+            ? ` (+${patients.length - feedingPatients.length} pasien puasa/NPO)`
+            : ''}
+        </span>
 
         <div className='flex items-center gap-3'>
           <span>Terpilih: {selectedIds.size}</span>

@@ -5,6 +5,7 @@ import { db } from '@/drizzle';
 import { snapshotBatchTable } from '@/db/schemas/snapshot/snapshot-batch';
 import { snapshotDetailTable } from '@/db/schemas/snapshot/snapshot-detail';
 import { pasienTable } from '@/db/schemas/patient/pasien';
+import { isNpoPatient } from '@/lib/npo-utils';
 import type {
   DpmpSummaryData,
   DpmpBatchOption,
@@ -177,29 +178,36 @@ export async function getDpmpData(
           .where(eq(snapshotDetailTable.batch_id, selectedBatch.id));
 
         if (details && details.length > 0) {
-          patientItems = details.map((d) => ({
-            id: d.id,
-            nama_pasien: d.nama_pasien,
-            no_rm: d.no_rm,
-            ruangan: d.ruangan,
-            kamar: d.gedung || 'Kamar 1',
-            gedung: d.gedung,
-            bed: d.no_bed,
-            diet: d.diet_rs_raw || d.bentuk_makanan || 'Diet Biasa',
-            waktu: formatWaktuTitle(
-              selectedBatch?.waktu_makan || selectedWaktu,
-            ),
-            status: d.is_emergent
-              ? 'EMERGENT'
-              : d.status_saat_snapshot || 'AKTIF',
-            kelas: d.kelas,
-            batch_id: d.batch_id,
-            batch_code: selectedBatch?.batch_code,
-            is_emergent: d.is_emergent,
-            extra: d.extra,
-            buah: d.buah,
-            snack: d.snack,
-          }));
+          patientItems = details.map((d) => {
+            const isNpo = isNpoPatient(d);
+            return {
+              id: d.id,
+              nama_pasien: d.nama_pasien,
+              no_rm: d.no_rm,
+              ruangan: d.ruangan,
+              kamar: d.gedung || 'Kamar 1',
+              gedung: d.gedung,
+              bed: d.no_bed,
+              diet: isNpo
+                ? 'NPO (Puasa)'
+                : d.diet_rs_raw || d.bentuk_makanan || 'Diet Biasa',
+              waktu: formatWaktuTitle(
+                selectedBatch?.waktu_makan || selectedWaktu,
+              ),
+              status: isNpo
+                ? 'NPO'
+                : d.is_emergent
+                ? 'EMERGENT'
+                : d.status_saat_snapshot || 'AKTIF',
+              kelas: d.kelas,
+              batch_id: d.batch_id,
+              batch_code: selectedBatch?.batch_code,
+              is_emergent: d.is_emergent,
+              extra: isNpo ? null : d.extra,
+              buah: isNpo ? null : d.buah,
+              snack: isNpo ? null : d.snack,
+            };
+          });
         }
       } catch (err) {
         console.error('Error fetching snapshot details for DPMP:', err);
@@ -219,11 +227,7 @@ export async function getDpmpData(
 
         if (livePatients && livePatients.length > 0) {
           patientItems = livePatients.map((p) => {
-            const isNpo =
-              p.is_npo ||
-              p.status_pasien === 'NPO' ||
-              p.diet.toLowerCase() === 'npo' ||
-              p.diet.toLowerCase() === 'puasa';
+            const isNpo = isNpoPatient(p);
 
             return {
               id: p.id,
@@ -250,10 +254,10 @@ export async function getDpmpData(
 
     // 4. Compute Counts & Formatting
     const totalCount = patientItems.length;
-    const activeCount = patientItems.filter((p) => p.status === 'AKTIF').length;
-    const npoCount = patientItems.filter((p) => p.status === 'NPO').length;
+    const npoCount = patientItems.filter((p) => isNpoPatient(p) || p.status === 'NPO').length;
+    const activeCount = patientItems.filter((p) => !isNpoPatient(p) && p.status !== 'NPO').length;
     const emergentCount = patientItems.filter(
-      (p) => p.is_emergent || p.status === 'EMERGENT',
+      (p) => (p.is_emergent || p.status === 'EMERGENT') && !isNpoPatient(p),
     ).length;
 
     const dateObj = new Date(selectedDate);
@@ -270,15 +274,20 @@ export async function getDpmpData(
     const dateClean = selectedDate.replace(/-/g, '');
     const dpmpNumber = `DPMP/GZ-RS/${dateClean}/${selectedWaktu}-001`;
 
-    const effectiveBatch: DpmpBatchOption = selectedBatch || {
-      id: 0,
-      batch_code: 'LIVE-PREVIEW',
-      tanggal_produksi: selectedDate,
-      waktu_makan: selectedWaktu,
-      total_pasien: totalCount,
-      status_batch: 'LIVE_PREVIEW',
-      cutoff_time: null,
-    };
+    const effectiveBatch: DpmpBatchOption = selectedBatch
+      ? {
+          ...selectedBatch,
+          total_pasien: activeCount, // Permintaan porsi makanan murni pasien makan
+        }
+      : {
+          id: 0,
+          batch_code: 'LIVE-PREVIEW',
+          tanggal_produksi: selectedDate,
+          waktu_makan: selectedWaktu,
+          total_pasien: activeCount,
+          status_batch: 'LIVE_PREVIEW',
+          cutoff_time: null,
+        };
 
     return {
       success: true,

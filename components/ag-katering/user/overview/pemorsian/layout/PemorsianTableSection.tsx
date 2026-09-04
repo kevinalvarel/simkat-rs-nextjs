@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Printer, CheckSquare, Square, UtensilsCrossed } from 'lucide-react';
+import { isNpoPatient } from '@/lib/npo-utils';
 import type { PemorsianPatientItem } from '@/types/pemorsiantypes';
 import PemorsianStatusBadge from '@/components/ag-katering/user/overview/pemorsian/ui/PemorsianStatusBadge';
 
@@ -32,8 +33,12 @@ export default function PemorsianTableSection({
   isAllSelected,
 }: PemorsianTableSectionProps) {
   const selectedCount = selectedIds.size;
+  const feedingPatients = patients.filter(
+    (p) => !isNpoPatient(p) && p.status !== 'NPO',
+  );
   const isAllFilteredSelected =
-    patients.length > 0 && selectedCount === patients.length;
+    feedingPatients.length > 0 &&
+    feedingPatients.every((p) => selectedIds.has(p.id));
 
   return (
     <div className='space-y-3'>
@@ -42,8 +47,8 @@ export default function PemorsianTableSection({
         <div className='flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-primary/10 border border-primary/20 rounded-xl px-4 py-2.5 shadow-2xs animate-in fade-in slide-in-from-top-2 duration-200'>
           <div className='flex items-center gap-2 text-xs sm:text-sm text-foreground font-medium'>
             <span>
-              <strong>{selectedCount}</strong> dari {patients.length} pasien
-              terpilih
+              <strong>{selectedCount}</strong> dari {feedingPatients.length} pasien
+              makan terpilih
             </span>
           </div>
 
@@ -137,36 +142,53 @@ export default function PemorsianTableSection({
                 </TableRow>
               ) : (
                 patients.map((patient, index) => {
-                  const isSelected = selectedIds.has(patient.id);
+                  const isNpo =
+                    isNpoPatient(patient) || patient.status === 'NPO';
+                  const isSelected = selectedIds.has(patient.id) && !isNpo;
 
                   return (
                     <TableRow
                       key={patient.id}
-                      className={`transition-colors cursor-pointer ${
-                        isSelected
-                          ? 'bg-primary/5 hover:bg-primary/10'
-                          : 'hover:bg-muted/40'
+                      className={`transition-colors ${
+                        isNpo
+                          ? 'bg-amber-500/[0.04] dark:bg-amber-500/[0.07] border-l-4 border-l-amber-500/80 opacity-75 cursor-not-allowed hover:bg-amber-500/[0.06]'
+                          : isSelected
+                          ? 'bg-primary/5 hover:bg-primary/10 cursor-pointer'
+                          : 'hover:bg-muted/40 cursor-pointer'
                       }`}
-                      onClick={() => onToggleSelect(patient.id)}
+                      onClick={
+                        isNpo ? undefined : () => onToggleSelect(patient.id)
+                      }
                     >
                       {/* Checkbox */}
                       <TableCell
                         className='text-center px-2'
                         onClick={(e) => {
                           e.stopPropagation();
-                          onToggleSelect(patient.id);
+                          if (!isNpo) onToggleSelect(patient.id);
                         }}
                       >
-                        <button
-                          className='p-1 rounded text-foreground'
-                          title={isSelected ? 'Batal pilih' : 'Pilih baris ini'}
-                        >
-                          {isSelected ? (
-                            <CheckSquare className='w-4 h-4 text-primary' />
-                          ) : (
-                            <Square className='w-4 h-4 text-muted-foreground' />
-                          )}
-                        </button>
+                        {isNpo ? (
+                          <span
+                            className='p-1 inline-flex text-muted-foreground/30 cursor-not-allowed'
+                            title='Pasien Puasa (NPO) tidak dicetak etiket baki'
+                          >
+                            <Square className='w-4 h-4' />
+                          </span>
+                        ) : (
+                          <button
+                            className='p-1 rounded text-foreground cursor-pointer'
+                            title={
+                              isSelected ? 'Batal pilih' : 'Pilih baris ini'
+                            }
+                          >
+                            {isSelected ? (
+                              <CheckSquare className='w-4 h-4 text-primary' />
+                            ) : (
+                              <Square className='w-4 h-4 text-muted-foreground' />
+                            )}
+                          </button>
+                        )}
                       </TableCell>
 
                       {/* No */}
@@ -228,21 +250,27 @@ export default function PemorsianTableSection({
                         />
                       </TableCell>
 
-                      {/* Aksi: Button Cetak */}
+                      {/* Aksi: Button Cetak atau Badge Puasa */}
                       <TableCell
                         className='text-center'
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <Button
-                          variant='outline'
-                          size='sm'
-                          onClick={() => onPrintSingle(patient)}
-                          className='h-8 px-2.5 text-xs gap-1.5 border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground transition-all shadow-2xs'
-                          title='Cetak Etiket Pasien'
-                        >
-                          <Printer className='w-3.5 h-3.5' />
-                          <span>Cetak</span>
-                        </Button>
+                        {isNpo ? (
+                          <span className='inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30'>
+                            Puasa (NPO)
+                          </span>
+                        ) : (
+                          <Button
+                            variant='outline'
+                            size='sm'
+                            onClick={() => onPrintSingle(patient)}
+                            className='h-8 px-2.5 text-xs gap-1.5 border-primary/30 text-primary hover:bg-primary hover:text-primary-foreground transition-all shadow-2xs'
+                            title='Cetak Etiket Pasien'
+                          >
+                            <Printer className='w-3.5 h-3.5' />
+                            <span>Cetak</span>
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   );

@@ -18,8 +18,7 @@ type FilterTab =
   | 'HEWANI'
   | 'NABATI'
   | 'SAYUR'
-  | 'EXTRA_BUAH'
-  | 'NPO';
+  | 'EXTRA_BUAH';
 
 export default function OverviewProductionCardsGrid({
   cards,
@@ -28,13 +27,15 @@ export default function OverviewProductionCardsGrid({
   const [activeTab, setActiveTab] = useState<FilterTab>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Filter out any card with code 'TIDAK' or 'NON'
+  // Filter out any card with code 'TIDAK' or 'NON' or 'NPO'
   const validCards = useMemo(() => {
     return cards.filter(
       (card) =>
         card.code &&
         card.code.toUpperCase() !== 'TIDAK' &&
-        card.code.toUpperCase() !== 'NON',
+        card.code.toUpperCase() !== 'NON' &&
+        card.code.toUpperCase() !== 'NPO' &&
+        (card.category || '').toUpperCase() !== 'NPO',
     );
   }, [cards]);
 
@@ -60,7 +61,6 @@ export default function OverviewProductionCardsGrid({
       if (activeTab === 'SAYUR') return cat === 'SAYUR';
       if (activeTab === 'EXTRA_BUAH')
         return cat === 'EXTRA' || cat === 'BUAH' || cat === 'SNACK';
-      if (activeTab === 'NPO') return cat === 'NPO';
 
       return true;
     });
@@ -107,12 +107,6 @@ export default function OverviewProductionCardsGrid({
         const cat = c.category?.toUpperCase();
         return cat === 'EXTRA' || cat === 'BUAH' || cat === 'SNACK';
       }).length,
-    },
-    {
-      id: 'NPO',
-      label: 'Puasa / NPO',
-      count: validCards.filter((c) => c.category?.toUpperCase() === 'NPO')
-        .length,
     },
   ];
 

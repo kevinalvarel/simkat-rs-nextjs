@@ -6,6 +6,7 @@ import { snapshotBatchTable } from '@/db/schemas/snapshot/snapshot-batch';
 import { snapshotDetailTable } from '@/db/schemas/snapshot/snapshot-detail';
 import { pasienTable } from '@/db/schemas/patient/pasien';
 import { otorisasiPerubahanDietTable } from '@/db/schemas/snapshot/perizinan-revisi';
+import { isNpoPatient } from '@/lib/npo-utils';
 import type {
   InvoiceDailySummary,
   InvoiceClassConsumption,
@@ -276,29 +277,25 @@ export async function getInvoiceDailyData(
           .where(eq(snapshotDetailTable.batch_id, targetBatch.id));
 
         for (const d of details) {
-          const isNpo =
-            d.status_saat_snapshot === 'NPO' ||
-            (d.diet_rs_raw || '').toLowerCase() === 'npo' ||
-            (d.diet_rs_raw || '').toLowerCase() === 'puasa';
+          if (isNpoPatient(d)) {
+            continue;
+          }
 
           const entry = getOrCreateClassEntry(d.kelas);
           entry.pasienSet.add(d.no_rm || d.nama_pasien);
+          entry.baselinePorsi++;
+          if (selectedWaktu === 'PAGI') entry.pagi++;
+          else if (selectedWaktu === 'SIANG') entry.siang++;
+          else if (selectedWaktu === 'MALAM') entry.malam++;
 
-          if (!isNpo) {
-            entry.baselinePorsi++;
-            if (selectedWaktu === 'PAGI') entry.pagi++;
-            else if (selectedWaktu === 'SIANG') entry.siang++;
-            else if (selectedWaktu === 'MALAM') entry.malam++;
-
-            if (d.extra?.trim() || d.buah?.trim() || d.snack?.trim()) {
-              entry.extra++;
-            }
-
-            const bentuk = d.bentuk_makanan || 'Biasa';
-            const kategori = d.kategori_diet || 'Standar';
-            const dietKey = `${bentuk} - ${kategori}`;
-            entry.dietMap.set(dietKey, (entry.dietMap.get(dietKey) || 0) + 1);
+          if (d.extra?.trim() || d.buah?.trim() || d.snack?.trim()) {
+            entry.extra++;
           }
+
+          const bentuk = d.bentuk_makanan || 'Biasa';
+          const kategori = d.kategori_diet || 'Standar';
+          const dietKey = `${bentuk} - ${kategori}`;
+          entry.dietMap.set(dietKey, (entry.dietMap.get(dietKey) || 0) + 1);
         }
 
         // 2. Accumulate Approved Post-Snapshot Revisions (TAMBAH PASIEN)
@@ -344,6 +341,16 @@ export async function getInvoiceDailyData(
             try {
               if (rev.data_baru) dataBaruObj = JSON.parse(rev.data_baru);
             } catch (_) {}
+
+            if (
+              isNpoPatient({
+                is_npo: dataBaruObj.is_npo,
+                status_pasien: dataBaruObj.status_pasien,
+                diet: rev.diet || dataBaruObj.diet,
+              })
+            ) {
+              continue;
+            }
 
             const targetKelas = rev.kelas || dataBaruObj.kelas || 'Kelas 3';
             const entry = getOrCreateClassEntry(targetKelas);
@@ -403,7 +410,7 @@ export async function getInvoiceDailyData(
           );
 
         for (const p of activePatients) {
-          if (!p.is_npo && p.status_pasien !== 'NPO') {
+          if (!isNpoPatient(p)) {
             const entry = getOrCreateClassEntry(p.kelas);
             entry.baselinePorsi++;
             if (selectedWaktu === 'PAGI') entry.pagi++;
@@ -502,15 +509,27 @@ export async function getInvoiceDailyData(
           );
 
         for (const d of details) {
-          const isNpo =
-            d.status_saat_snapshot === 'NPO' ||
-            (d.diet_rs_raw || '').toLowerCase() === 'npo' ||
-            (d.diet_rs_raw || '').toLowerCase() === 'puasa';
+          if (isNpoPatient(d)) {
+            continue;
+          }
 
           const waktu = (d.waktu_makan || 'PAGI').toUpperCase();
           const entry = getOrCreateClassEntry(d.kelas);
           const patientDayKey = `${d.tanggal_produksi}_${d.no_rm || d.nama_pasien}`;
           entry.pasienSet.add(patientDayKey);
+          entry.baselinePorsi++;
+          if (waktu === 'PAGI') entry.pagi++;
+          else if (waktu === 'SIANG') entry.siang++;
+          else if (waktu === 'MALAM' || waktu === 'SORE') entry.malam++;
+
+          if (d.extra?.trim() || d.buah?.trim() || d.snack?.trim()) {
+            entry.extra++;
+          }
+
+          const bentuk = d.bentuk_makanan || 'Biasa';
+          const kategori = d.kategori_diet || 'Standar';
+          const dietKey = `${bentuk} - ${kategori}`;
+          entry.dietMap.set(dietKey, (entry.dietMap.get(dietKey) || 0) + 1);
 
           // Track per-day for "Cetak Harian"
           const dayDateKey = d.tanggal_produksi;
@@ -534,25 +553,18 @@ export async function getInvoiceDailyData(
             }
             const dayEntry = dayClassMap.get(normKelas)!;
             dayEntry.pasienSet.add(d.no_rm || d.nama_pasien);
+            dayEntry.baselinePorsi++;
+            if (waktu === 'PAGI') dayEntry.pagi++;
+            else if (waktu === 'SIANG') dayEntry.siang++;
+            else if (waktu === 'MALAM' || waktu === 'SORE') dayEntry.malam++;
 
-            if (!isNpo) {
-              dayEntry.baselinePorsi++;
-              if (waktu === 'PAGI') dayEntry.pagi++;
-              else if (waktu === 'SIANG') dayEntry.siang++;
-              else if (waktu === 'MALAM' || waktu === 'SORE') dayEntry.malam++;
-
-              if (d.extra?.trim() || d.buah?.trim() || d.snack?.trim()) {
-                dayEntry.extra++;
-              }
-
-              const bentuk = d.bentuk_makanan || 'Biasa';
-              const kategori = d.kategori_diet || 'Standar';
-              const dietKey = `${bentuk} - ${kategori}`;
-              dayEntry.dietMap.set(
-                dietKey,
-                (dayEntry.dietMap.get(dietKey) || 0) + 1,
-              );
+            if (d.extra?.trim() || d.buah?.trim() || d.snack?.trim()) {
+              dayEntry.extra++;
             }
+            dayEntry.dietMap.set(
+              dietKey,
+              (dayEntry.dietMap.get(dietKey) || 0) + 1,
+            );
           }
 
           // Track per-batch for "Cetak 1 Snapshot 1 Lembar"
@@ -573,42 +585,19 @@ export async function getInvoiceDailyData(
             }
             const bClassData = bEntry.classMap.get(bNorm)!;
             bClassData.pasienSet.add(d.no_rm || d.nama_pasien);
-
-            if (!isNpo) {
-              bClassData.baselinePorsi++;
-              if (waktu === 'PAGI') bClassData.pagi++;
-              else if (waktu === 'SIANG') bClassData.siang++;
-              else if (waktu === 'MALAM' || waktu === 'SORE')
-                bClassData.malam++;
-
-              if (d.extra?.trim() || d.buah?.trim() || d.snack?.trim()) {
-                bClassData.extra++;
-              }
-
-              const bentuk = d.bentuk_makanan || 'Biasa';
-              const kategori = d.kategori_diet || 'Standar';
-              const dietKey = `${bentuk} - ${kategori}`;
-              bClassData.dietMap.set(
-                dietKey,
-                (bClassData.dietMap.get(dietKey) || 0) + 1,
-              );
-            }
-          }
-
-          if (!isNpo) {
-            entry.baselinePorsi++;
-            if (waktu === 'PAGI') entry.pagi++;
-            else if (waktu === 'SIANG') entry.siang++;
-            else if (waktu === 'MALAM' || waktu === 'SORE') entry.malam++;
+            bClassData.baselinePorsi++;
+            if (waktu === 'PAGI') bClassData.pagi++;
+            else if (waktu === 'SIANG') bClassData.siang++;
+            else if (waktu === 'MALAM' || waktu === 'SORE')
+              bClassData.malam++;
 
             if (d.extra?.trim() || d.buah?.trim() || d.snack?.trim()) {
-              entry.extra++;
+              bClassData.extra++;
             }
-
-            const bentuk = d.bentuk_makanan || 'Biasa';
-            const kategori = d.kategori_diet || 'Standar';
-            const dietKey = `${bentuk} - ${kategori}`;
-            entry.dietMap.set(dietKey, (entry.dietMap.get(dietKey) || 0) + 1);
+            bClassData.dietMap.set(
+              dietKey,
+              (bClassData.dietMap.get(dietKey) || 0) + 1,
+            );
           }
         }
 
@@ -649,6 +638,21 @@ export async function getInvoiceDailyData(
           );
 
         for (const rev of rangeRevisions) {
+          let dataBaruObj: any = {};
+          try {
+            if (rev.data_baru) dataBaruObj = JSON.parse(rev.data_baru);
+          } catch (_) {}
+
+          if (
+            isNpoPatient({
+              is_npo: dataBaruObj.is_npo,
+              status_pasien: dataBaruObj.status_pasien,
+              diet: rev.diet || dataBaruObj.diet,
+            })
+          ) {
+            continue;
+          }
+
           if (rev.batch_id && batchIds.includes(rev.batch_id)) {
             const matchingBatch = rangeBatches.find(
               (b) => b.id === rev.batch_id,

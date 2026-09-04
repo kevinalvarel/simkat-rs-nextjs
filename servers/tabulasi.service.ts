@@ -13,6 +13,7 @@ import {
 } from '@/db/schemas/master/siklus-menu';
 import { ruanganTable } from '@/db/schemas/master/ruangan';
 import { gedungTable } from '@/db/schemas/master/gedung';
+import { isNpoPatient } from '@/lib/npo-utils';
 import type {
   TabulasiDashboardData,
   TabulasiBatchOption,
@@ -211,22 +212,26 @@ async function resolveTabulasiPatients(
       .from(snapshotDetailTable)
       .where(eq(snapshotDetailTable.batch_id, selectedBatch.id));
 
-    const patientRecords: TabulasiPatientRecord[] = details.map((d) => ({
-      id: d.id,
-      no_rm: d.no_rm,
-      nama_pasien: d.nama_pasien,
-      gedung: d.gedung,
-      ruangan: d.ruangan,
-      kelas: d.kelas,
-      diet_rs_raw: d.diet_rs_raw,
-      bentuk_makanan: d.bentuk_makanan,
-      kategori_diet: d.kategori_diet,
-      status_saat_snapshot: d.status_saat_snapshot,
-      is_npo:
-        d.status_saat_snapshot === 'NPO' ||
-        (d.diet_rs_raw || '').toLowerCase().includes('npo') ||
-        (d.diet_rs_raw || '').toLowerCase().includes('puasa'),
-    }));
+    const patientRecords: TabulasiPatientRecord[] = details.map((d) => {
+      const isNpo = isNpoPatient({
+        ...d,
+        is_npo: d.status_saat_snapshot === 'NPO',
+        status_pasien: d.status_saat_snapshot,
+      });
+      return {
+        id: d.id,
+        no_rm: d.no_rm,
+        nama_pasien: d.nama_pasien,
+        gedung: d.gedung,
+        ruangan: d.ruangan,
+        kelas: d.kelas,
+        diet_rs_raw: d.diet_rs_raw,
+        bentuk_makanan: d.bentuk_makanan,
+        kategori_diet: d.kategori_diet,
+        status_saat_snapshot: isNpo ? 'NPO' : d.status_saat_snapshot,
+        is_npo: isNpo,
+      };
+    });
 
     // Accumulate approved post-snapshot revisions (NEW_PATIENT)
     const revisions = await db
@@ -250,6 +255,14 @@ async function resolveTabulasiPatients(
         dataBaruObj = {};
       }
 
+      const isRevNpo = isNpoPatient({
+        nama_pasien: dataBaruObj.nama_pasien,
+        diet: dataBaruObj.diet,
+        diet_rs_raw: dataBaruObj.diet,
+        bentuk_makanan: dataBaruObj.bentuk_makanan,
+        kategori_diet: dataBaruObj.kategori_diet,
+      });
+
       patientRecords.push({
         id: `rev-${rev.id}`,
         no_rm: dataBaruObj.no_rm || '-',
@@ -260,8 +273,8 @@ async function resolveTabulasiPatients(
         diet_rs_raw: dataBaruObj.diet || 'Standar',
         bentuk_makanan: dataBaruObj.bentuk_makanan || null,
         kategori_diet: dataBaruObj.kategori_diet || null,
-        status_saat_snapshot: 'AKTIF',
-        is_npo: false,
+        status_saat_snapshot: isRevNpo ? 'NPO' : 'AKTIF',
+        is_npo: isRevNpo,
       });
     }
 
@@ -282,23 +295,22 @@ async function resolveTabulasiPatients(
       ),
     );
 
-  const patientRecords: TabulasiPatientRecord[] = activePatients.map((p) => ({
-    id: p.id,
-    no_rm: p.no_rm || '-',
-    nama_pasien: p.nama_pasien,
-    gedung: p.gedung || 'Gedung Lama',
-    ruangan: p.ruangan || '-',
-    kelas: p.kelas || 'Kelas 3',
-    diet_rs_raw: p.diet || 'Standar',
-    bentuk_makanan: null,
-    kategori_diet: null,
-    status_pasien: p.status_pasien,
-    is_npo:
-      p.is_npo ||
-      p.status_pasien === 'NPO' ||
-      (p.diet || '').toLowerCase().includes('npo') ||
-      (p.diet || '').toLowerCase().includes('puasa'),
-  }));
+  const patientRecords: TabulasiPatientRecord[] = activePatients.map((p) => {
+    const isNpo = isNpoPatient(p);
+    return {
+      id: p.id,
+      no_rm: p.no_rm || '-',
+      nama_pasien: p.nama_pasien,
+      gedung: p.gedung || 'Gedung Lama',
+      ruangan: p.ruangan || '-',
+      kelas: p.kelas || 'Kelas 3',
+      diet_rs_raw: p.diet || 'Standar',
+      bentuk_makanan: null,
+      kategori_diet: null,
+      status_pasien: isNpo ? 'NPO' : p.status_pasien,
+      is_npo: isNpo,
+    };
+  });
 
   return { patientRecords, isOfficialLocked, resolvedBatchCode };
 }
@@ -480,10 +492,12 @@ export async function getTabulasiDashboardData(
       const raw = (p.diet_rs_raw || '').toUpperCase();
       const isNpo = Boolean(
         p.is_npo ||
-          p.status_saat_snapshot === 'NPO' ||
-          p.status_pasien === 'NPO' ||
-          raw.includes('NPO') ||
-          raw.includes('PUASA'),
+          isNpoPatient({
+            ...p,
+            is_npo: p.is_npo,
+            status_pasien: p.status_pasien,
+            status_saat_snapshot: p.status_saat_snapshot,
+          }),
       );
 
       if (isNpo) {
@@ -641,9 +655,14 @@ export async function getTabulasiDashboardData(
     const allItems = categoryGroups.flatMap((g) => g.items);
     const grandTotalPorsi = totalPortionsLama + totalPortionsBaru;
 
-    // 7. Location & Diet breakdowns
-    const lamaPatients = analyzed.filter((a) => a.gedungType === 'GEDUNG LAMA');
-    const baruPatients = analyzed.filter((a) => a.gedungType === 'GEDUNG BARU');
+    // 7. Location & Diet breakdowns (feeding patients only)
+    const lamaPatients = analyzed.filter(
+      (a) => a.gedungType === 'GEDUNG LAMA' && !a.isNpo,
+    );
+    const baruPatients = analyzed.filter(
+      (a) => a.gedungType === 'GEDUNG BARU' && !a.isNpo,
+    );
+    const totalFeedingPatients = patientsEating;
 
     const locationDistribution: TabulasiLocationGroup[] = [
       {
@@ -654,8 +673,8 @@ export async function getTabulasiDashboardData(
             floorName: 'Semua Ruangan Gedung Lama',
             patientCount: lamaPatients.length,
             percentage:
-              totalPatients > 0
-                ? Math.round((lamaPatients.length / totalPatients) * 100)
+              totalFeedingPatients > 0
+                ? Math.round((lamaPatients.length / totalFeedingPatients) * 100)
                 : 0,
           },
         ],
@@ -668,8 +687,8 @@ export async function getTabulasiDashboardData(
             floorName: 'Semua Ruangan Gedung Baru',
             patientCount: baruPatients.length,
             percentage:
-              totalPatients > 0
-                ? Math.round((baruPatients.length / totalPatients) * 100)
+              totalFeedingPatients > 0
+                ? Math.round((baruPatients.length / totalFeedingPatients) * 100)
                 : 0,
           },
         ],

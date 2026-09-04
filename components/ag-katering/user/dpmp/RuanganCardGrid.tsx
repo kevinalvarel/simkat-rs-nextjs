@@ -15,6 +15,7 @@ import {
   Eye,
   Building,
 } from 'lucide-react';
+import { isNpoPatient } from '@/lib/npo-utils';
 import type { DpmpPatientItem } from '@/types/dpmptypes';
 
 interface RuanganGroupData {
@@ -82,8 +83,11 @@ export default function RuanganCardGrid({
 
     return Array.from(map.entries())
       .map(([ruanganName, list]) => {
-        const activeCount = list.filter((p) => p.status === 'AKTIF').length;
-        const npoCount = list.filter((p) => p.status === 'NPO').length;
+        const feedingList = list.filter(
+          (p) => !isNpoPatient(p) && p.status !== 'NPO',
+        );
+        const activeCount = feedingList.length;
+        const npoCount = list.length - activeCount;
         const emergentCount = list.filter(
           (p) => p.is_emergent || p.status === 'EMERGENT',
         ).length;
@@ -314,7 +318,12 @@ export default function RuanganCardGrid({
                     size='sm'
                     onClick={(e) => {
                       e.stopPropagation();
-                      onQuickPrintRuangan(group.ruanganName, group.patientList);
+                      onQuickPrintRuangan(
+                        group.ruanganName,
+                        group.patientList.filter(
+                          (p) => !isNpoPatient(p) && p.status !== 'NPO',
+                        ),
+                      );
                     }}
                     className='text-xs h-8 px-2.5 gap-1.5 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10 font-bold cursor-pointer rounded-xl shrink-0'
                     title={`Cetak Lembar DPMP ${group.ruanganName}`}
