@@ -77,6 +77,14 @@ export interface InvoiceDailySummary {
   classes: InvoiceClassConsumption[];
   lastUpdated: string;
 
+  // Diet TKTP aggregated portions
+  tktpCounts?: {
+    pagi: number;
+    siang: number;
+    malam: number;
+    total: number;
+  };
+
   // Range metadata
   isRange?: boolean;
   startDate?: string;
@@ -98,4 +106,45 @@ export interface InvoiceDailySummary {
 
 export interface InvoicePageProps {
   initialData: InvoiceDailySummary;
+}
+
+export interface ClassEntry {
+  pagi: number;
+  siang: number;
+  malam: number;
+  extra: number;
+  baselinePorsi: number;
+  revisiTambahPorsi: number;
+  pasienSet: Set<string>;
+  dietMap: Map<string, number>;
+}
+
+/** TKTP meal counters */
+export interface TktpCounters {
+  pagi: number;
+  siang: number;
+  malam: number;
+}
+
+/** Aggregation context shared across processing functions */
+export interface AggregationContext {
+  classMap: Map<string, ClassEntry>;
+  tktp: TktpCounters;
+  revisiPatients: InvoiceRevisionPatient[];
+  isOfficialLocked: boolean;
+  resolvedBatchId: number | null;
+  resolvedBatchCode: string | null;
+  resolvedCutoffTime: string | null;
+}
+
+/** Grand totals computed from classes array */
+export interface GrandTotals {
+  grandTotalPagi: number;
+  grandTotalSiang: number;
+  grandTotalMalam: number;
+  grandTotalExtra: number;
+  grandTotalPorsi: number;
+  grandTotalPasien: number;
+  baselineTotalPorsi: number;
+  revisiTambahPasienCount: number;
 }

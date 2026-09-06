@@ -15,6 +15,10 @@ export const routeDataProduksi = {
           title: 'Live Pemorsian',
           url: '/dashboard/ag-katering/overview/pemorsian',
         },
+        {
+          title: 'Live Katering',
+          url: '/dashboard/ag-katering/overview/katering',
+        },
       ],
     },
     {

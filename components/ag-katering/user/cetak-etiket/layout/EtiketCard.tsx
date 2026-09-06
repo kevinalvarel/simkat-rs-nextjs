@@ -14,7 +14,6 @@ export interface EtiketCardProps {
   customNotice?: string;
   customDateLabel?: string;
   customDateValue?: string;
-  mealTimeFormat?: 'slash' | 'single';
   showQuote?: boolean;
   showNotice?: boolean;
   showBedWithRuangan?: boolean;
@@ -29,12 +28,11 @@ export default function EtiketCard({
   customNotice,
   customDateLabel,
   customDateValue,
-  mealTimeFormat = 'slash',
   showQuote = true,
   showNotice = true,
   showBedWithRuangan = true,
 }: EtiketCardProps) {
-  const mealTimeUpper = (data.waktu || 'SIANG').toUpperCase().trim();
+  const mealTimeUpper = data.waktu.toUpperCase().trim();
 
   // Active Quote
   const activeQuote =
@@ -76,9 +74,10 @@ export default function EtiketCard({
   }, [customDateValue, data.exp_date]);
 
   // Display Room
-  const displayRoom = showBedWithRuangan && data.bed && data.bed !== '-'
-    ? `${data.ruangan} (${data.bed})`
-    : data.ruangan || '-';
+  const displayRoom =
+    showBedWithRuangan && data.bed && data.bed !== '-'
+      ? `${data.ruangan} (${data.bed})`
+      : data.ruangan || '-';
 
   // Keterangan text (e.g. Kelas or Revisi reason)
   const keteranganText =
@@ -216,44 +215,10 @@ export default function EtiketCard({
           <div className='grid grid-cols-2 gap-x-3 text-black pt-1'>
             <div className='flex flex-col gap-1'>
               {/* Field WAKTU / PAGI/SIANG/MALAM dengan garis bawah */}
-              <div className='border-b border-black pb-0.5 flex items-baseline justify-between gap-1'>
-                {mealTimeFormat === 'slash' ? (
-                  <div className='text-[10px] font-bold tracking-tight flex items-center gap-1 uppercase'>
-                    <span
-                      className={
-                        mealTimeUpper === 'PAGI'
-                          ? 'underline decoration-2 font-black'
-                          : 'opacity-70'
-                      }
-                    >
-                      PAGI
-                    </span>
-                    <span>/</span>
-                    <span
-                      className={
-                        mealTimeUpper === 'SIANG'
-                          ? 'underline decoration-2 font-black'
-                          : 'opacity-70'
-                      }
-                    >
-                      SIANG
-                    </span>
-                    <span>/</span>
-                    <span
-                      className={
-                        mealTimeUpper === 'MALAM'
-                          ? 'underline decoration-2 font-black'
-                          : 'opacity-70'
-                      }
-                    >
-                      MALAM
-                    </span>
-                  </div>
-                ) : (
-                  <span className='text-[10px] font-bold uppercase tracking-wide'>
-                    WAKTU
-                  </span>
-                )}
+              <div className='border-b border-black pb-0.5 flex items-baseline justify-start gap-1'>
+                <span className='text-[10px] font-bold uppercase tracking-wide'>
+                  WAKTU :
+                </span>
                 <span className='text-[10px] font-extrabold uppercase px-1 rounded-xs bg-neutral-900 text-white leading-tight'>
                   {mealTimeUpper}
                 </span>
@@ -339,10 +304,7 @@ export default function EtiketCard({
                 <span className='w-20 font-bold shrink-0 text-black'>
                   Keterangan
                 </span>
-                <span
-                  className='text-black truncate'
-                  title={keteranganText}
-                >
+                <span className='text-black truncate' title={keteranganText}>
                   : {keteranganText}
                 </span>
               </div>
@@ -350,44 +312,7 @@ export default function EtiketCard({
                 <span className='w-20 font-bold shrink-0 text-black'>
                   Waktu
                 </span>
-                <span className='font-bold text-black'>
-                  :{' '}
-                  {mealTimeFormat === 'slash' ? (
-                    <span className='inline-flex items-center gap-0.5 text-[9.5px] font-bold uppercase'>
-                      <span
-                        className={
-                          mealTimeUpper === 'PAGI'
-                            ? 'underline decoration-2 font-black'
-                            : 'opacity-70'
-                        }
-                      >
-                        PAGI
-                      </span>
-                      <span>/</span>
-                      <span
-                        className={
-                          mealTimeUpper === 'SIANG'
-                            ? 'underline decoration-2 font-black'
-                            : 'opacity-70'
-                        }
-                      >
-                        SIANG
-                      </span>
-                      <span>/</span>
-                      <span
-                        className={
-                          mealTimeUpper === 'MALAM'
-                            ? 'underline decoration-2 font-black'
-                            : 'opacity-70'
-                        }
-                      >
-                        MALAM
-                      </span>
-                    </span>
-                  ) : (
-                    mealTimeUpper
-                  )}
-                </span>
+                <span className='font-bold text-black'>: {mealTimeUpper}</span>
               </div>
               <div className='flex items-baseline'>
                 <span className='w-20 font-bold shrink-0 text-black'>

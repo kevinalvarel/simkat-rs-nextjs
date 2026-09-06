@@ -13,9 +13,17 @@ import type {
   DietBreakdownItem,
   InvoiceRevisionPatient,
   AvailableSnapshotBatch,
+  ClassEntry,
+  TktpCounters,
+  AggregationContext,
+  GrandTotals
 } from '@/types/invoicetypes';
 
-// Standard class ordering priority
+// ═══════════════════════════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/** Standard class ordering priority */
 const KELAS_ORDER: Record<string, number> = {
   VIP: 1,
   'KELAS 1': 2,
@@ -32,6 +40,20 @@ const KELAS_ORDER: Record<string, number> = {
   PICU: 5,
 };
 
+/** Standard classes that always appear in the output for visual consistency */
+const STANDARD_CLASSES = ['VIP', 'Kelas 1', 'Kelas 2', 'Kelas 3'] as const;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// INTERNAL TYPES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/** Internal aggregation entry for a single patient class */
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// HELPER FUNCTIONS (Internal, non-exported)
+// ═══════════════════════════════════════════════════════════════════════════════
+
 function normalizeKelasName(rawKelas: string | null | undefined): string {
   if (!rawKelas || !rawKelas.trim()) return 'Kelas 3';
   const k = rawKelas.trim();
@@ -47,12 +69,876 @@ function normalizeKelasName(rawKelas: string | null | undefined): string {
   return k;
 }
 
+/**
+ * Check if a patient has TKTP (Tinggi Kalori Tinggi Protein) diet.
+ * NOTE: Synchronous — NOT async. Previously exported as async, which caused
+ * a bug where calls without `await` (in Scenarios 2 & 3) always evaluated
+ * to truthy (Promise object), counting all patients as TKTP.
+ */
+function isTktpDiet(
+  d:
+    | {
+        kategori_diet?: string | null;
+        diet_rs_raw?: string | null;
+        bentuk_makanan?: string | null;
+        diet?: string | null;
+      }
+    | null
+    | undefined,
+): boolean {
+  if (!d) return false;
+  const kat = (d.kategori_diet || '').toUpperCase();
+  const raw = (d.diet_rs_raw || '').toUpperCase();
+  const bentuk = (d.bentuk_makanan || '').toUpperCase();
+  const diet = (d.diet || '').toUpperCase();
+  return (
+    kat.includes('TKTP') ||
+    raw.includes('TKTP') ||
+    bentuk.includes('TKTP') ||
+    diet.includes('TKTP')
+  );
+}
+
 function getDefaultMealtime(): 'PAGI' | 'SIANG' | 'MALAM' {
   const hour = new Date().getHours();
   if (hour < 10) return 'PAGI';
   if (hour < 15) return 'SIANG';
   return 'MALAM';
 }
+
+/** Creates a fresh class entry with all counters zeroed out */
+function createEmptyClassEntry(): ClassEntry {
+  return {
+    pagi: 0,
+    siang: 0,
+    malam: 0,
+    extra: 0,
+    baselinePorsi: 0,
+    revisiTambahPorsi: 0,
+    pasienSet: new Set<string>(),
+    dietMap: new Map<string, number>(),
+  };
+}
+
+/** Get or create a class entry in the map, normalizing the key */
+function getOrCreateClassEntry(
+  classMap: Map<string, ClassEntry>,
+  kelasName: string | null | undefined,
+): ClassEntry {
+  const norm = normalizeKelasName(kelasName);
+  if (!classMap.has(norm)) {
+    classMap.set(norm, createEmptyClassEntry());
+  }
+  return classMap.get(norm)!;
+}
+
+/** Increment the meal count for a specific waktu makan */
+function incrementMealCount(
+  entry: ClassEntry,
+  waktu: string,
+): void {
+  if (waktu === 'PAGI') entry.pagi++;
+  else if (waktu === 'SIANG') entry.siang++;
+  else if (waktu === 'MALAM' || waktu === 'SORE') entry.malam++;
+}
+
+/** Increment TKTP counters for a specific waktu makan */
+function incrementTktpCount(counters: TktpCounters, waktu: string): void {
+  if (waktu === 'PAGI') counters.pagi++;
+  else if (waktu === 'SIANG') counters.siang++;
+  else if (waktu === 'MALAM' || waktu === 'SORE') counters.malam++;
+}
+
+/** Track diet breakdown entry in the class map */
+function trackDietEntry(
+  entry: ClassEntry,
+  bentuk: string | null | undefined,
+  kategori: string | null | undefined,
+): void {
+  const b = bentuk || 'Biasa';
+  const k = kategori || 'Standar';
+  const dietKey = `${b} - ${k}`;
+  entry.dietMap.set(dietKey, (entry.dietMap.get(dietKey) || 0) + 1);
+}
+
+/** Safely parse JSON from revision data_baru field */
+function parseRevisionDataBaru(dataBaru: string | null | undefined): Record<string, any> {
+  if (!dataBaru) return {};
+  try {
+    return JSON.parse(dataBaru);
+  } catch {
+    return {};
+  }
+}
+
+/** Check if a detail has extras (extra, buah, or snack) */
+function hasExtras(d: { extra?: string | null; buah?: string | null; snack?: string | null }): boolean {
+  return !!(d.extra?.trim() || d.buah?.trim() || d.snack?.trim());
+}
+
+/** Ensure all standard classes exist in the class map for visual consistency */
+function ensureStandardClasses(classMap: Map<string, ClassEntry>): void {
+  for (const stdClass of STANDARD_CLASSES) {
+    if (!classMap.has(stdClass)) {
+      classMap.set(stdClass, createEmptyClassEntry());
+    }
+  }
+}
+
+/** Convert a class map to a sorted InvoiceClassConsumption array */
+function classMapToSortedArray(
+  classMap: Map<string, ClassEntry>,
+  isPerSnapshot: boolean = false,
+): InvoiceClassConsumption[] {
+  const classes: InvoiceClassConsumption[] = Array.from(
+    classMap.entries(),
+  ).map(([kelasName, data]) => {
+    const baselinePorsi = data.baselinePorsi;
+    const revisiTambahPorsi = data.revisiTambahPorsi;
+    const totalPorsi = isPerSnapshot
+      ? baselinePorsi + revisiTambahPorsi
+      : data.pagi + data.siang + data.malam + data.extra;
+    const totalPasien = data.pasienSet.size;
+
+    const dietBreakdown: DietBreakdownItem[] = Array.from(
+      data.dietMap.entries(),
+    ).map(([key, count]) => {
+      const [bentuk, kategori] = key.split(' - ');
+      return {
+        bentuk: bentuk || 'Biasa',
+        kategori: kategori || 'Standar',
+        count,
+      };
+    });
+
+    return {
+      kelas: kelasName,
+      pagiCount: data.pagi,
+      siangCount: data.siang,
+      malamCount: data.malam,
+      extraCount: data.extra,
+      baselinePorsi,
+      revisiTambahPorsi,
+      totalPorsi,
+      totalPasien,
+      dietBreakdown,
+    };
+  });
+
+  classes.sort((a, b) => {
+    const orderA = KELAS_ORDER[a.kelas.toUpperCase()] || 99;
+    const orderB = KELAS_ORDER[b.kelas.toUpperCase()] || 99;
+    if (orderA !== orderB) return orderA - orderB;
+    return a.kelas.localeCompare(b.kelas);
+  });
+
+  return classes;
+}
+
+/** Compute all grand totals from a classes array */
+function computeGrandTotals(classes: InvoiceClassConsumption[]): GrandTotals {
+  let grandTotalPagi = 0;
+  let grandTotalSiang = 0;
+  let grandTotalMalam = 0;
+  let grandTotalExtra = 0;
+  let grandTotalPorsi = 0;
+  let grandTotalPasien = 0;
+  let baselineTotalPorsi = 0;
+  let revisiTambahPasienCount = 0;
+
+  for (const c of classes) {
+    grandTotalPagi += c.pagiCount;
+    grandTotalSiang += c.siangCount;
+    grandTotalMalam += c.malamCount;
+    grandTotalExtra += c.extraCount;
+    grandTotalPorsi += c.totalPorsi;
+    grandTotalPasien += c.totalPasien;
+    baselineTotalPorsi += c.baselinePorsi || 0;
+    revisiTambahPasienCount += c.revisiTambahPorsi || 0;
+  }
+
+  return {
+    grandTotalPagi,
+    grandTotalSiang,
+    grandTotalMalam,
+    grandTotalExtra,
+    grandTotalPorsi,
+    grandTotalPasien,
+    baselineTotalPorsi,
+    revisiTambahPasienCount,
+  };
+}
+
+/** Format a date string to Indonesian locale (e.g. "6 Agustus 2026") */
+function formatDateIndo(dStr: string): string {
+  const d = new Date(dStr);
+  return !isNaN(d.getTime())
+    ? d.toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      })
+    : dStr;
+}
+
+/** Format a date string to Indonesian locale with weekday (e.g. "Sabtu, 29 Agustus 2026") */
+function formatDateIndoFull(dStr: string): string {
+  const d = new Date(dStr);
+  return !isNaN(d.getTime())
+    ? d.toLocaleDateString('id-ID', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      })
+    : dStr;
+}
+
+/** Build a revision patient record from a revision row and parsed data */
+function buildRevisionPatient(
+  rev: {
+    id: number;
+    nama_pasien: string | null;
+    no_rm: string | null;
+    ruangan?: string | null;
+    bed?: string | null;
+    diet?: string | null;
+    waktu_makan?: string | null;
+    alasan?: string | null;
+    requested_by?: string | null;
+    requested_at?: Date | string | null;
+    reviewed_by?: string | null;
+    reviewed_at?: Date | string | null;
+  },
+  dataBaruObj: Record<string, any>,
+  normKelas: string,
+  waktu: string,
+): InvoiceRevisionPatient {
+  return {
+    id: rev.id,
+    nama_pasien:
+      rev.nama_pasien || dataBaruObj.nama_pasien || 'Pasien Susulan',
+    no_rm: rev.no_rm || dataBaruObj.no_rm || '-',
+    kelas: normKelas,
+    ruangan: rev.ruangan || dataBaruObj.ruangan || '-',
+    bed: rev.bed || dataBaruObj.bed || '-',
+    diet: rev.diet || dataBaruObj.diet || 'Standar',
+    waktu_makan: rev.waktu_makan || waktu,
+    jenis_perubahan: 'NEW_PATIENT',
+    alasan: rev.alasan || 'Pasien baru pasca-snapshot (Susulan)',
+    requested_by: rev.requested_by || 'Ahli Gizi RS',
+    requested_at: rev.requested_at
+      ? new Date(rev.requested_at).toLocaleTimeString('id-ID')
+      : undefined,
+    reviewed_by: rev.reviewed_by || 'Supervisor Gizi',
+    reviewed_at: rev.reviewed_at
+      ? new Date(rev.reviewed_at).toLocaleTimeString('id-ID')
+      : undefined,
+  };
+}
+
+/** Build a default empty InvoiceDailySummary for error fallback */
+function buildEmptyFallbackSummary(): InvoiceDailySummary {
+  const today = new Date().toISOString().slice(0, 10);
+  const emptyClass = (kelas: string): InvoiceClassConsumption => ({
+    kelas,
+    pagiCount: 0,
+    siangCount: 0,
+    malamCount: 0,
+    extraCount: 0,
+    baselinePorsi: 0,
+    revisiTambahPorsi: 0,
+    totalPorsi: 0,
+    totalPasien: 0,
+    dietBreakdown: [],
+  });
+
+  return {
+    tanggal: today,
+    tanggalFormatted: 'Hari Ini',
+    invoiceNumber: `REKAP/GZ-RS/${today.replace(/-/g, '')}/001`,
+    hospitalName: 'RSUD dr Slamet Garut',
+    cateringVendor: 'INSTALASI GIZI & LAYANAN KATERING RS',
+    statusBatch: 'LIVE_PREVIEW',
+    availableDates: [today],
+    availableBatches: [],
+    waktuMakan: 'SIANG',
+    isPerSnapshot: true,
+    baselineTotalPorsi: 0,
+    revisiTambahPasienCount: 0,
+    revisiPatients: [],
+    grandTotalPagi: 0,
+    grandTotalSiang: 0,
+    grandTotalMalam: 0,
+    grandTotalExtra: 0,
+    grandTotalPorsi: 0,
+    grandTotalPasien: 0,
+    classes: STANDARD_CLASSES.map((k) => emptyClass(k)),
+    tktpCounts: { pagi: 0, siang: 0, malam: 0, total: 0 },
+    lastUpdated: new Date().toLocaleTimeString('id-ID'),
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCENARIO PROCESSORS (Internal)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * SCENARIO 1: SINGLE SNAPSHOT MODE
+ * Processes a specific snapshot batch (or live preview if no batch found).
+ */
+async function processSnapshotMode(
+  ctx: AggregationContext,
+  selectedDate: string,
+  selectedWaktu: string,
+  batchId?: number,
+): Promise<void> {
+  // Find matching batch
+  let targetBatch = null;
+  if (batchId) {
+    const bList = await db
+      .select()
+      .from(snapshotBatchTable)
+      .where(eq(snapshotBatchTable.id, batchId));
+    targetBatch = bList[0] || null;
+  } else {
+    const bList = await db
+      .select()
+      .from(snapshotBatchTable)
+      .where(
+        and(
+          eq(snapshotBatchTable.tanggal_produksi, selectedDate),
+          eq(snapshotBatchTable.waktu_makan, selectedWaktu),
+        ),
+      );
+    targetBatch = bList[0] || null;
+  }
+
+  if (targetBatch) {
+    ctx.isOfficialLocked = true;
+    ctx.resolvedBatchId = targetBatch.id;
+    ctx.resolvedBatchCode = targetBatch.batch_code;
+    ctx.resolvedCutoffTime = targetBatch.cutoff_time;
+
+    // 1. Baseline portions from snapshot details
+    const details = await db
+      .select()
+      .from(snapshotDetailTable)
+      .where(eq(snapshotDetailTable.batch_id, targetBatch.id));
+
+    for (const d of details) {
+      if (isNpoPatient(d)) continue;
+
+      const entry = getOrCreateClassEntry(ctx.classMap, d.kelas);
+      entry.pasienSet.add(d.no_rm || d.nama_pasien);
+      entry.baselinePorsi++;
+      incrementMealCount(entry, selectedWaktu);
+
+      if (isTktpDiet(d)) {
+        incrementTktpCount(ctx.tktp, selectedWaktu);
+      }
+
+      if (hasExtras(d)) {
+        entry.extra++;
+      }
+
+      trackDietEntry(entry, d.bentuk_makanan, d.kategori_diet);
+    }
+
+    // 2. Accumulate Approved Post-Snapshot Revisions (TAMBAH PASIEN)
+    const revisions = await db
+      .select({
+        id: otorisasiPerubahanDietTable.id,
+        pasien_id: otorisasiPerubahanDietTable.pasien_id,
+        batch_id: otorisasiPerubahanDietTable.batch_id,
+        waktu_makan: otorisasiPerubahanDietTable.waktu_makan,
+        jenis_perubahan: otorisasiPerubahanDietTable.jenis_perubahan,
+        data_lama: otorisasiPerubahanDietTable.data_lama,
+        data_baru: otorisasiPerubahanDietTable.data_baru,
+        alasan: otorisasiPerubahanDietTable.alasan,
+        status: otorisasiPerubahanDietTable.status,
+        requested_by: otorisasiPerubahanDietTable.requested_by,
+        requested_at: otorisasiPerubahanDietTable.requested_at,
+        reviewed_by: otorisasiPerubahanDietTable.reviewed_by,
+        reviewed_at: otorisasiPerubahanDietTable.reviewed_at,
+        nama_pasien: pasienTable.nama_pasien,
+        no_rm: pasienTable.no_rm,
+        ruangan: pasienTable.ruangan,
+        bed: pasienTable.bed,
+        kelas: pasienTable.kelas,
+        diet: pasienTable.diet,
+      })
+      .from(otorisasiPerubahanDietTable)
+      .leftJoin(
+        pasienTable,
+        eq(otorisasiPerubahanDietTable.pasien_id, pasienTable.id),
+      )
+      .where(
+        and(
+          eq(otorisasiPerubahanDietTable.batch_id, targetBatch.id),
+          eq(otorisasiPerubahanDietTable.status, 'APPROVED'),
+        ),
+      );
+
+    for (const rev of revisions) {
+      // Hanya TAMBAH PASIEN (NEW_PATIENT) yang menambah porsi tagihan!
+      // Perubahan diet sifatnya tetap (tidak menambah porsi).
+      if (rev.jenis_perubahan !== 'NEW_PATIENT') continue;
+
+      const dataBaruObj = parseRevisionDataBaru(rev.data_baru);
+
+      if (
+        isNpoPatient({
+          is_npo: dataBaruObj.is_npo,
+          status_pasien: dataBaruObj.status_pasien,
+          diet: rev.diet || dataBaruObj.diet,
+        })
+      ) {
+        continue;
+      }
+
+      const targetKelas = rev.kelas || dataBaruObj.kelas || 'Kelas 3';
+      const normKelas = normalizeKelasName(targetKelas);
+      const entry = getOrCreateClassEntry(ctx.classMap, targetKelas);
+
+      entry.revisiTambahPorsi++;
+      incrementMealCount(entry, selectedWaktu);
+
+      if (isTktpDiet({ diet: rev.diet || dataBaruObj.diet })) {
+        incrementTktpCount(ctx.tktp, selectedWaktu);
+      }
+
+      entry.pasienSet.add(
+        rev.no_rm || dataBaruObj.no_rm || rev.nama_pasien || `rev-${rev.id}`,
+      );
+
+      const dietStr = rev.diet || dataBaruObj.diet || 'Standar';
+      entry.dietMap.set(dietStr, (entry.dietMap.get(dietStr) || 0) + 1);
+
+      ctx.revisiPatients.push(
+        buildRevisionPatient(rev, dataBaruObj, normKelas, selectedWaktu),
+      );
+    }
+  } else {
+    // Fallback: Live preview before snapshot cut-off
+    ctx.isOfficialLocked = false;
+    ctx.resolvedBatchCode = `LIVE-${selectedDate.replace(/-/g, '')}-${selectedWaktu}`;
+
+    const activePatients = await db
+      .select()
+      .from(pasienTable)
+      .where(
+        and(
+          ne(pasienTable.status_pasien, 'PULANG'),
+          ne(pasienTable.status_pasien, 'PENDING_REVISI'),
+        ),
+      );
+
+    for (const p of activePatients) {
+      if (isNpoPatient(p)) continue;
+
+      const entry = getOrCreateClassEntry(ctx.classMap, p.kelas);
+      entry.baselinePorsi++;
+      incrementMealCount(entry, selectedWaktu);
+
+      if (isTktpDiet({ diet: p.diet })) {
+        incrementTktpCount(ctx.tktp, selectedWaktu);
+      }
+
+      entry.pasienSet.add(p.no_rm || p.nama_pasien);
+      const dietStr = p.diet || 'Standar';
+      entry.dietMap.set(dietStr, (entry.dietMap.get(dietStr) || 0) + 1);
+    }
+  }
+}
+
+/**
+ * SCENARIO 2: DATE RANGE QUERY
+ * Processes all snapshots within a date range.
+ * Returns optional dailySummaries and snapshotSummaries for sub-views.
+ */
+async function processRangeMode(
+  ctx: AggregationContext,
+  start: string,
+  end: string,
+  selectedWaktu: string,
+  availableDates: string[],
+): Promise<{
+  dailySummaries?: InvoiceDailySummary[];
+  snapshotSummaries?: InvoiceDailySummary[];
+}> {
+  const batchConditions = [
+    gte(snapshotBatchTable.tanggal_produksi, start),
+    lte(snapshotBatchTable.tanggal_produksi, end),
+  ];
+  if (selectedWaktu !== 'ALL') {
+    batchConditions.push(eq(snapshotBatchTable.waktu_makan, selectedWaktu));
+  }
+
+  const rangeBatches = await db
+    .select()
+    .from(snapshotBatchTable)
+    .where(and(...batchConditions))
+    .orderBy(
+      asc(snapshotBatchTable.tanggal_produksi),
+      asc(snapshotBatchTable.id),
+    );
+
+  // Track per-day and per-batch breakdowns
+  const dailyMap = new Map<string, Map<string, ClassEntry>>();
+  const batchMap = new Map<
+    number,
+    {
+      batch: (typeof rangeBatches)[0];
+      classMap: Map<string, ClassEntry>;
+      revisiPatients: InvoiceRevisionPatient[];
+    }
+  >();
+
+  if (!rangeBatches || rangeBatches.length === 0) {
+    return {};
+  }
+
+  ctx.isOfficialLocked = true;
+
+  for (const b of rangeBatches) {
+    batchMap.set(b.id, {
+      batch: b,
+      classMap: new Map(),
+      revisiPatients: [],
+    });
+  }
+
+  // Fetch all details in range with a single query
+  const details = await db
+    .select({
+      batch_id: snapshotDetailTable.batch_id,
+      waktu_makan: snapshotBatchTable.waktu_makan,
+      tanggal_produksi: snapshotBatchTable.tanggal_produksi,
+      kelas: snapshotDetailTable.kelas,
+      no_rm: snapshotDetailTable.no_rm,
+      nama_pasien: snapshotDetailTable.nama_pasien,
+      status_saat_snapshot: snapshotDetailTable.status_saat_snapshot,
+      diet_rs_raw: snapshotDetailTable.diet_rs_raw,
+      bentuk_makanan: snapshotDetailTable.bentuk_makanan,
+      kategori_diet: snapshotDetailTable.kategori_diet,
+      extra: snapshotDetailTable.extra,
+      buah: snapshotDetailTable.buah,
+      snack: snapshotDetailTable.snack,
+    })
+    .from(snapshotDetailTable)
+    .innerJoin(
+      snapshotBatchTable,
+      eq(snapshotDetailTable.batch_id, snapshotBatchTable.id),
+    )
+    .where(
+      and(
+        gte(snapshotBatchTable.tanggal_produksi, start),
+        lte(snapshotBatchTable.tanggal_produksi, end),
+        selectedWaktu !== 'ALL'
+          ? eq(snapshotBatchTable.waktu_makan, selectedWaktu)
+          : undefined,
+      ),
+    );
+
+  for (const d of details) {
+    if (isNpoPatient(d)) continue;
+
+    const waktu = (d.waktu_makan || 'PAGI').toUpperCase();
+    const normKelas = normalizeKelasName(d.kelas);
+
+    // Global aggregation
+    const entry = getOrCreateClassEntry(ctx.classMap, d.kelas);
+    const patientDayKey = `${d.tanggal_produksi}_${d.no_rm || d.nama_pasien}`;
+    entry.pasienSet.add(patientDayKey);
+    entry.baselinePorsi++;
+    incrementMealCount(entry, waktu);
+
+    if (isTktpDiet(d)) {
+      incrementTktpCount(ctx.tktp, waktu);
+    }
+
+    if (hasExtras(d)) {
+      entry.extra++;
+    }
+
+    trackDietEntry(entry, d.bentuk_makanan, d.kategori_diet);
+
+    // Per-day tracking (for "Cetak Harian")
+    const dayDateKey = d.tanggal_produksi;
+    if (dayDateKey) {
+      if (!dailyMap.has(dayDateKey)) {
+        dailyMap.set(dayDateKey, new Map());
+      }
+      const dayEntry = getOrCreateClassEntry(dailyMap.get(dayDateKey)!, d.kelas);
+      dayEntry.pasienSet.add(d.no_rm || d.nama_pasien);
+      dayEntry.baselinePorsi++;
+      incrementMealCount(dayEntry, waktu);
+
+      if (hasExtras(d)) {
+        dayEntry.extra++;
+      }
+
+      trackDietEntry(dayEntry, d.bentuk_makanan, d.kategori_diet);
+    }
+
+    // Per-batch tracking (for "Cetak 1 Snapshot 1 Lembar")
+    if (d.batch_id && batchMap.has(d.batch_id)) {
+      const bEntry = batchMap.get(d.batch_id)!;
+      const bClassEntry = getOrCreateClassEntry(bEntry.classMap, d.kelas);
+      bClassEntry.pasienSet.add(d.no_rm || d.nama_pasien);
+      bClassEntry.baselinePorsi++;
+      incrementMealCount(bClassEntry, waktu);
+
+      if (hasExtras(d)) {
+        bClassEntry.extra++;
+      }
+
+      trackDietEntry(bClassEntry, d.bentuk_makanan, d.kategori_diet);
+    }
+  }
+
+  // Process revisions in range
+  const batchIds = rangeBatches.map((b) => b.id);
+  const rangeRevisions = await db
+    .select({
+      id: otorisasiPerubahanDietTable.id,
+      pasien_id: otorisasiPerubahanDietTable.pasien_id,
+      batch_id: otorisasiPerubahanDietTable.batch_id,
+      waktu_makan: otorisasiPerubahanDietTable.waktu_makan,
+      jenis_perubahan: otorisasiPerubahanDietTable.jenis_perubahan,
+      data_baru: otorisasiPerubahanDietTable.data_baru,
+      alasan: otorisasiPerubahanDietTable.alasan,
+      requested_at: otorisasiPerubahanDietTable.requested_at,
+      reviewed_by: otorisasiPerubahanDietTable.reviewed_by,
+      reviewed_at: otorisasiPerubahanDietTable.reviewed_at,
+      nama_pasien: pasienTable.nama_pasien,
+      no_rm: pasienTable.no_rm,
+      ruangan: pasienTable.ruangan,
+      bed: pasienTable.bed,
+      kelas: pasienTable.kelas,
+      diet: pasienTable.diet,
+    })
+    .from(otorisasiPerubahanDietTable)
+    .leftJoin(
+      pasienTable,
+      eq(otorisasiPerubahanDietTable.pasien_id, pasienTable.id),
+    )
+    .where(
+      and(
+        eq(otorisasiPerubahanDietTable.status, 'APPROVED'),
+        eq(otorisasiPerubahanDietTable.jenis_perubahan, 'NEW_PATIENT'),
+        selectedWaktu !== 'ALL'
+          ? eq(otorisasiPerubahanDietTable.waktu_makan, selectedWaktu)
+          : undefined,
+      ),
+    );
+
+  for (const rev of rangeRevisions) {
+    const dataBaruObj = parseRevisionDataBaru(rev.data_baru);
+
+    if (
+      isNpoPatient({
+        is_npo: dataBaruObj.is_npo,
+        status_pasien: dataBaruObj.status_pasien,
+        diet: rev.diet || dataBaruObj.diet,
+      })
+    ) {
+      continue;
+    }
+
+    if (!rev.batch_id || !batchIds.includes(rev.batch_id)) continue;
+
+    const matchingBatch = rangeBatches.find((b) => b.id === rev.batch_id);
+    const targetKelas = rev.kelas || 'Kelas 3';
+    const normKelas = normalizeKelasName(targetKelas);
+    const waktu = (rev.waktu_makan || 'PAGI').toUpperCase();
+
+    // Global aggregation
+    const entry = getOrCreateClassEntry(ctx.classMap, normKelas);
+    entry.revisiTambahPorsi++;
+    incrementMealCount(entry, waktu);
+
+    if (isTktpDiet({ diet: rev.diet || dataBaruObj.diet })) {
+      incrementTktpCount(ctx.tktp, waktu);
+    }
+
+    // Per-day tracking
+    if (matchingBatch?.tanggal_produksi) {
+      const dayClassMap = dailyMap.get(matchingBatch.tanggal_produksi);
+      if (dayClassMap) {
+        const dayEntry = dayClassMap.get(normKelas);
+        if (dayEntry) {
+          dayEntry.revisiTambahPorsi++;
+          incrementMealCount(dayEntry, waktu);
+        }
+      }
+    }
+
+    // Per-batch tracking
+    if (batchMap.has(rev.batch_id)) {
+      const bEntry = batchMap.get(rev.batch_id)!;
+      const bClassEntry = getOrCreateClassEntry(bEntry.classMap, normKelas);
+      bClassEntry.revisiTambahPorsi++;
+      bClassEntry.pasienSet.add(
+        rev.no_rm || rev.nama_pasien || `rev-${rev.id}`,
+      );
+      incrementMealCount(bClassEntry, waktu);
+
+      bEntry.revisiPatients.push(
+        buildRevisionPatient(rev, dataBaruObj, normKelas, waktu),
+      );
+    }
+  }
+
+  // Build snapshotSummaries from batchMap
+  const snapshotSummaries: InvoiceDailySummary[] = [];
+  for (const [, bData] of batchMap.entries()) {
+    const b = bData.batch;
+    ensureStandardClasses(bData.classMap);
+
+    const bClasses = classMapToSortedArray(bData.classMap, true);
+    const bTotals = computeGrandTotals(bClasses);
+
+    snapshotSummaries.push({
+      tanggal: String(b.tanggal_produksi),
+      tanggalFormatted: formatDateIndoFull(String(b.tanggal_produksi)),
+      invoiceNumber: `INVOICE/GZ-RS/${String(b.tanggal_produksi).replace(/-/g, '')}-${b.waktu_makan}/BATCH-${b.id}`,
+      hospitalName: 'RSUD dr Slamet Garut',
+      cateringVendor: 'INSTALASI GIZI & LAYANAN KATERING RS',
+      statusBatch: 'OFFICIAL_LOCKED',
+      availableDates,
+      batchId: b.id,
+      batchCode: b.batch_code,
+      waktuMakan: b.waktu_makan,
+      isPerSnapshot: true,
+      cutoffTime: b.cutoff_time,
+      ...bTotals,
+      revisiPatients: bData.revisiPatients,
+      classes: bClasses,
+      lastUpdated: new Date().toLocaleTimeString('id-ID'),
+      isRange: false,
+    });
+  }
+
+  // Build dailySummaries from dailyMap
+  let dailySummaries: InvoiceDailySummary[] | undefined = undefined;
+  if (dailyMap.size > 0) {
+    dailySummaries = [];
+    const sortedDates = Array.from(dailyMap.keys()).sort();
+
+    for (const dayStr of sortedDates) {
+      const dayClassMap = dailyMap.get(dayStr)!;
+      ensureStandardClasses(dayClassMap);
+
+      const dayClasses = classMapToSortedArray(dayClassMap, false);
+      const dayTotals = computeGrandTotals(dayClasses);
+
+      dailySummaries.push({
+        tanggal: dayStr,
+        tanggalFormatted: formatDateIndoFull(dayStr),
+        invoiceNumber: `REKAP/GZ-RS/${dayStr.replace(/-/g, '')}/001`,
+        hospitalName: 'RSUD dr Slamet Garut',
+        cateringVendor: 'INSTALASI GIZI & LAYANAN KATERING RS',
+        statusBatch: 'OFFICIAL_LOCKED',
+        availableDates,
+        ...dayTotals,
+        classes: dayClasses,
+        lastUpdated: new Date().toLocaleTimeString('id-ID'),
+        isRange: false,
+      });
+    }
+  }
+
+  return { dailySummaries, snapshotSummaries };
+}
+
+/**
+ * SCENARIO 3: SINGLE DATE, ALL MEALTIMES COMBINED ('ALL')
+ * Processes all batches for a single date, combining all meal times.
+ */
+async function processAllMealtimesMode(
+  ctx: AggregationContext,
+  selectedDate: string,
+): Promise<void> {
+  const dateBatches = await db
+    .select()
+    .from(snapshotBatchTable)
+    .where(eq(snapshotBatchTable.tanggal_produksi, selectedDate));
+
+  if (!dateBatches || dateBatches.length === 0) return;
+
+  ctx.isOfficialLocked = true;
+
+  for (const batch of dateBatches) {
+    const waktu = (batch.waktu_makan || 'PAGI').toUpperCase();
+
+    const details = await db
+      .select()
+      .from(snapshotDetailTable)
+      .where(eq(snapshotDetailTable.batch_id, batch.id));
+
+    for (const d of details) {
+      // Fixed: was inline NPO check, now uses centralized isNpoPatient()
+      if (isNpoPatient(d)) continue;
+
+      const entry = getOrCreateClassEntry(ctx.classMap, d.kelas);
+      entry.pasienSet.add(d.no_rm || d.nama_pasien);
+      entry.baselinePorsi++;
+      incrementMealCount(entry, waktu);
+
+      if (isTktpDiet(d)) {
+        incrementTktpCount(ctx.tktp, waktu);
+      }
+
+      if (hasExtras(d)) {
+        entry.extra++;
+      }
+
+      trackDietEntry(entry, d.bentuk_makanan, d.kategori_diet);
+    }
+
+    // Approved revisions for this batch
+    const batchRevisions = await db
+      .select({
+        id: otorisasiPerubahanDietTable.id,
+        pasien_id: otorisasiPerubahanDietTable.pasien_id,
+        batch_id: otorisasiPerubahanDietTable.batch_id,
+        waktu_makan: otorisasiPerubahanDietTable.waktu_makan,
+        jenis_perubahan: otorisasiPerubahanDietTable.jenis_perubahan,
+        nama_pasien: pasienTable.nama_pasien,
+        no_rm: pasienTable.no_rm,
+        kelas: pasienTable.kelas,
+        diet: pasienTable.diet,
+      })
+      .from(otorisasiPerubahanDietTable)
+      .leftJoin(
+        pasienTable,
+        eq(otorisasiPerubahanDietTable.pasien_id, pasienTable.id),
+      )
+      .where(
+        and(
+          eq(otorisasiPerubahanDietTable.batch_id, batch.id),
+          eq(otorisasiPerubahanDietTable.status, 'APPROVED'),
+          eq(otorisasiPerubahanDietTable.jenis_perubahan, 'NEW_PATIENT'),
+        ),
+      );
+
+    for (const rev of batchRevisions) {
+      const entry = getOrCreateClassEntry(ctx.classMap, rev.kelas || 'Kelas 3');
+      entry.revisiTambahPorsi++;
+      incrementMealCount(entry, waktu);
+
+      if (isTktpDiet({ diet: rev.diet })) {
+        incrementTktpCount(ctx.tktp, waktu);
+      }
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// EXPORTED SERVER ACTIONS
+// ═══════════════════════════════════════════════════════════════════════════════
 
 /**
  * Fetch list of all dates that have recorded batches
@@ -128,10 +1014,8 @@ export async function getInvoiceDailyData(
     const availableDates = await getAvailableInvoiceDates();
     const availableBatches = await getAvailableInvoiceBatches();
 
-    // Check if user explicitly requested a Date Range
+    // Determine query mode
     const isRange = Boolean(endDateStr && endDateStr !== selectedDate);
-
-    // Determine target mealtime: supports specific mealtime even in range queries
     const selectedWaktu = isRange
       ? waktuMakan && waktuMakan !== 'ALL'
         ? waktuMakan.toUpperCase()
@@ -139,15 +1023,12 @@ export async function getInvoiceDailyData(
       : (waktuMakan as string) || getDefaultMealtime();
     const isPerSnapshot = !isRange && selectedWaktu !== 'ALL';
 
+    // Normalize date range
     const start = isRange
-      ? selectedDate < endDateStr!
-        ? selectedDate
-        : endDateStr!
+      ? selectedDate < endDateStr! ? selectedDate : endDateStr!
       : selectedDate;
     const end = isRange
-      ? selectedDate < endDateStr!
-        ? endDateStr!
-        : selectedDate
+      ? selectedDate < endDateStr! ? endDateStr! : selectedDate
       : selectedDate;
 
     const startDateObj = new Date(start);
@@ -158,987 +1039,52 @@ export async function getInvoiceDailyData(
       ) + 1;
     const totalDays = isRange ? Math.max(1, diffDays) : 1;
 
-    const formatIndo = (dStr: string) => {
-      const d = new Date(dStr);
-      return !isNaN(d.getTime())
-        ? d.toLocaleDateString('id-ID', {
-            day: 'numeric',
-            month: 'long',
-            year: 'numeric',
-          })
-        : dStr;
-    };
-
+    // Format display date
     const tanggalFormatted = isRange
-      ? `${formatIndo(start)} – ${formatIndo(end)} (${totalDays} Hari${selectedWaktu !== 'ALL' ? ` • Snapshot ${selectedWaktu}` : ''})`
+      ? `${formatDateIndo(start)} – ${formatDateIndo(end)} (${totalDays} Hari${selectedWaktu !== 'ALL' ? ` • Snapshot ${selectedWaktu}` : ''})`
       : !isNaN(startDateObj.getTime())
-        ? startDateObj.toLocaleDateString('id-ID', {
-            weekday: 'long',
-            day: 'numeric',
-            month: 'long',
-            year: 'numeric',
-          })
+        ? formatDateIndoFull(selectedDate)
         : selectedDate;
 
-    // Data structures for aggregation
-    const classMap = new Map<
-      string,
-      {
-        pagi: number;
-        siang: number;
-        malam: number;
-        extra: number;
-        baselinePorsi: number;
-        revisiTambahPorsi: number;
-        pasienSet: Set<string>;
-        dietMap: Map<string, number>;
-      }
-    >();
+    // Initialize aggregation context
+    const ctx: AggregationContext = {
+      classMap: new Map<string, ClassEntry>(),
+      tktp: { pagi: 0, siang: 0, malam: 0 },
+      revisiPatients: [],
+      isOfficialLocked: false,
+      resolvedBatchId: null,
+      resolvedBatchCode: null,
+      resolvedCutoffTime: null,
+    };
 
-    function getOrCreateClassEntry(kelasName: string) {
-      const norm = normalizeKelasName(kelasName);
-      if (!classMap.has(norm)) {
-        classMap.set(norm, {
-          pagi: 0,
-          siang: 0,
-          malam: 0,
-          extra: 0,
-          baselinePorsi: 0,
-          revisiTambahPorsi: 0,
-          pasienSet: new Set<string>(),
-          dietMap: new Map<string, number>(),
-        });
-      }
-      return classMap.get(norm)!;
-    }
-
-    let isOfficialLocked = false;
-    let resolvedBatchId: number | null = null;
-    let resolvedBatchCode: string | null = null;
-    let resolvedCutoffTime: string | null = null;
-    const revisiPatients: InvoiceRevisionPatient[] = [];
-
-    // Map for multi-day breakdown (used in 'Harian')
-    const dailyMap = new Map<
-      string,
-      Map<
-        string,
-        {
-          pagi: number;
-          siang: number;
-          malam: number;
-          extra: number;
-          baselinePorsi: number;
-          revisiTambahPorsi: number;
-          pasienSet: Set<string>;
-          dietMap: Map<string, number>;
-        }
-      >
-    >();
-
-    // Map for multi-snapshot breakdown (used in 'Cetak 1 Snapshot 1 Lembar')
+    let dailySummaries: InvoiceDailySummary[] | undefined = undefined;
     let snapshotSummaries: InvoiceDailySummary[] | undefined = undefined;
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // SCENARIO 1: SINGLE SNAPSHOT MODE (Default / Waktu Makan spesifik)
-    // ─────────────────────────────────────────────────────────────────────────
+    // Dispatch to appropriate scenario processor
     if (isPerSnapshot) {
-      // Find matching batch
-      let targetBatch = null;
-      if (batchId) {
-        const bList = await db
-          .select()
-          .from(snapshotBatchTable)
-          .where(eq(snapshotBatchTable.id, batchId));
-        targetBatch = bList[0] || null;
-      } else {
-        const bList = await db
-          .select()
-          .from(snapshotBatchTable)
-          .where(
-            and(
-              eq(snapshotBatchTable.tanggal_produksi, selectedDate),
-              eq(snapshotBatchTable.waktu_makan, selectedWaktu),
-            ),
-          );
-        targetBatch = bList[0] || null;
-      }
-
-      if (targetBatch) {
-        isOfficialLocked = true;
-        resolvedBatchId = targetBatch.id;
-        resolvedBatchCode = targetBatch.batch_code;
-        resolvedCutoffTime = targetBatch.cutoff_time;
-
-        // 1. Baseline portions from snapshot details
-        const details = await db
-          .select()
-          .from(snapshotDetailTable)
-          .where(eq(snapshotDetailTable.batch_id, targetBatch.id));
-
-        for (const d of details) {
-          if (isNpoPatient(d)) {
-            continue;
-          }
-
-          const entry = getOrCreateClassEntry(d.kelas);
-          entry.pasienSet.add(d.no_rm || d.nama_pasien);
-          entry.baselinePorsi++;
-          if (selectedWaktu === 'PAGI') entry.pagi++;
-          else if (selectedWaktu === 'SIANG') entry.siang++;
-          else if (selectedWaktu === 'MALAM') entry.malam++;
-
-          if (d.extra?.trim() || d.buah?.trim() || d.snack?.trim()) {
-            entry.extra++;
-          }
-
-          const bentuk = d.bentuk_makanan || 'Biasa';
-          const kategori = d.kategori_diet || 'Standar';
-          const dietKey = `${bentuk} - ${kategori}`;
-          entry.dietMap.set(dietKey, (entry.dietMap.get(dietKey) || 0) + 1);
-        }
-
-        // 2. Accumulate Approved Post-Snapshot Revisions (TAMBAH PASIEN)
-        const revisions = await db
-          .select({
-            id: otorisasiPerubahanDietTable.id,
-            pasien_id: otorisasiPerubahanDietTable.pasien_id,
-            batch_id: otorisasiPerubahanDietTable.batch_id,
-            waktu_makan: otorisasiPerubahanDietTable.waktu_makan,
-            jenis_perubahan: otorisasiPerubahanDietTable.jenis_perubahan,
-            data_lama: otorisasiPerubahanDietTable.data_lama,
-            data_baru: otorisasiPerubahanDietTable.data_baru,
-            alasan: otorisasiPerubahanDietTable.alasan,
-            status: otorisasiPerubahanDietTable.status,
-            requested_by: otorisasiPerubahanDietTable.requested_by,
-            requested_at: otorisasiPerubahanDietTable.requested_at,
-            reviewed_by: otorisasiPerubahanDietTable.reviewed_by,
-            reviewed_at: otorisasiPerubahanDietTable.reviewed_at,
-            nama_pasien: pasienTable.nama_pasien,
-            no_rm: pasienTable.no_rm,
-            ruangan: pasienTable.ruangan,
-            bed: pasienTable.bed,
-            kelas: pasienTable.kelas,
-            diet: pasienTable.diet,
-          })
-          .from(otorisasiPerubahanDietTable)
-          .leftJoin(
-            pasienTable,
-            eq(otorisasiPerubahanDietTable.pasien_id, pasienTable.id),
-          )
-          .where(
-            and(
-              eq(otorisasiPerubahanDietTable.batch_id, targetBatch.id),
-              eq(otorisasiPerubahanDietTable.status, 'APPROVED'),
-            ),
-          );
-
-        for (const rev of revisions) {
-          // Hanya TAMBAH PASIEN (NEW_PATIENT) yang menambah porsi tagihan!
-          // Perubahan diet sifatnya tetap (tidak menambah porsi).
-          if (rev.jenis_perubahan === 'NEW_PATIENT') {
-            let dataBaruObj: any = {};
-            try {
-              if (rev.data_baru) dataBaruObj = JSON.parse(rev.data_baru);
-            } catch (_) {}
-
-            if (
-              isNpoPatient({
-                is_npo: dataBaruObj.is_npo,
-                status_pasien: dataBaruObj.status_pasien,
-                diet: rev.diet || dataBaruObj.diet,
-              })
-            ) {
-              continue;
-            }
-
-            const targetKelas = rev.kelas || dataBaruObj.kelas || 'Kelas 3';
-            const entry = getOrCreateClassEntry(targetKelas);
-
-            // Tambahkan porsi susulan
-            entry.revisiTambahPorsi++;
-            if (selectedWaktu === 'PAGI') entry.pagi++;
-            else if (selectedWaktu === 'SIANG') entry.siang++;
-            else if (selectedWaktu === 'MALAM') entry.malam++;
-
-            entry.pasienSet.add(
-              rev.no_rm ||
-                dataBaruObj.no_rm ||
-                rev.nama_pasien ||
-                `rev-${rev.id}`,
-            );
-
-            const dietStr = rev.diet || dataBaruObj.diet || 'Standar';
-            entry.dietMap.set(dietStr, (entry.dietMap.get(dietStr) || 0) + 1);
-
-            revisiPatients.push({
-              id: rev.id,
-              nama_pasien:
-                rev.nama_pasien || dataBaruObj.nama_pasien || 'Pasien Susulan',
-              no_rm: rev.no_rm || dataBaruObj.no_rm || '-',
-              kelas: normalizeKelasName(targetKelas),
-              ruangan: rev.ruangan || dataBaruObj.ruangan || '-',
-              bed: rev.bed || dataBaruObj.bed || '-',
-              diet: dietStr,
-              waktu_makan: rev.waktu_makan || selectedWaktu,
-              jenis_perubahan: 'NEW_PATIENT',
-              alasan: rev.alasan || 'Pasien baru pasca-snapshot (Susulan)',
-              requested_by: rev.requested_by || 'Ahli Gizi RS',
-              requested_at: rev.requested_at
-                ? new Date(rev.requested_at).toLocaleTimeString('id-ID')
-                : undefined,
-              reviewed_by: rev.reviewed_by || 'Supervisor Gizi',
-              reviewed_at: rev.reviewed_at
-                ? new Date(rev.reviewed_at).toLocaleTimeString('id-ID')
-                : undefined,
-            });
-          }
-        }
-      } else {
-        // Fallback: Live preview before snapshot cut-off
-        isOfficialLocked = false;
-        resolvedBatchCode = `LIVE-${selectedDate.replace(/-/g, '')}-${selectedWaktu}`;
-
-        const activePatients = await db
-          .select()
-          .from(pasienTable)
-          .where(
-            and(
-              ne(pasienTable.status_pasien, 'PULANG'),
-              ne(pasienTable.status_pasien, 'PENDING_REVISI'),
-            ),
-          );
-
-        for (const p of activePatients) {
-          if (!isNpoPatient(p)) {
-            const entry = getOrCreateClassEntry(p.kelas);
-            entry.baselinePorsi++;
-            if (selectedWaktu === 'PAGI') entry.pagi++;
-            else if (selectedWaktu === 'SIANG') entry.siang++;
-            else if (selectedWaktu === 'MALAM') entry.malam++;
-            entry.pasienSet.add(p.no_rm || p.nama_pasien);
-
-            const dietStr = p.diet || 'Standar';
-            entry.dietMap.set(dietStr, (entry.dietMap.get(dietStr) || 0) + 1);
-          }
-        }
-      }
+      await processSnapshotMode(ctx, selectedDate, selectedWaktu, batchId);
     } else if (isRange) {
-      // ───────────────────────────────────────────────────────────────────────
-      // SCENARIO 2: DATE RANGE QUERY (Semua Snapshot dalam Rentang Tanggal)
-      // ───────────────────────────────────────────────────────────────────────
-      const batchConditions = [
-        gte(snapshotBatchTable.tanggal_produksi, start),
-        lte(snapshotBatchTable.tanggal_produksi, end),
-      ];
-      if (selectedWaktu !== 'ALL') {
-        batchConditions.push(eq(snapshotBatchTable.waktu_makan, selectedWaktu));
-      }
-
-      const rangeBatches = await db
-        .select()
-        .from(snapshotBatchTable)
-        .where(and(...batchConditions))
-        .orderBy(
-          asc(snapshotBatchTable.tanggal_produksi),
-          asc(snapshotBatchTable.id),
-        );
-
-      if (rangeBatches && rangeBatches.length > 0) {
-        isOfficialLocked = true;
-
-        // Structure to track per-batch details for "Cetak 1 Snapshot 1 Lembar"
-        const batchMap = new Map<
-          number,
-          {
-            batch: (typeof rangeBatches)[0];
-            classMap: Map<
-              string,
-              {
-                pagi: number;
-                siang: number;
-                malam: number;
-                extra: number;
-                baselinePorsi: number;
-                revisiTambahPorsi: number;
-                pasienSet: Set<string>;
-                dietMap: Map<string, number>;
-              }
-            >;
-            revisiPatients: InvoiceRevisionPatient[];
-          }
-        >();
-
-        for (const b of rangeBatches) {
-          batchMap.set(b.id, {
-            batch: b,
-            classMap: new Map(),
-            revisiPatients: [],
-          });
-        }
-
-        const details = await db
-          .select({
-            batch_id: snapshotDetailTable.batch_id,
-            waktu_makan: snapshotBatchTable.waktu_makan,
-            tanggal_produksi: snapshotBatchTable.tanggal_produksi,
-            kelas: snapshotDetailTable.kelas,
-            no_rm: snapshotDetailTable.no_rm,
-            nama_pasien: snapshotDetailTable.nama_pasien,
-            status_saat_snapshot: snapshotDetailTable.status_saat_snapshot,
-            diet_rs_raw: snapshotDetailTable.diet_rs_raw,
-            bentuk_makanan: snapshotDetailTable.bentuk_makanan,
-            kategori_diet: snapshotDetailTable.kategori_diet,
-            extra: snapshotDetailTable.extra,
-            buah: snapshotDetailTable.buah,
-            snack: snapshotDetailTable.snack,
-          })
-          .from(snapshotDetailTable)
-          .innerJoin(
-            snapshotBatchTable,
-            eq(snapshotDetailTable.batch_id, snapshotBatchTable.id),
-          )
-          .where(
-            and(
-              gte(snapshotBatchTable.tanggal_produksi, start),
-              lte(snapshotBatchTable.tanggal_produksi, end),
-              selectedWaktu !== 'ALL'
-                ? eq(snapshotBatchTable.waktu_makan, selectedWaktu)
-                : undefined,
-            ),
-          );
-
-        for (const d of details) {
-          if (isNpoPatient(d)) {
-            continue;
-          }
-
-          const waktu = (d.waktu_makan || 'PAGI').toUpperCase();
-          const entry = getOrCreateClassEntry(d.kelas);
-          const patientDayKey = `${d.tanggal_produksi}_${d.no_rm || d.nama_pasien}`;
-          entry.pasienSet.add(patientDayKey);
-          entry.baselinePorsi++;
-          if (waktu === 'PAGI') entry.pagi++;
-          else if (waktu === 'SIANG') entry.siang++;
-          else if (waktu === 'MALAM' || waktu === 'SORE') entry.malam++;
-
-          if (d.extra?.trim() || d.buah?.trim() || d.snack?.trim()) {
-            entry.extra++;
-          }
-
-          const bentuk = d.bentuk_makanan || 'Biasa';
-          const kategori = d.kategori_diet || 'Standar';
-          const dietKey = `${bentuk} - ${kategori}`;
-          entry.dietMap.set(dietKey, (entry.dietMap.get(dietKey) || 0) + 1);
-
-          // Track per-day for "Cetak Harian"
-          const dayDateKey = d.tanggal_produksi;
-          if (dayDateKey) {
-            if (!dailyMap.has(dayDateKey)) {
-              dailyMap.set(dayDateKey, new Map());
-            }
-            const dayClassMap = dailyMap.get(dayDateKey)!;
-            const normKelas = normalizeKelasName(d.kelas);
-            if (!dayClassMap.has(normKelas)) {
-              dayClassMap.set(normKelas, {
-                pagi: 0,
-                siang: 0,
-                malam: 0,
-                extra: 0,
-                baselinePorsi: 0,
-                revisiTambahPorsi: 0,
-                pasienSet: new Set<string>(),
-                dietMap: new Map<string, number>(),
-              });
-            }
-            const dayEntry = dayClassMap.get(normKelas)!;
-            dayEntry.pasienSet.add(d.no_rm || d.nama_pasien);
-            dayEntry.baselinePorsi++;
-            if (waktu === 'PAGI') dayEntry.pagi++;
-            else if (waktu === 'SIANG') dayEntry.siang++;
-            else if (waktu === 'MALAM' || waktu === 'SORE') dayEntry.malam++;
-
-            if (d.extra?.trim() || d.buah?.trim() || d.snack?.trim()) {
-              dayEntry.extra++;
-            }
-            dayEntry.dietMap.set(
-              dietKey,
-              (dayEntry.dietMap.get(dietKey) || 0) + 1,
-            );
-          }
-
-          // Track per-batch for "Cetak 1 Snapshot 1 Lembar"
-          if (d.batch_id && batchMap.has(d.batch_id)) {
-            const bEntry = batchMap.get(d.batch_id)!;
-            const bNorm = normalizeKelasName(d.kelas);
-            if (!bEntry.classMap.has(bNorm)) {
-              bEntry.classMap.set(bNorm, {
-                pagi: 0,
-                siang: 0,
-                malam: 0,
-                extra: 0,
-                baselinePorsi: 0,
-                revisiTambahPorsi: 0,
-                pasienSet: new Set(),
-                dietMap: new Map(),
-              });
-            }
-            const bClassData = bEntry.classMap.get(bNorm)!;
-            bClassData.pasienSet.add(d.no_rm || d.nama_pasien);
-            bClassData.baselinePorsi++;
-            if (waktu === 'PAGI') bClassData.pagi++;
-            else if (waktu === 'SIANG') bClassData.siang++;
-            else if (waktu === 'MALAM' || waktu === 'SORE')
-              bClassData.malam++;
-
-            if (d.extra?.trim() || d.buah?.trim() || d.snack?.trim()) {
-              bClassData.extra++;
-            }
-            bClassData.dietMap.set(
-              dietKey,
-              (bClassData.dietMap.get(dietKey) || 0) + 1,
-            );
-          }
-        }
-
-        // Revisions in range
-        const batchIds = rangeBatches.map((b) => b.id);
-        const rangeRevisions = await db
-          .select({
-            id: otorisasiPerubahanDietTable.id,
-            pasien_id: otorisasiPerubahanDietTable.pasien_id,
-            batch_id: otorisasiPerubahanDietTable.batch_id,
-            waktu_makan: otorisasiPerubahanDietTable.waktu_makan,
-            jenis_perubahan: otorisasiPerubahanDietTable.jenis_perubahan,
-            data_baru: otorisasiPerubahanDietTable.data_baru,
-            alasan: otorisasiPerubahanDietTable.alasan,
-            requested_at: otorisasiPerubahanDietTable.requested_at,
-            reviewed_by: otorisasiPerubahanDietTable.reviewed_by,
-            reviewed_at: otorisasiPerubahanDietTable.reviewed_at,
-            nama_pasien: pasienTable.nama_pasien,
-            no_rm: pasienTable.no_rm,
-            ruangan: pasienTable.ruangan,
-            bed: pasienTable.bed,
-            kelas: pasienTable.kelas,
-            diet: pasienTable.diet,
-          })
-          .from(otorisasiPerubahanDietTable)
-          .leftJoin(
-            pasienTable,
-            eq(otorisasiPerubahanDietTable.pasien_id, pasienTable.id),
-          )
-          .where(
-            and(
-              eq(otorisasiPerubahanDietTable.status, 'APPROVED'),
-              eq(otorisasiPerubahanDietTable.jenis_perubahan, 'NEW_PATIENT'),
-              selectedWaktu !== 'ALL'
-                ? eq(otorisasiPerubahanDietTable.waktu_makan, selectedWaktu)
-                : undefined,
-            ),
-          );
-
-        for (const rev of rangeRevisions) {
-          let dataBaruObj: any = {};
-          try {
-            if (rev.data_baru) dataBaruObj = JSON.parse(rev.data_baru);
-          } catch (_) {}
-
-          if (
-            isNpoPatient({
-              is_npo: dataBaruObj.is_npo,
-              status_pasien: dataBaruObj.status_pasien,
-              diet: rev.diet || dataBaruObj.diet,
-            })
-          ) {
-            continue;
-          }
-
-          if (rev.batch_id && batchIds.includes(rev.batch_id)) {
-            const matchingBatch = rangeBatches.find(
-              (b) => b.id === rev.batch_id,
-            );
-            const targetKelas = rev.kelas || 'Kelas 3';
-            const normKelas = normalizeKelasName(targetKelas);
-            const entry = getOrCreateClassEntry(normKelas);
-            entry.revisiTambahPorsi++;
-
-            const waktu = (rev.waktu_makan || 'PAGI').toUpperCase();
-            if (waktu === 'PAGI') entry.pagi++;
-            else if (waktu === 'SIANG') entry.siang++;
-            else if (waktu === 'MALAM') entry.malam++;
-
-            // Track into dailyMap
-            if (matchingBatch?.tanggal_produksi) {
-              const dayClassMap = dailyMap.get(matchingBatch.tanggal_produksi);
-              if (dayClassMap) {
-                const dayEntry = dayClassMap.get(normKelas);
-                if (dayEntry) {
-                  dayEntry.revisiTambahPorsi++;
-                  if (waktu === 'PAGI') dayEntry.pagi++;
-                  else if (waktu === 'SIANG') dayEntry.siang++;
-                  else if (waktu === 'MALAM') dayEntry.malam++;
-                }
-              }
-            }
-
-            // Track into batchMap
-            if (batchMap.has(rev.batch_id)) {
-              const bEntry = batchMap.get(rev.batch_id)!;
-              if (!bEntry.classMap.has(normKelas)) {
-                bEntry.classMap.set(normKelas, {
-                  pagi: 0,
-                  siang: 0,
-                  malam: 0,
-                  extra: 0,
-                  baselinePorsi: 0,
-                  revisiTambahPorsi: 0,
-                  pasienSet: new Set(),
-                  dietMap: new Map(),
-                });
-              }
-              const bClassData = bEntry.classMap.get(normKelas)!;
-              bClassData.revisiTambahPorsi++;
-              bClassData.pasienSet.add(
-                rev.no_rm || rev.nama_pasien || `rev-${rev.id}`,
-              );
-              if (waktu === 'PAGI') bClassData.pagi++;
-              else if (waktu === 'SIANG') bClassData.siang++;
-              else if (waktu === 'MALAM') bClassData.malam++;
-
-              let dataBaruObj: any = {};
-              try {
-                if (rev.data_baru) dataBaruObj = JSON.parse(rev.data_baru);
-              } catch (_) {}
-
-              bEntry.revisiPatients.push({
-                id: rev.id,
-                nama_pasien:
-                  rev.nama_pasien ||
-                  dataBaruObj.nama_pasien ||
-                  'Pasien Susulan',
-                no_rm: rev.no_rm || dataBaruObj.no_rm || '-',
-                kelas: normKelas,
-                ruangan: rev.ruangan || dataBaruObj.ruangan || '-',
-                bed: rev.bed || dataBaruObj.bed || '-',
-                diet: rev.diet || dataBaruObj.diet || 'Standar',
-                waktu_makan: waktu,
-                jenis_perubahan: 'NEW_PATIENT',
-                alasan: rev.alasan || 'Pasien baru pasca-cut-off (Susulan)',
-                requested_by: 'Ahli Gizi RS',
-                requested_at: rev.requested_at
-                  ? new Date(rev.requested_at).toLocaleTimeString('id-ID')
-                  : undefined,
-                reviewed_by: rev.reviewed_by || 'Supervisor Gizi',
-                reviewed_at: rev.reviewed_at
-                  ? new Date(rev.reviewed_at).toLocaleTimeString('id-ID')
-                  : undefined,
-              });
-            }
-          }
-        }
-
-        // Build snapshotSummaries from batchMap for "Cetak 1 Snapshot 1 Lembar"
-        snapshotSummaries = [];
-        for (const [bId, bData] of batchMap.entries()) {
-          const b = bData.batch;
-          const bClassMap = bData.classMap;
-
-          for (const stdClass of ['VIP', 'Kelas 1', 'Kelas 2', 'Kelas 3']) {
-            if (!bClassMap.has(stdClass)) {
-              bClassMap.set(stdClass, {
-                pagi: 0,
-                siang: 0,
-                malam: 0,
-                extra: 0,
-                baselinePorsi: 0,
-                revisiTambahPorsi: 0,
-                pasienSet: new Set(),
-                dietMap: new Map(),
-              });
-            }
-          }
-
-          const bClasses: InvoiceClassConsumption[] = Array.from(
-            bClassMap.entries(),
-          ).map(([kName, kData]) => {
-            const baselinePorsi = kData.baselinePorsi;
-            const revisiTambahPorsi = kData.revisiTambahPorsi;
-            const totalPorsi = baselinePorsi + revisiTambahPorsi;
-            const totalPasien = kData.pasienSet.size;
-
-            const dietBreakdown: DietBreakdownItem[] = Array.from(
-              kData.dietMap.entries(),
-            ).map(([key, count]) => {
-              const [bentuk, kategori] = key.split(' - ');
-              return {
-                bentuk: bentuk || 'Biasa',
-                kategori: kategori || 'Standar',
-                count,
-              };
-            });
-
-            return {
-              kelas: kName,
-              pagiCount: kData.pagi,
-              siangCount: kData.siang,
-              malamCount: kData.malam,
-              extraCount: kData.extra,
-              baselinePorsi,
-              revisiTambahPorsi,
-              totalPorsi,
-              totalPasien,
-              dietBreakdown,
-            };
-          });
-
-          bClasses.sort((a, b) => {
-            const orderA = KELAS_ORDER[a.kelas.toUpperCase()] || 99;
-            const orderB = KELAS_ORDER[b.kelas.toUpperCase()] || 99;
-            if (orderA !== orderB) return orderA - orderB;
-            return a.kelas.localeCompare(b.kelas);
-          });
-
-          let bPagi = 0,
-            bSiang = 0,
-            bMalam = 0,
-            bExtra = 0,
-            bPorsi = 0,
-            bPasien = 0,
-            bBaseline = 0,
-            bRevisiCount = 0;
-
-          for (const c of bClasses) {
-            bPagi += c.pagiCount;
-            bSiang += c.siangCount;
-            bMalam += c.malamCount;
-            bExtra += c.extraCount;
-            bPorsi += c.totalPorsi;
-            bPasien += c.totalPasien;
-            bBaseline += c.baselinePorsi || 0;
-            bRevisiCount += c.revisiTambahPorsi || 0;
-          }
-
-          const dDateObj = new Date(String(b.tanggal_produksi));
-          const dayFormatted = !isNaN(dDateObj.getTime())
-            ? dDateObj.toLocaleDateString('id-ID', {
-                weekday: 'long',
-                day: 'numeric',
-                month: 'long',
-                year: 'numeric',
-              })
-            : String(b.tanggal_produksi);
-
-          snapshotSummaries.push({
-            tanggal: String(b.tanggal_produksi),
-            tanggalFormatted: dayFormatted,
-            invoiceNumber: `INVOICE/GZ-RS/${String(b.tanggal_produksi).replace(/-/g, '')}-${b.waktu_makan}/BATCH-${b.id}`,
-            hospitalName: 'RSUD dr Slamet Garut',
-            cateringVendor: 'INSTALASI GIZI & LAYANAN KATERING RS',
-            statusBatch: 'OFFICIAL_LOCKED',
-            availableDates,
-            batchId: b.id,
-            batchCode: b.batch_code,
-            waktuMakan: b.waktu_makan,
-            isPerSnapshot: true,
-            cutoffTime: b.cutoff_time,
-            baselineTotalPorsi: bBaseline,
-            revisiTambahPasienCount: bRevisiCount,
-            revisiPatients: bData.revisiPatients,
-            grandTotalPagi: bPagi,
-            grandTotalSiang: bSiang,
-            grandTotalMalam: bMalam,
-            grandTotalExtra: bExtra,
-            grandTotalPorsi: bPorsi,
-            grandTotalPasien: bPasien,
-            classes: bClasses,
-            lastUpdated: new Date().toLocaleTimeString('id-ID'),
-            isRange: false,
-          });
-        }
-      }
+      const rangeResult = await processRangeMode(
+        ctx, start, end, selectedWaktu, availableDates,
+      );
+      dailySummaries = rangeResult.dailySummaries;
+      snapshotSummaries = rangeResult.snapshotSummaries;
     } else {
-      // ───────────────────────────────────────────────────────────────────────
-      // SCENARIO 3: SINGLE DATE, ALL MEALTIMES COMBINED ('ALL')
-      // ───────────────────────────────────────────────────────────────────────
-      const dateBatches = await db
-        .select()
-        .from(snapshotBatchTable)
-        .where(eq(snapshotBatchTable.tanggal_produksi, selectedDate));
-
-      if (dateBatches && dateBatches.length > 0) {
-        isOfficialLocked = true;
-
-        for (const batch of dateBatches) {
-          const waktu = (batch.waktu_makan || 'PAGI').toUpperCase();
-          const details = await db
-            .select()
-            .from(snapshotDetailTable)
-            .where(eq(snapshotDetailTable.batch_id, batch.id));
-
-          for (const d of details) {
-            const isNpo =
-              d.status_saat_snapshot === 'NPO' ||
-              (d.diet_rs_raw || '').toLowerCase() === 'npo' ||
-              (d.diet_rs_raw || '').toLowerCase() === 'puasa';
-
-            const entry = getOrCreateClassEntry(d.kelas);
-            entry.pasienSet.add(d.no_rm || d.nama_pasien);
-
-            if (!isNpo) {
-              entry.baselinePorsi++;
-              if (waktu === 'PAGI') entry.pagi++;
-              else if (waktu === 'SIANG') entry.siang++;
-              else if (waktu === 'MALAM' || waktu === 'SORE') entry.malam++;
-
-              if (d.extra?.trim() || d.buah?.trim() || d.snack?.trim()) {
-                entry.extra++;
-              }
-
-              const bentuk = d.bentuk_makanan || 'Biasa';
-              const kategori = d.kategori_diet || 'Standar';
-              const dietKey = `${bentuk} - ${kategori}`;
-              entry.dietMap.set(dietKey, (entry.dietMap.get(dietKey) || 0) + 1);
-            }
-          }
-
-          // Approved revisions for this batch
-          const batchRevisions = await db
-            .select({
-              id: otorisasiPerubahanDietTable.id,
-              pasien_id: otorisasiPerubahanDietTable.pasien_id,
-              batch_id: otorisasiPerubahanDietTable.batch_id,
-              waktu_makan: otorisasiPerubahanDietTable.waktu_makan,
-              jenis_perubahan: otorisasiPerubahanDietTable.jenis_perubahan,
-              nama_pasien: pasienTable.nama_pasien,
-              no_rm: pasienTable.no_rm,
-              kelas: pasienTable.kelas,
-              diet: pasienTable.diet,
-            })
-            .from(otorisasiPerubahanDietTable)
-            .leftJoin(
-              pasienTable,
-              eq(otorisasiPerubahanDietTable.pasien_id, pasienTable.id),
-            )
-            .where(
-              and(
-                eq(otorisasiPerubahanDietTable.batch_id, batch.id),
-                eq(otorisasiPerubahanDietTable.status, 'APPROVED'),
-                eq(otorisasiPerubahanDietTable.jenis_perubahan, 'NEW_PATIENT'),
-              ),
-            );
-
-          for (const rev of batchRevisions) {
-            const entry = getOrCreateClassEntry(rev.kelas || 'Kelas 3');
-            entry.revisiTambahPorsi++;
-            if (waktu === 'PAGI') entry.pagi++;
-            else if (waktu === 'SIANG') entry.siang++;
-            else if (waktu === 'MALAM') entry.malam++;
-          }
-        }
-      }
+      await processAllMealtimesMode(ctx, selectedDate);
     }
 
     // Ensure standard classes exist for visual consistency
-    for (const standardClass of ['VIP', 'Kelas 1', 'Kelas 2', 'Kelas 3']) {
-      if (!classMap.has(standardClass)) {
-        classMap.set(standardClass, {
-          pagi: 0,
-          siang: 0,
-          malam: 0,
-          extra: 0,
-          baselinePorsi: 0,
-          revisiTambahPorsi: 0,
-          pasienSet: new Set<string>(),
-          dietMap: new Map<string, number>(),
-        });
-      }
-    }
+    ensureStandardClasses(ctx.classMap);
 
-    // Convert classMap to sorted list
-    const classes: InvoiceClassConsumption[] = Array.from(
-      classMap.entries(),
-    ).map(([kelasName, data]) => {
-      const baselinePorsi = data.baselinePorsi;
-      const revisiTambahPorsi = data.revisiTambahPorsi;
-      const totalPorsi = isPerSnapshot
-        ? baselinePorsi + revisiTambahPorsi
-        : data.pagi + data.siang + data.malam + data.extra;
-      const totalPasien = data.pasienSet.size;
+    // Convert to sorted array and compute totals
+    const classes = classMapToSortedArray(ctx.classMap, isPerSnapshot);
+    const totals = computeGrandTotals(classes);
 
-      const dietBreakdown: DietBreakdownItem[] = Array.from(
-        data.dietMap.entries(),
-      ).map(([key, count]) => {
-        const [bentuk, kategori] = key.split(' - ');
-        return {
-          bentuk: bentuk || 'Biasa',
-          kategori: kategori || 'Standar',
-          count,
-        };
-      });
-
-      return {
-        kelas: kelasName,
-        pagiCount: data.pagi,
-        siangCount: data.siang,
-        malamCount: data.malam,
-        extraCount: data.extra,
-        baselinePorsi,
-        revisiTambahPorsi,
-        totalPorsi,
-        totalPasien,
-        dietBreakdown,
-      };
-    });
-
-    classes.sort((a, b) => {
-      const orderA = KELAS_ORDER[a.kelas.toUpperCase()] || 99;
-      const orderB = KELAS_ORDER[b.kelas.toUpperCase()] || 99;
-      if (orderA !== orderB) return orderA - orderB;
-      return a.kelas.localeCompare(b.kelas);
-    });
-
-    // Compute Grand Totals
-    let grandTotalPagi = 0;
-    let grandTotalSiang = 0;
-    let grandTotalMalam = 0;
-    let grandTotalExtra = 0;
-    let grandTotalPorsi = 0;
-    let grandTotalPasien = 0;
-    let baselineTotalPorsi = 0;
-    let revisiTambahPasienCount = 0;
-
-    for (const c of classes) {
-      grandTotalPagi += c.pagiCount;
-      grandTotalSiang += c.siangCount;
-      grandTotalMalam += c.malamCount;
-      grandTotalExtra += c.extraCount;
-      grandTotalPorsi += c.totalPorsi;
-      grandTotalPasien += c.totalPasien;
-      baselineTotalPorsi += c.baselinePorsi || 0;
-      revisiTambahPasienCount += c.revisiTambahPorsi || 0;
-    }
-
-    // If range query, build per-day summaries for "Cetak Harian"
-    let dailySummaries: InvoiceDailySummary[] | undefined = undefined;
-
-    if (isRange && dailyMap.size > 0) {
-      dailySummaries = [];
-      const sortedDates = Array.from(dailyMap.keys()).sort();
-
-      for (const dayStr of sortedDates) {
-        const dayClassMap = dailyMap.get(dayStr)!;
-
-        for (const stdClass of ['VIP', 'Kelas 1', 'Kelas 2', 'Kelas 3']) {
-          if (!dayClassMap.has(stdClass)) {
-            dayClassMap.set(stdClass, {
-              pagi: 0,
-              siang: 0,
-              malam: 0,
-              extra: 0,
-              baselinePorsi: 0,
-              revisiTambahPorsi: 0,
-              pasienSet: new Set(),
-              dietMap: new Map(),
-            });
-          }
-        }
-
-        const dayClasses: InvoiceClassConsumption[] = Array.from(
-          dayClassMap.entries(),
-        ).map(([kName, kData]) => {
-          const totalPorsi =
-            kData.pagi + kData.siang + kData.malam + kData.extra;
-          const totalPasien = kData.pasienSet.size;
-
-          const dietBreakdown: DietBreakdownItem[] = Array.from(
-            kData.dietMap.entries(),
-          ).map(([key, count]) => {
-            const [b, k] = key.split(' - ');
-            return {
-              bentuk: b || 'Biasa',
-              kategori: k || 'Standar',
-              count,
-            };
-          });
-
-          return {
-            kelas: kName,
-            pagiCount: kData.pagi,
-            siangCount: kData.siang,
-            malamCount: kData.malam,
-            extraCount: kData.extra,
-            baselinePorsi: kData.baselinePorsi,
-            revisiTambahPorsi: kData.revisiTambahPorsi,
-            totalPorsi,
-            totalPasien,
-            dietBreakdown,
-          };
-        });
-
-        dayClasses.sort((a, b) => {
-          const orderA = KELAS_ORDER[a.kelas.toUpperCase()] || 99;
-          const orderB = KELAS_ORDER[b.kelas.toUpperCase()] || 99;
-          if (orderA !== orderB) return orderA - orderB;
-          return a.kelas.localeCompare(b.kelas);
-        });
-
-        let dPagi = 0,
-          dSiang = 0,
-          dMalam = 0,
-          dExtra = 0,
-          dPorsi = 0,
-          dPasien = 0,
-          dBaseline = 0,
-          dRevisi = 0;
-
-        for (const c of dayClasses) {
-          dPagi += c.pagiCount;
-          dSiang += c.siangCount;
-          dMalam += c.malamCount;
-          dExtra += c.extraCount;
-          dPorsi += c.totalPorsi;
-          dPasien += c.totalPasien;
-          dBaseline += c.baselinePorsi || 0;
-          dRevisi += c.revisiTambahPorsi || 0;
-        }
-
-        const dDateObj = new Date(dayStr);
-        const dayFormatted = !isNaN(dDateObj.getTime())
-          ? dDateObj.toLocaleDateString('id-ID', {
-              weekday: 'long',
-              day: 'numeric',
-              month: 'long',
-              year: 'numeric',
-            })
-          : dayStr;
-
-        dailySummaries.push({
-          tanggal: dayStr,
-          tanggalFormatted: dayFormatted,
-          invoiceNumber: `REKAP/GZ-RS/${dayStr.replace(/-/g, '')}/001`,
-          hospitalName: 'RSUD dr Slamet Garut',
-          cateringVendor: 'INSTALASI GIZI & LAYANAN KATERING RS',
-          statusBatch: 'OFFICIAL_LOCKED',
-          availableDates,
-          baselineTotalPorsi: dBaseline,
-          revisiTambahPasienCount: dRevisi,
-          grandTotalPagi: dPagi,
-          grandTotalSiang: dSiang,
-          grandTotalMalam: dMalam,
-          grandTotalExtra: dExtra,
-          grandTotalPorsi: dPorsi,
-          grandTotalPasien: dPasien,
-          classes: dayClasses,
-          lastUpdated: new Date().toLocaleTimeString('id-ID'),
-          isRange: false,
-        });
-      }
-    }
-
+    // Generate invoice number
     const invoiceNumber = isRange
       ? `REKAP/GZ-RS/PERIODE/${start.replace(/-/g, '')}-${end.replace(/-/g, '')}/001`
       : isPerSnapshot
-        ? `INVOICE/GZ-RS/${selectedDate.replace(/-/g, '')}-${selectedWaktu}/BATCH-${resolvedBatchId || 'LIVE'}`
+        ? `INVOICE/GZ-RS/${selectedDate.replace(/-/g, '')}-${selectedWaktu}/BATCH-${ctx.resolvedBatchId || 'LIVE'}`
         : `REKAP/GZ-RS/${selectedDate.replace(/-/g, '')}/001`;
 
     return {
@@ -1151,28 +1097,26 @@ export async function getInvoiceDailyData(
       invoiceNumber,
       hospitalName: 'RSUD dr Slamet Garut',
       cateringVendor: 'INSTALASI GIZI & LAYANAN KATERING RS',
-      statusBatch: isOfficialLocked ? 'OFFICIAL_LOCKED' : 'LIVE_PREVIEW',
+      statusBatch: ctx.isOfficialLocked ? 'OFFICIAL_LOCKED' : 'LIVE_PREVIEW',
       availableDates,
       availableBatches,
 
-      batchId: resolvedBatchId,
-      batchCode: resolvedBatchCode,
+      batchId: ctx.resolvedBatchId,
+      batchCode: ctx.resolvedBatchCode,
       waktuMakan: selectedWaktu,
       isPerSnapshot,
-      cutoffTime: resolvedCutoffTime,
+      cutoffTime: ctx.resolvedCutoffTime,
 
-      baselineTotalPorsi,
-      revisiTambahPasienCount,
-      revisiPatients,
-
-      grandTotalPagi,
-      grandTotalSiang,
-      grandTotalMalam,
-      grandTotalExtra,
-      grandTotalPorsi,
-      grandTotalPasien,
+      ...totals,
+      revisiPatients: ctx.revisiPatients,
 
       classes,
+      tktpCounts: {
+        pagi: ctx.tktp.pagi,
+        siang: ctx.tktp.siang,
+        malam: ctx.tktp.malam,
+        total: ctx.tktp.pagi + ctx.tktp.siang + ctx.tktp.malam,
+      },
       lastUpdated: new Date().toLocaleTimeString('id-ID'),
 
       isRange,
@@ -1184,82 +1128,6 @@ export async function getInvoiceDailyData(
     };
   } catch (error) {
     console.error('Error fetching invoice snapshot data:', error);
-    const today = new Date().toISOString().slice(0, 10);
-    return {
-      tanggal: today,
-      tanggalFormatted: 'Hari Ini',
-      invoiceNumber: `REKAP/GZ-RS/${today.replace(/-/g, '')}/001`,
-      hospitalName: 'RSUD dr Slamet Garut',
-      cateringVendor: 'INSTALASI GIZI & LAYANAN KATERING RS',
-      statusBatch: 'LIVE_PREVIEW',
-      availableDates: [today],
-      availableBatches: [],
-
-      waktuMakan: 'SIANG',
-      isPerSnapshot: true,
-
-      baselineTotalPorsi: 0,
-      revisiTambahPasienCount: 0,
-      revisiPatients: [],
-
-      grandTotalPagi: 0,
-      grandTotalSiang: 0,
-      grandTotalMalam: 0,
-      grandTotalExtra: 0,
-      grandTotalPorsi: 0,
-      grandTotalPasien: 0,
-
-      classes: [
-        {
-          kelas: 'VIP',
-          pagiCount: 0,
-          siangCount: 0,
-          malamCount: 0,
-          extraCount: 0,
-          baselinePorsi: 0,
-          revisiTambahPorsi: 0,
-          totalPorsi: 0,
-          totalPasien: 0,
-          dietBreakdown: [],
-        },
-        {
-          kelas: 'Kelas 1',
-          pagiCount: 0,
-          siangCount: 0,
-          malamCount: 0,
-          extraCount: 0,
-          baselinePorsi: 0,
-          revisiTambahPorsi: 0,
-          totalPorsi: 0,
-          totalPasien: 0,
-          dietBreakdown: [],
-        },
-        {
-          kelas: 'Kelas 2',
-          pagiCount: 0,
-          siangCount: 0,
-          malamCount: 0,
-          extraCount: 0,
-          baselinePorsi: 0,
-          revisiTambahPorsi: 0,
-          totalPorsi: 0,
-          totalPasien: 0,
-          dietBreakdown: [],
-        },
-        {
-          kelas: 'Kelas 3',
-          pagiCount: 0,
-          siangCount: 0,
-          malamCount: 0,
-          extraCount: 0,
-          baselinePorsi: 0,
-          revisiTambahPorsi: 0,
-          totalPorsi: 0,
-          totalPasien: 0,
-          dietBreakdown: [],
-        },
-      ],
-      lastUpdated: new Date().toLocaleTimeString('id-ID'),
-    };
+    return buildEmptyFallbackSummary();
   }
 }

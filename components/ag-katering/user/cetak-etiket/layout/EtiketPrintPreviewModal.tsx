@@ -88,9 +88,6 @@ export default function EtiketPrintPreviewModal({
   const [customNotice, setCustomNotice] = useState<string>(NOTICE_DEFAULT_V1);
   const [customDateLabel, setCustomDateLabel] = useState<string>('');
   const [customDateValue, setCustomDateValue] = useState<string>('');
-  const [mealTimeFormat, setMealTimeFormat] = useState<'slash' | 'single'>(
-    'slash',
-  );
 
   // Toggles
   const [showQuote, setShowQuote] = useState<boolean>(true);
@@ -403,34 +400,6 @@ export default function EtiketPrintPreviewModal({
 
           {/* Row 3: Pengaturan Format Waktu, Tanggal, dan Checkboxes */}
           <div className='grid grid-cols-1 md:grid-cols-3 gap-24 pt-1 border-t border-border/40 text-xs'>
-            {/* Format Waktu Makan */}
-            <div className='flex items-center gap-2'>
-              <Clock className='w-3.5 h-3.5 text-muted-foreground shrink-0' />
-              <span className='font-medium text-muted-foreground shrink-0'>
-                Format Waktu:
-              </span>
-              <div className='flex items-center gap-1'>
-                <Button
-                  type='button'
-                  size='sm'
-                  variant={mealTimeFormat === 'slash' ? 'default' : 'outline'}
-                  onClick={() => setMealTimeFormat('slash')}
-                  className='h-6 text-[11px] px-2'
-                >
-                  PAGI/SIANG/MALAM
-                </Button>
-                <Button
-                  type='button'
-                  size='sm'
-                  variant={mealTimeFormat === 'single' ? 'default' : 'outline'}
-                  onClick={() => setMealTimeFormat('single')}
-                  className='h-6 text-[11px] px-2'
-                >
-                  Waktu Saja
-                </Button>
-              </div>
-            </div>
-
             {/* Margin Cetak */}
             <div className='flex items-center gap-2'>
               <Sliders className='w-3.5 h-3.5 text-muted-foreground shrink-0' />
@@ -542,7 +511,6 @@ export default function EtiketPrintPreviewModal({
                   customDateValue={
                     customDateValue.trim() ? customDateValue : undefined
                   }
-                  mealTimeFormat={mealTimeFormat}
                   showQuote={showQuote}
                   showNotice={showNotice}
                   showBedWithRuangan={showBedWithRuangan}
