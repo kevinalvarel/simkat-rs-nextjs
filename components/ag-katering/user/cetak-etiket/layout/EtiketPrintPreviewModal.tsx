@@ -13,6 +13,9 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Printer,
   Tag,
@@ -20,8 +23,13 @@ import {
   Utensils,
   RotateCcw,
   Sliders,
+  Sparkles,
+  Layers,
+  Calendar,
+  Clock,
+  Eye,
 } from 'lucide-react';
-import type { EtiketData } from '@/types/pemorsiantypes';
+import type { EtiketData, EtiketVariant } from '@/types/pemorsiantypes';
 import EtiketCard from '@/components/ag-katering/user/cetak-etiket/layout/EtiketCard';
 
 interface EtiketPrintPreviewModalProps {
@@ -32,8 +40,12 @@ interface EtiketPrintPreviewModalProps {
   onPrintSuccess?: () => void;
 }
 
+const DEFAULT_HEADER_TITLE = 'ETIKET DIET PASIEN';
 const DEFAULT_QUOTE = 'Setiap suapan adalah langkah menuju sehat';
-const DEFAULT_NOTICE = '*Alat makan diambil 1 jam setelah pengantaran';
+
+const NOTICE_DEFAULT_V1 = '*Alat makan diambil 1 jam setelah pengantaran';
+const NOTICE_DEFAULT_V2 =
+  '*Makanan dikonsumsi maksimal 1 jam setelah disajikan';
 
 const QUOTE_PRESETS = [
   'Setiap suapan adalah langkah menuju sehat',
@@ -42,11 +54,18 @@ const QUOTE_PRESETS = [
   'Makanan sehat untuk pemulihan optimal',
 ];
 
-const NOTICE_PRESETS = [
+const NOTICE_PRESETS_V1 = [
   '*Alat makan diambil 1 jam setelah pengantaran',
   '*Alat makan diambil 30 menit setelah pengantaran',
   '*Alat makan diambil 2 jam setelah pengantaran',
   '*Harap kembalikan alat makan ke troli gizi',
+];
+
+const NOTICE_PRESETS_V2 = [
+  '*Makanan dikonsumsi maksimal 1 jam setelah disajikan',
+  '*Makanan dikonsumsi maksimal 2 jam setelah disajikan',
+  '*Sebaiknya dikonsumsi dalam keadaan hangat',
+  '*Alat makan diambil 1 jam setelah pengantaran',
 ];
 
 export default function EtiketPrintPreviewModal({
@@ -58,10 +77,28 @@ export default function EtiketPrintPreviewModal({
 }: EtiketPrintPreviewModalProps) {
   const printRef = useRef<HTMLDivElement>(null);
 
+  // Variant State: 'diet-focus' (Gambar 1) vs 'ruangan-focus' (Gambar 2)
+  const [selectedVariant, setSelectedVariant] =
+    useState<EtiketVariant>('diet-focus');
+
   // Customization States
+  const [customHeaderTitle, setCustomHeaderTitle] =
+    useState<string>(DEFAULT_HEADER_TITLE);
   const [customQuote, setCustomQuote] = useState<string>(DEFAULT_QUOTE);
-  const [customNotice, setCustomNotice] = useState<string>(DEFAULT_NOTICE);
-  const [printMargin, setPrintMargin] = useState<number>(3); // 3mm default safe margin
+  const [customNotice, setCustomNotice] = useState<string>(NOTICE_DEFAULT_V1);
+  const [customDateLabel, setCustomDateLabel] = useState<string>('');
+  const [customDateValue, setCustomDateValue] = useState<string>('');
+  const [mealTimeFormat, setMealTimeFormat] = useState<'slash' | 'single'>(
+    'slash',
+  );
+
+  // Toggles
+  const [showQuote, setShowQuote] = useState<boolean>(true);
+  const [showNotice, setShowNotice] = useState<boolean>(true);
+  const [showBedWithRuangan, setShowBedWithRuangan] = useState<boolean>(true);
+
+  // Print Layout Margin
+  const [printMargin, setPrintMargin] = useState<number>(3); // 3mm safe margin
 
   const isBatch = etiketList && etiketList.length > 1;
   const modalTitle =
@@ -70,13 +107,33 @@ export default function EtiketPrintPreviewModal({
       ? `Cetak ${etiketList?.length || 0} Etiket Makan`
       : `Cetak Etiket Makan - ${etiketList?.[0]?.nama || ''}`);
 
+  // Handle variant change and sync natural notice default if untouched
+  const handleVariantChange = (val: string) => {
+    const newVariant = val as EtiketVariant;
+    setSelectedVariant(newVariant);
+
+    if (newVariant === 'diet-focus' && customNotice === NOTICE_DEFAULT_V2) {
+      setCustomNotice(NOTICE_DEFAULT_V1);
+    } else if (
+      newVariant === 'ruangan-focus' &&
+      customNotice === NOTICE_DEFAULT_V1
+    ) {
+      setCustomNotice(NOTICE_DEFAULT_V2);
+    }
+  };
+
+  const activeNoticePresets =
+    selectedVariant === 'diet-focus' ? NOTICE_PRESETS_V1 : NOTICE_PRESETS_V2;
+
+  const defaultNoticeForActiveVariant =
+    selectedVariant === 'diet-focus' ? NOTICE_DEFAULT_V1 : NOTICE_DEFAULT_V2;
+
   const triggerReactPrint = useReactToPrint({
     contentRef: printRef,
     documentTitle: modalTitle,
     onAfterPrint: () => {
       onPrintSuccess?.();
     },
-
     pageStyle: `
       @page {
         size: auto;
@@ -106,9 +163,9 @@ export default function EtiketPrintPreviewModal({
           width: 96mm !important;
           max-width: 98mm !important;
           min-height: 56mm !important;
-          padding: 3mm 3.5mm !important;
-          margin: 2.5mm auto !important;
-          border: 1.5px solid #000000 !important;
+          padding: 2.5mm 3.2mm !important;
+          margin: 2mm auto !important;
+          border: 1.2px solid #000000 !important;
           border-radius: 2px !important;
           background-color: #ffffff !important;
           color: #000000 !important;
@@ -125,16 +182,14 @@ export default function EtiketPrintPreviewModal({
           box-shadow: none !important;
         }
         .etiket-card-print h2 {
-          font-size: 10.5pt !important;
+          font-size: 10pt !important;
           margin: 0 !important;
           line-height: 1.1 !important;
         }
-        .etiket-card-print table {
-          font-size: 8pt !important;
-          line-height: 1.25 !important;
-        }
-        .etiket-card-print td {
-          padding: 1mm 1.5mm !important;
+        .etiket-card-print h3 {
+          font-size: 9.5pt !important;
+          margin: 0 !important;
+          line-height: 1.1 !important;
         }
         .etiket-card-print span,
         .etiket-card-print div,
@@ -150,9 +205,9 @@ export default function EtiketPrintPreviewModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className='sm:max-w-4xl max-h-[94vh] flex flex-col p-0 overflow-hidden'>
+      <DialogContent className='sm:max-w-5xl max-h-[95vh] flex flex-col p-4 overflow-hidden'>
         {/* 1. Modal Header */}
-        <DialogHeader className='px-6 py-3.5 border-b bg-muted/20'>
+        <DialogHeader className='px-6 py-3 border-b bg-muted/20'>
           <div className='flex items-center justify-between'>
             <div className='space-y-0.5'>
               <DialogTitle className='text-base sm:text-lg font-bold flex items-center gap-2 text-foreground'>
@@ -161,43 +216,114 @@ export default function EtiketPrintPreviewModal({
               </DialogTitle>
               <DialogDescription className='text-xs text-muted-foreground'>
                 {isBatch
-                  ? `Pratinjau cetak untuk ${etiketList.length} pasien. Sesuaikan teks quotes, catatan alat makan, dan margin sebelum mencetak.`
-                  : 'Pratinjau cetak etiket makan pasien sesuai standar penyajian katering RS.'}
+                  ? `Pratinjau cetak untuk ${etiketList.length} pasien. Pilih varian desain dan sesuaikan teks sebelum mencetak.`
+                  : 'Pratinjau cetak etiket makan pasien sesuai standar penyajian gizi rumah sakit.'}
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
-        {/* 2. Customization Controls Section (Quotes, Catatan Alat, Margin) */}
-        <div className='px-6 py-3 border-b bg-card/60 space-y-3 shrink-0'>
-          <div className='grid grid-cols-1 md:grid-cols-2 gap-3.5'>
-            {/* Input Quotes / Pesan Motivasi */}
-            <div className='space-y-1.5'>
+        {/* 2. Customization Controls Section */}
+        <div className='px-6 py-3 border-b bg-card/70 space-y-3 shrink-0 overflow-y-auto max-h-[36vh]'>
+          {/* Row 1: Pemilihan Varian Desain (Shadcn Tabs) */}
+          <div className='flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-border/50'>
+            <div className='flex items-center gap-2'>
+              <Layers className='w-4 h-4 text-primary shrink-0' />
+              <div>
+                <span className='text-xs font-bold text-foreground block'>
+                  Varian Desain Etiket:
+                </span>
+                <span className='text-[11px] text-muted-foreground'>
+                  {selectedVariant === 'diet-focus'
+                    ? 'Varian 1: Subjudul Nama Diet dengan format garis pembatas'
+                    : 'Varian 2: Subjudul Ruangan Pasien dengan 2 kolom titik dua sejajar'}
+                </span>
+              </div>
+            </div>
+
+            {/* Switcher Varian menggunakan Shadcn Tabs */}
+            <Tabs
+              value={selectedVariant}
+              onValueChange={handleVariantChange}
+              className='shrink-0'
+            >
+              <TabsList className='grid grid-cols-2 h-8'>
+                <TabsTrigger value='diet-focus' className='text-xs px-3'>
+                  Varian 1 (Fokus Diet)
+                </TabsTrigger>
+                <TabsTrigger value='ruangan-focus' className='text-xs px-3'>
+                  Varian 2 (Fokus Ruangan)
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+
+          {/* Row 2: Kustomisasi Kalimat (Judul, Quotes, Catatan) */}
+          <div className='grid grid-cols-1 md:grid-cols-3 gap-3'>
+            {/* Input Judul Header */}
+            <div className='space-y-1'>
+              <div className='flex items-center justify-between'>
+                <Label
+                  htmlFor='input-header-title'
+                  className='text-xs font-semibold flex items-center gap-1 text-foreground'
+                >
+                  Judul Kop Etiket
+                </Label>
+                {customHeaderTitle !== DEFAULT_HEADER_TITLE && (
+                  <Button
+                    type='button'
+                    variant='ghost'
+                    size='icon'
+                    onClick={() => setCustomHeaderTitle(DEFAULT_HEADER_TITLE)}
+                    className='h-5 w-5 text-muted-foreground hover:text-foreground'
+                    title='Reset ke judul awal'
+                  >
+                    <RotateCcw className='w-3 h-3' />
+                  </Button>
+                )}
+              </div>
+              <Input
+                id='input-header-title'
+                value={customHeaderTitle}
+                onChange={(e) => setCustomHeaderTitle(e.target.value)}
+                placeholder='ETIKET DIET PASIEN'
+                className='h-8 text-xs bg-background'
+              />
+              <span className='text-[10px] text-muted-foreground block truncate'>
+                Default: ETIKET DIET PASIEN
+              </span>
+            </div>
+
+            {/* Input Quotes Motivasi */}
+            <div className='space-y-1'>
               <div className='flex items-center justify-between'>
                 <Label
                   htmlFor='input-quote'
-                  className='text-xs font-semibold flex items-center gap-1.5 text-foreground'
+                  className='text-xs font-semibold flex items-center gap-1 text-foreground'
                 >
                   <Quote className='w-3.5 h-3.5 text-amber-500' />
-                  Quotes / Pesan Motivasi di Etiket
+                  Quotes Motivasi
                 </Label>
                 {customQuote !== DEFAULT_QUOTE && (
-                  <button
+                  <Button
                     type='button'
+                    variant='ghost'
+                    size='icon'
                     onClick={() => setCustomQuote(DEFAULT_QUOTE)}
-                    className='text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors cursor-pointer'
-                    title='Kembalikan ke quotes awal'
+                    className='h-5 w-5 text-muted-foreground hover:text-foreground'
+                    title='Reset quotes'
                   >
-                    <RotateCcw className='w-3 h-3' /> Reset
-                  </button>
+                    <RotateCcw className='w-3 h-3' />
+                  </Button>
                 )}
               </div>
               <Input
                 id='input-quote'
                 value={customQuote}
                 onChange={(e) => setCustomQuote(e.target.value)}
-                placeholder='Tulis pesan/quotes motivasi...'
+                placeholder='Tulis kalimat quotes...'
                 className='h-8 text-xs bg-background'
+                disabled={!showQuote}
               />
               {/* Preset Chips */}
               <div className='flex flex-wrap gap-1 pt-0.5'>
@@ -206,10 +332,11 @@ export default function EtiketPrintPreviewModal({
                     key={i}
                     type='button'
                     onClick={() => setCustomQuote(preset)}
-                    className={`text-[10px] px-2 py-0.5 rounded-full border transition-all cursor-pointer truncate max-w-[200px] ${
+                    disabled={!showQuote}
+                    className={`text-[9.5px] px-1.5 py-0.5 rounded border transition-all cursor-pointer truncate max-w-[140px] ${
                       customQuote === preset
                         ? 'bg-amber-100 text-amber-900 border-amber-300 font-semibold dark:bg-amber-950 dark:text-amber-200'
-                        : 'bg-muted/50 text-muted-foreground hover:bg-muted border-border'
+                        : 'bg-muted/60 text-muted-foreground hover:bg-muted border-border'
                     }`}
                     title={preset}
                   >
@@ -219,45 +346,51 @@ export default function EtiketPrintPreviewModal({
               </div>
             </div>
 
-            {/* Input Catatan Pengambilan Alat Makan */}
-            <div className='space-y-1.5'>
+            {/* Input Catatan Alat / Makanan */}
+            <div className='space-y-1'>
               <div className='flex items-center justify-between'>
                 <Label
                   htmlFor='input-notice'
-                  className='text-xs font-semibold flex items-center gap-1.5 text-foreground'
+                  className='text-xs font-semibold flex items-center gap-1 text-foreground'
                 >
-                  <Utensils className='w-3.5 h-3.5 text-blue-500' />
-                  Catatan Pengambilan Alat Makan
+                  <Utensils className='w-3.5 h-3.5 text-emerald-500' />
+                  Catatan Tambahan
                 </Label>
-                {customNotice !== DEFAULT_NOTICE && (
-                  <button
+                {customNotice !== defaultNoticeForActiveVariant && (
+                  <Button
                     type='button'
-                    onClick={() => setCustomNotice(DEFAULT_NOTICE)}
-                    className='text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors cursor-pointer'
-                    title='Kembalikan ke catatan awal'
+                    variant='ghost'
+                    size='icon'
+                    onClick={() =>
+                      setCustomNotice(defaultNoticeForActiveVariant)
+                    }
+                    className='h-5 w-5 text-muted-foreground hover:text-foreground'
+                    title='Reset catatan'
                   >
-                    <RotateCcw className='w-3 h-3' /> Reset
-                  </button>
+                    <RotateCcw className='w-3 h-3' />
+                  </Button>
                 )}
               </div>
               <Input
                 id='input-notice'
                 value={customNotice}
                 onChange={(e) => setCustomNotice(e.target.value)}
-                placeholder='Contoh: *Alat makan diambil 1 jam setelah pengantaran'
+                placeholder='Contoh: *Alat makan diambil 1 jam...'
                 className='h-8 text-xs bg-background'
+                disabled={!showNotice}
               />
               {/* Preset Chips */}
               <div className='flex flex-wrap gap-1 pt-0.5'>
-                {NOTICE_PRESETS.map((preset, i) => (
+                {activeNoticePresets.map((preset, i) => (
                   <button
                     key={i}
                     type='button'
                     onClick={() => setCustomNotice(preset)}
-                    className={`text-[10px] px-2 py-0.5 rounded-full border transition-all cursor-pointer truncate max-w-[200px] ${
+                    disabled={!showNotice}
+                    className={`text-[9.5px] px-1.5 py-0.5 rounded border transition-all cursor-pointer truncate max-w-[140px] ${
                       customNotice === preset
-                        ? 'bg-blue-100 text-blue-900 border-blue-300 font-semibold dark:bg-blue-950 dark:text-blue-200'
-                        : 'bg-muted/50 text-muted-foreground hover:bg-muted border-border'
+                        ? 'bg-emerald-100 text-emerald-900 border-emerald-300 font-semibold dark:bg-emerald-950 dark:text-emerald-200'
+                        : 'bg-muted/60 text-muted-foreground hover:bg-muted border-border'
                     }`}
                     title={preset}
                   >
@@ -268,43 +401,129 @@ export default function EtiketPrintPreviewModal({
             </div>
           </div>
 
-          {/* Sub Row: Pengaturan Margin Cetak */}
-          <div className='flex items-center justify-between pt-1 border-t border-border/50 text-xs'>
+          {/* Row 3: Pengaturan Format Waktu, Tanggal, dan Checkboxes */}
+          <div className='grid grid-cols-1 md:grid-cols-3 gap-24 pt-1 border-t border-border/40 text-xs'>
+            {/* Format Waktu Makan */}
             <div className='flex items-center gap-2'>
-              <Sliders className='w-3.5 h-3.5 text-muted-foreground' />
-              <span className='text-xs text-muted-foreground font-medium'>
-                Margin Cetak:
+              <Clock className='w-3.5 h-3.5 text-muted-foreground shrink-0' />
+              <span className='font-medium text-muted-foreground shrink-0'>
+                Format Waktu:
+              </span>
+              <div className='flex items-center gap-1'>
+                <Button
+                  type='button'
+                  size='sm'
+                  variant={mealTimeFormat === 'slash' ? 'default' : 'outline'}
+                  onClick={() => setMealTimeFormat('slash')}
+                  className='h-6 text-[11px] px-2'
+                >
+                  PAGI/SIANG/MALAM
+                </Button>
+                <Button
+                  type='button'
+                  size='sm'
+                  variant={mealTimeFormat === 'single' ? 'default' : 'outline'}
+                  onClick={() => setMealTimeFormat('single')}
+                  className='h-6 text-[11px] px-2'
+                >
+                  Waktu Saja
+                </Button>
+              </div>
+            </div>
+
+            {/* Margin Cetak */}
+            <div className='flex items-center gap-2'>
+              <Sliders className='w-3.5 h-3.5 text-muted-foreground shrink-0' />
+              <span className='font-medium text-muted-foreground shrink-0'>
+                Margin:
               </span>
               <div className='flex items-center gap-1'>
                 {[
-                  { label: 'Tipis (1.5mm)', val: 1.5 },
-                  { label: 'Normal (3mm)', val: 3 },
-                  { label: 'Lebar (5mm)', val: 5 },
+                  { label: '1.5mm', val: 1.5 },
+                  { label: '3mm', val: 3 },
+                  { label: '5mm', val: 5 },
                 ].map((m) => (
-                  <button
+                  <Button
                     key={m.val}
                     type='button'
+                    size='sm'
+                    variant={printMargin === m.val ? 'default' : 'outline'}
                     onClick={() => setPrintMargin(m.val)}
-                    className={`px-2 py-0.5 text-[11px] rounded-md transition-all cursor-pointer ${
-                      printMargin === m.val
-                        ? 'bg-primary text-primary-foreground font-semibold shadow-xs'
-                        : 'bg-muted/60 text-muted-foreground hover:bg-muted'
-                    }`}
+                    className='h-6 text-[11px] px-2'
                   >
                     {m.label}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
 
-            <div className='text-[11px] text-muted-foreground hidden sm:block'>
-              Perubahan teks otomatis diterapkan ke semua kartu etiket.
+            {/* Checkbox Toggles: Quotes & Notice */}
+            <div className='flex items-center gap-3 justify-end flex-wrap'>
+              <div className='flex items-center space-x-1.5'>
+                <Checkbox
+                  id='toggle-quote'
+                  checked={showQuote}
+                  onCheckedChange={(checked) => setShowQuote(!!checked)}
+                />
+                <Label
+                  htmlFor='toggle-quote'
+                  className='text-[11px] font-medium text-foreground cursor-pointer select-none'
+                >
+                  Quotes
+                </Label>
+              </div>
+
+              <div className='flex items-center space-x-1.5'>
+                <Checkbox
+                  id='toggle-notice'
+                  checked={showNotice}
+                  onCheckedChange={(checked) => setShowNotice(!!checked)}
+                />
+                <Label
+                  htmlFor='toggle-notice'
+                  className='text-[11px] font-medium text-foreground cursor-pointer select-none'
+                >
+                  Catatan
+                </Label>
+              </div>
+
+              <div className='flex items-center space-x-1.5'>
+                <Checkbox
+                  id='toggle-bed'
+                  checked={showBedWithRuangan}
+                  onCheckedChange={(checked) =>
+                    setShowBedWithRuangan(!!checked)
+                  }
+                />
+                <Label
+                  htmlFor='toggle-bed'
+                  className='text-[11px] font-medium text-foreground cursor-pointer select-none'
+                >
+                  Nomor Bed
+                </Label>
+              </div>
             </div>
           </div>
         </div>
 
         {/* 3. Preview Scrollable Body */}
         <div className='flex-1 overflow-y-auto p-4 sm:p-6 bg-muted/40'>
+          <div className='flex items-center justify-between mb-3 px-1'>
+            <div className='flex items-center gap-2'>
+              <Eye className='w-4 h-4 text-muted-foreground' />
+              <span className='text-xs font-semibold text-muted-foreground'>
+                Pratinjau Kartu (
+                {selectedVariant === 'diet-focus'
+                  ? 'Varian 1 - Fokus Diet'
+                  : 'Varian 2 - Fokus Ruangan'}
+                )
+              </span>
+            </div>
+            <Badge variant='outline' className='text-[11px] bg-background'>
+              {etiketList.length} etiket
+            </Badge>
+          </div>
+
           <div
             ref={printRef}
             className='etiket-container-print flex flex-wrap justify-center gap-5 sm:gap-6'
@@ -313,8 +532,20 @@ export default function EtiketPrintPreviewModal({
               <div key={idx} className='flex justify-center'>
                 <EtiketCard
                   data={item}
+                  variant={selectedVariant}
+                  customHeaderTitle={customHeaderTitle}
                   customQuote={customQuote}
                   customNotice={customNotice}
+                  customDateLabel={
+                    customDateLabel.trim() ? customDateLabel : undefined
+                  }
+                  customDateValue={
+                    customDateValue.trim() ? customDateValue : undefined
+                  }
+                  mealTimeFormat={mealTimeFormat}
+                  showQuote={showQuote}
+                  showNotice={showNotice}
+                  showBedWithRuangan={showBedWithRuangan}
                 />
               </div>
             ))}
@@ -354,4 +585,3 @@ export default function EtiketPrintPreviewModal({
     </Dialog>
   );
 }
-

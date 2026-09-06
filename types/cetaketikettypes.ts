@@ -3,6 +3,7 @@ import type {
   PemorsianPatientItem,
   PemorsianRevisiItem,
   EtiketData,
+  EtiketVariant,
   PemorsianBatchOption,
 } from './pemorsiantypes';
 
@@ -11,6 +12,7 @@ export type {
   PemorsianPatientItem,
   PemorsianRevisiItem,
   EtiketData,
+  EtiketVariant,
   PemorsianBatchOption,
 };
 

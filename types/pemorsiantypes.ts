@@ -120,6 +120,8 @@ export interface PemorsianFilterState {
   status: string;
 }
 
+export type EtiketVariant = 'diet-focus' | 'ruangan-focus';
+
 export interface EtiketData {
   nama: string;
   ruangan: string;
@@ -138,3 +140,4 @@ export interface EtiketData {
   quote?: string;
   catatan_alat?: string;
 }
+
