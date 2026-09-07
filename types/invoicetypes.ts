@@ -148,3 +148,48 @@ export interface GrandTotals {
   baselineTotalPorsi: number;
   revisiTambahPasienCount: number;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SALES INVOICE (FAKTUR PENJUALAN) TYPES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/** A single line item in the Faktur Penjualan table */
+export interface SalesInvoiceLineItem {
+  no: number;
+  namaBarang: string;    // "TKTP" or "Makan Pasien"
+  type: string;          // "Kelas I", "Kelas II", "Kelas III", etc.
+  banyaknya: number;     // jumlah porsi
+  satuan: string;        // "Porsi"
+  hargaSatuan: number;   // harga per porsi (Rp)
+  jumlahHarga: number;   // banyaknya × hargaSatuan
+}
+
+/** Default harga satuan per kelas and per nama barang */
+export interface SalesInvoicePriceConfig {
+  tktpKelas1: number;
+  tktpKelas2: number;
+  tktpKelas3: number;
+  makanPasienKelas1: number;
+  makanPasienKelas2: number;
+  makanPasienKelas3: number;
+}
+
+/** Extended summary for Faktur Penjualan with pricing */
+export interface SalesInvoiceSummary extends InvoiceDailySummary {
+  lineItems: SalesInvoiceLineItem[];
+  totalBanyaknya: number;
+  totalHarga: number;
+  terbilang: string;
+  priceConfig: SalesInvoicePriceConfig;
+  // Monthly invoice support
+  isMonthly?: boolean;
+  bulan?: number;   // 1-12
+  tahun?: number;   // e.g. 2026
+  monthLabel?: string;  // e.g. "Agustus 2026"
+  dailySalesInvoices?: SalesInvoiceSummary[];
+}
+
+/** Props for the SalesInvoiceClient component */
+export interface SalesInvoicePageProps {
+  initialData: SalesInvoiceSummary;
+}

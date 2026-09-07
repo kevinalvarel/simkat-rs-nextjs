@@ -22,6 +22,19 @@ export const routeDataProduksi = {
       ],
     },
     {
+      title: 'Faktur',
+      items: [
+        {
+          title: 'Faktur Pengiriman',
+          url: '/dashboard/ag-katering/faktur-pengiriman',
+        },
+        {
+          title: 'Faktur Penjualan',
+          url: '/dashboard/ag-katering/faktur-penjualan',
+        },
+      ],
+    },
+    {
       title: 'Master Data',
       items: [
         {
@@ -33,18 +46,9 @@ export const routeDataProduksi = {
           url: '/dashboard/ag-katering/cetak-etiket',
         },
         {
-          title: 'Cetak Invoice',
-          url: '/dashboard/ag-katering/invoice',
-        },
-        {
           title: 'Cetak DPMP',
           url: '/dashboard/ag-katering/cetak-dpmp',
         },
-      ],
-    },
-    {
-      title: 'Produksi & Tabulasi',
-      items: [
         {
           title: 'Tabulasi Rekapitulasi',
           url: '/dashboard/ag-katering/tabulasi',
@@ -74,7 +78,7 @@ export const routeDataSupervisor = {
       ],
     },
     {
-      title: 'Master Data',
+      title: 'Pasien',
       items: [
         {
           title: 'Mapping Diet Pasien',
@@ -85,13 +89,27 @@ export const routeDataSupervisor = {
           url: '/dashboard/ag-katering/cetak-etiket',
         },
         {
-          title: 'Cetak Invoice',
-          url: '/dashboard/ag-katering/invoice',
-        },
-        {
           title: 'Cetak DPMP',
           url: '/dashboard/ag-katering/cetak-dpmp',
         },
+      ],
+    },
+    {
+      title: 'Cetak Faktur',
+      items: [
+        {
+          title: 'Faktur Pengiriman',
+          url: '/dashboard/ag-katering/faktur-pengiriman',
+        },
+        {
+          title: 'Faktur Penjualan',
+          url: '/dashboard/ag-katering/faktur-penjualan',
+        },
+      ],
+    },
+    {
+      title: 'Master Data',
+      items: [
         {
           title: 'Tabulasi Rekapitulasi',
           url: '/dashboard/ag-katering/tabulasi',
