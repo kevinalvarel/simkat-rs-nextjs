@@ -65,27 +65,24 @@ const COMMON_DIET_TAGS = [
 ];
 
 const KELAS_OPTIONS = [
-  { value: 'Semua Kelas', label: 'Semua Kelas (Umum / Shared)' },
+  { value: 'Semua Kelas', label: 'Semua Kelas' },
   { value: 'I', label: 'Kelas I' },
   { value: 'II-III', label: 'Kelas II - III' },
   { value: 'VIP', label: 'Kelas VIP' },
 ];
 
 const JENIS_MAKANAN_OPTIONS = [
-  { value: 'HEWANI', label: '🍗 HEWANI (Lauk Hewani)' },
-  { value: 'NABATI', label: '🫘 NABATI (Lauk Nabati)' },
-  { value: 'SAYUR', label: '🥦 SAYUR (Sayur Mayur)' },
-  { value: 'SARING', label: '🥣 SARING (Makanan Saring / Lunak)' },
-  { value: 'BUAH', label: '🍊 BUAH (Buah Segar)' },
-  { value: 'SNACK', label: '🍪 SNACK (Selingan)' },
-  { value: 'EXTRA', label: '🥛 EXTRA (Extra / Khusus)' },
+  { value: 'HEWANI', label: 'HEWANI (Lauk Hewani)' },
+  { value: 'NABATI', label: 'NABATI (Lauk Nabati)' },
+  { value: 'SAYUR', label: 'SAYUR (Sayur Mayur)' },
+  { value: 'SARING', label: 'SARING (Makanan Saring / Lunak)' },
 ];
 
 const WAKTU_MAKAN_OPTIONS = [
-  { value: 'PAGI', label: '🌅 Makan Pagi' },
-  { value: 'SIANG', label: '☀️ Makan Siang' },
-  { value: 'SORE', label: '🌇 Makan Sore' },
-  { value: 'SARING_SIANG', label: '🥣 Saring (Siang)' },
+  { value: 'PAGI', label: 'PAGI' },
+  { value: 'SIANG', label: 'SIANG' },
+  { value: 'SORE', label: 'SORE' },
+  { value: 'SARING', label: 'SARING' },
 ];
 
 const ItemSchema = z.object({
@@ -127,7 +124,6 @@ export default function SiklusItemDialog({
       label: `Siklus ${num}`,
     }));
   }, [availableCycles]);
-
 
   const {
     control,
@@ -238,10 +234,7 @@ export default function SiklusItemDialog({
 
   // Combine common tags and master db tags
   const availableTags = Array.from(
-    new Set([
-      ...COMMON_DIET_TAGS,
-      ...dietOptions.map((d) => d.kode),
-    ])
+    new Set([...COMMON_DIET_TAGS, ...dietOptions.map((d) => d.kode)]),
   );
 
   return (
@@ -250,10 +243,13 @@ export default function SiklusItemDialog({
         <DialogHeader className='gap-1 border-b pb-4'>
           <DialogTitle className='text-lg font-bold tracking-tight flex items-center gap-2'>
             <UtensilsCrossed className='w-5 h-5 text-primary' />
-            {isEdit ? 'Edit Hidangan Siklus Menu' : 'Tambah Hidangan ke Siklus Menu'}
+            {isEdit
+              ? 'Edit Hidangan Siklus Menu'
+              : 'Tambah Hidangan ke Siklus Menu'}
           </DialogTitle>
           <DialogDescription className='text-xs text-muted-foreground'>
-            Tentukan nama hidangan, kategori diet (mis. B, DM, RG), waktu makan, dan kelas pasien.
+            Tentukan nama hidangan, kategori diet (mis. B, DM, RG), waktu makan,
+            dan kelas pasien.
           </DialogDescription>
         </DialogHeader>
 
@@ -291,7 +287,6 @@ export default function SiklusItemDialog({
                 </p>
               )}
             </div>
-
 
             <div className='space-y-1.5'>
               <Label className='text-xs font-semibold'>

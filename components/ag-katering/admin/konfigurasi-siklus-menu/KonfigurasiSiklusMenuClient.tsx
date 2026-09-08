@@ -261,7 +261,7 @@ export default function KonfigurasiSiklusMenuClient({
         if (selectedJenisFilter === 'SARING') {
           if (
             item.jenis_makanan !== 'SARING' &&
-            item.waktu_makan !== 'SARING_SIANG'
+            item.waktu_makan !== 'SARING'
           ) {
             return false;
           }

@@ -50,7 +50,7 @@ export const masterSiklusMenuTable = pgTable('master_siklus_menu', {
   /** Jenis makanan: "HEWANI" | "NABATI" | "SAYUR" | "SARING" | "BUAH" | "SNACK" | "EXTRA" */
   jenis_makanan: text('jenis_makanan').notNull(),
 
-  /** Waktu makan: "PAGI" | "SIANG" | "SORE" | "SARING_SIANG" */
+  /** Waktu makan: "PAGI" | "SIANG" | "SORE" | "SARING" */
   waktu_makan: text('waktu_makan').notNull(),
 
   /** Nama hidangan / menu makanan, contoh: "Telur Puyuh BB Kecap" */

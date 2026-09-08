@@ -23,7 +23,10 @@ import {
   Layers,
   Utensils,
 } from 'lucide-react';
-import type { SiklusMenuItem, SlotItemInput } from '@/servers/siklus-menu.service';
+import type {
+  SiklusMenuItem,
+  SlotItemInput,
+} from '@/servers/siklus-menu.service';
 import { saveSlotMenuItems } from '@/servers/siklus-menu.service';
 import { toast } from 'sonner';
 
@@ -41,13 +44,25 @@ interface SiklusSlotEditorDialogProps {
 }
 
 const WAKTU_MAKAN_LABELS: Record<string, string> = {
-  PAGI: '🌅 Makan Pagi',
-  SIANG: '☀️ Makan Siang',
-  SORE: '🌇 Makan Sore',
-  SARING_SIANG: '🥣 Saring (Siang)',
+  PAGI: 'Makan Pagi',
+  SIANG: 'Makan Siang',
+  SORE: 'Makan Sore',
+  SARING: 'Saring',
 };
 
-const COMMON_QUICK_TAGS = ['B', 'Diit', 'DM', 'RG', 'DJ', 'DH', 'RP', 'RS', 'RL', 'RKol', 'TKTP'];
+const COMMON_QUICK_TAGS = [
+  'B',
+  'Diit',
+  'DM',
+  'RG',
+  'DJ',
+  'DH',
+  'RP',
+  'RS',
+  'RL',
+  'RKol',
+  'TKTP',
+];
 
 export default function SiklusSlotEditorDialog({
   open,
@@ -69,7 +84,7 @@ export default function SiklusSlotEditorDialog({
               kategori_menu: item.kategori_menu || '',
               catatan: item.catatan || '',
               urutan: item.urutan || idx + 1,
-            }))
+            })),
           );
         } else {
           setItems([
@@ -105,7 +120,7 @@ export default function SiklusSlotEditorDialog({
   function handleFieldChange(
     index: number,
     field: keyof SlotItemInput,
-    val: string | number
+    val: string | number,
   ) {
     setItems((prev) => {
       const next = [...prev];
@@ -164,7 +179,7 @@ export default function SiklusSlotEditorDialog({
         slotContext.kelas,
         slotContext.jenis_makanan,
         slotContext.waktu_makan,
-        validItems
+        validItems,
       );
 
       if (res.success) {
@@ -189,7 +204,10 @@ export default function SiklusSlotEditorDialog({
       <DialogContent className='sm:max-w-2xl p-6 max-h-[90vh] flex flex-col'>
         <DialogHeader className='gap-1 border-b pb-4 shrink-0'>
           <div className='flex items-center gap-2 flex-wrap'>
-            <Badge variant='outline' className='bg-primary/10 text-primary font-mono text-xs'>
+            <Badge
+              variant='outline'
+              className='bg-primary/10 text-primary font-mono text-xs'
+            >
               Siklus #{slotContext.siklus_ke}
             </Badge>
             <Badge variant='secondary' className='text-xs font-semibold'>
@@ -199,7 +217,8 @@ export default function SiklusSlotEditorDialog({
               {slotContext.jenis_makanan}
             </Badge>
             <Badge className='bg-foreground text-background text-xs font-bold'>
-              {WAKTU_MAKAN_LABELS[slotContext.waktu_makan] || slotContext.waktu_makan}
+              {WAKTU_MAKAN_LABELS[slotContext.waktu_makan] ||
+                slotContext.waktu_makan}
             </Badge>
           </div>
           <DialogTitle className='text-lg font-bold tracking-tight pt-1 flex items-center gap-2'>
@@ -207,7 +226,8 @@ export default function SiklusSlotEditorDialog({
             Kelola Daftar Hidangan dalam Slot Ini
           </DialogTitle>
           <DialogDescription className='text-xs text-muted-foreground'>
-            Anda dapat menambah beberapa variasi hidangan untuk diet yang berbeda (contoh: Biasa, Rendah Garam, DM, Jantung).
+            Anda dapat menambah beberapa variasi hidangan untuk diet yang
+            berbeda (contoh: Biasa, Rendah Garam, DM, Jantung).
           </DialogDescription>
         </DialogHeader>
 
@@ -273,30 +293,42 @@ export default function SiklusSlotEditorDialog({
                 {/* Input Fields */}
                 <div className='grid grid-cols-1 sm:grid-cols-12 gap-2'>
                   <div className='sm:col-span-6 space-y-1'>
-                    <Label className='text-[11px] font-semibold'>Nama Hidangan</Label>
+                    <Label className='text-[11px] font-semibold'>
+                      Nama Hidangan
+                    </Label>
                     <Input
                       value={item.nama_makanan}
-                      onChange={(e) => handleFieldChange(idx, 'nama_makanan', e.target.value)}
+                      onChange={(e) =>
+                        handleFieldChange(idx, 'nama_makanan', e.target.value)
+                      }
                       placeholder='mis. Telur Puyuh BB Kecap'
                       className='h-8 text-xs bg-background'
                     />
                   </div>
 
                   <div className='sm:col-span-3 space-y-1'>
-                    <Label className='text-[11px] font-semibold'>Kategori / Tag Diet</Label>
+                    <Label className='text-[11px] font-semibold'>
+                      Kategori / Tag Diet
+                    </Label>
                     <Input
                       value={item.kategori_menu || ''}
-                      onChange={(e) => handleFieldChange(idx, 'kategori_menu', e.target.value)}
+                      onChange={(e) =>
+                        handleFieldChange(idx, 'kategori_menu', e.target.value)
+                      }
                       placeholder='mis. B, Diit, DM'
                       className='h-8 text-xs font-mono font-bold bg-background'
                     />
                   </div>
 
                   <div className='sm:col-span-3 space-y-1'>
-                    <Label className='text-[11px] font-semibold'>Catatan / Potongan</Label>
+                    <Label className='text-[11px] font-semibold'>
+                      Catatan / Potongan
+                    </Label>
                     <Input
                       value={item.catatan || ''}
-                      onChange={(e) => handleFieldChange(idx, 'catatan', e.target.value)}
+                      onChange={(e) =>
+                        handleFieldChange(idx, 'catatan', e.target.value)
+                      }
                       placeholder='mis. *ptg dadu'
                       className='h-8 text-xs bg-background'
                     />
@@ -305,7 +337,9 @@ export default function SiklusSlotEditorDialog({
 
                 {/* Quick Diet Tag Chips */}
                 <div className='flex items-center gap-1 flex-wrap pt-0.5'>
-                  <span className='text-[10px] text-muted-foreground mr-1'>Pilih Tag Cepat:</span>
+                  <span className='text-[10px] text-muted-foreground mr-1'>
+                    Pilih Tag Cepat:
+                  </span>
                   {COMMON_QUICK_TAGS.map((tag) => {
                     const isSelected = currentItemTags.includes(tag);
                     return (

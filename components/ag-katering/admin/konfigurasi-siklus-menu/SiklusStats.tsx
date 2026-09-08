@@ -14,7 +14,7 @@ export default function SiklusStats({ items, activeSiklus }: SiklusStatsProps) {
   const pagiCount = items.filter((i) => i.waktu_makan === 'PAGI').length;
   const siangCount = items.filter((i) => i.waktu_makan === 'SIANG').length;
   const soreCount = items.filter((i) => i.waktu_makan === 'SORE').length;
-  const saringCount = items.filter((i) => i.waktu_makan === 'SARING_SIANG').length;
+  const saringCount = items.filter((i) => i.waktu_makan === 'SARING').length;
 
   const hewaniCount = items.filter((i) => i.jenis_makanan === 'HEWANI').length;
   const nabatiCount = items.filter((i) => i.jenis_makanan === 'NABATI').length;

@@ -113,6 +113,13 @@ export default function SiklusMenuMatrixTable({
   for (const item of items) {
     // Treat SARING as special or row
     if (item.jenis_makanan === 'SARING') continue;
+    // Skip 'Semua Kelas' items — they are shared data, not separate rows
+    if (
+      item.kelas === 'Semua Kelas' ||
+      item.kelas === 'ALL' ||
+      item.kelas === 'Umum'
+    )
+      continue;
 
     const key = `${item.kelas}__${item.jenis_makanan}`;
     if (!rowKeys.has(key)) {
@@ -127,7 +134,7 @@ export default function SiklusMenuMatrixTable({
 
   // Items dedicated to SARING (SIANG)
   const saringSiangItems = items.filter(
-    (i) => i.waktu_makan === 'SARING_SIANG' || i.jenis_makanan === 'SARING',
+    (i) => i.waktu_makan === 'SARING' || i.jenis_makanan === 'SARING',
   );
 
   async function handleDeleteConfirm() {
@@ -320,7 +327,7 @@ export default function SiklusMenuMatrixTable({
                 <TableHead className='min-w-[180px] text-xs font-bold uppercase tracking-wider text-foreground bg-primary/5'>
                   <div className='flex items-center gap-1.5 justify-center text-primary'>
                     <Coffee className='w-4 h-4' />
-                    Saring (Siang)
+                    Saring
                   </div>
                 </TableHead>
               </TableRow>
@@ -363,7 +370,7 @@ export default function SiklusMenuMatrixTable({
                         className='text-xs font-bold px-2.5 py-1 uppercase tracking-wide'
                       >
                         {row.kelas === 'Semua Kelas'
-                          ? 'I, II-III'
+                          ? 'Semua Kelas'
                           : `Kelas ${row.kelas}`}
                       </Badge>
                     </TableCell>
@@ -402,7 +409,7 @@ export default function SiklusMenuMatrixTable({
                         {renderSlotCell(
                           'Semua Kelas',
                           'SARING',
-                          'SARING_SIANG',
+                          'SARING',
                           saringSiangItems,
                           true,
                         )}
