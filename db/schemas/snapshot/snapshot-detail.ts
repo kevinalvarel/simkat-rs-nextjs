@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, serial, text, integer, boolean, timestamp } from 'drizzle-orm/pg-core';
 import { snapshotBatchTable } from './snapshot-batch';
 
 export const snapshotDetailTable = pgTable('snapshot_detail_pasien', {
@@ -28,4 +28,10 @@ export const snapshotDetailTable = pgTable('snapshot_detail_pasien', {
 
   /** Flag: true jika record ini berasal dari emergent request yang di-approve. */
   is_emergent: boolean('is_emergent').notNull().default(false),
+
+  /** Status cetak etiket pasien khusus untuk batch snapshot ini */
+  is_printed: boolean('is_printed').notNull().default(false),
+  printed_at: timestamp('printed_at'),
+  printed_by: text('printed_by'),
 });
+

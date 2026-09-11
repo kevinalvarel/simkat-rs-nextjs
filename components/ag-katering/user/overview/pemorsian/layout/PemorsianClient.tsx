@@ -7,10 +7,16 @@ import type {
   PemorsianRevisiItem,
   EtiketData,
 } from '@/types/pemorsiantypes';
-import { getLivePemorsianData } from '@/servers/pemorsian.service';
-import { listenProductionUpdate } from '@/lib/realtime-sync';
-import { useEtiketPrintedSync } from '@/hooks/useEtiketPrintedSync';
+import {
+  getLivePemorsianData,
+  updateEtiketPrintStatus,
+} from '@/servers/pemorsian.service';
+import {
+  listenProductionUpdate,
+  broadcastProductionUpdate,
+} from '@/lib/realtime-sync';
 import { isNpoPatient } from '@/lib/npo-utils';
+import { toast } from 'sonner';
 import PemorsianStatsCards from '../ui/PemorsianStatsCards';
 import PemorsianRevisiTableSection from './PemorsianRevisiTableSection';
 import EtiketPrintPreviewModal from '../../../cetak-etiket/layout/EtiketPrintPreviewModal';
@@ -49,33 +55,21 @@ export default function PemorsianClient({ initialData }: PemorsianClientProps) {
   // Prevent concurrent fetch calls
   const isFetchingRef = useRef(false);
 
-  // 2. Synchronized Printed Status (shared with Cetak Etiket)
-  const { printedPatientIds, savePrintedIds } = useEtiketPrintedSync(
-    data.batchCode,
-  );
-
-  // 3. Enrich patients with dynamic printed status
-  const enrichedPatients: PemorsianPatientItem[] = useMemo(() => {
-    return data.patients.map((p) => {
-      // If patient is in Butuh Revisi, retain status
-      if (p.print_status === 'BUTUH_REVISI') {
-        return p;
+  // 2. Synchronized Printed Status from Database per Snapshot
+  const printedPatientIds = useMemo(() => {
+    const set = new Set<number>();
+    data.patients.forEach((p) => {
+      if (p.print_status === 'SUDAH_DICETAK') {
+        set.add(p.id);
       }
-
-      // Check if printed in localStorage
-      if (printedPatientIds.has(p.id)) {
-        return {
-          ...p,
-          print_status: 'SUDAH_DICETAK',
-        };
-      }
-
-      return {
-        ...p,
-        print_status: 'BELUM_DICETAK',
-      };
     });
-  }, [data.patients, printedPatientIds]);
+    return set;
+  }, [data.patients]);
+
+  // 3. Patients with dynamic printed status loaded directly from DB
+  const enrichedPatients: PemorsianPatientItem[] = useMemo(() => {
+    return data.patients;
+  }, [data.patients]);
 
   // Calculate dynamic status counts (strictly for feeding patients)
   const { belumDicetakCount, sudahDicetakCount, butuhRevisiCount } =
@@ -176,6 +170,7 @@ export default function PemorsianClient({ initialData }: PemorsianClientProps) {
   // 7. Cross-Tab Synchronization (BroadcastChannel)
   useEffect(() => {
     const unsubscribe = listenProductionUpdate((msg) => {
+      if (msg.source === 'pemorsian') return;
       console.debug('Received real-time production update in Pemorsian:', msg);
       fetchLiveData(undefined, false);
     });
@@ -232,28 +227,91 @@ export default function PemorsianClient({ initialData }: PemorsianClientProps) {
     }
   }
 
-  // 10. Status Toggle Handlers (Manual status update)
-  function handleTogglePrintedStatus(id: number, currentStatus: string) {
-    const next = new Set(printedPatientIds);
-    if (currentStatus === 'SUDAH_DICETAK') {
-      next.delete(id);
-    } else {
-      next.add(id);
+  // 10. Status Toggle Handlers (Persisted to Database per Snapshot)
+  async function handleTogglePrintedStatus(id: number, currentStatus: string) {
+    const newPrinted = currentStatus !== 'SUDAH_DICETAK';
+
+    // Optimistic UI update
+    setData((prev) => ({
+      ...prev,
+      patients: prev.patients.map((p) =>
+        p.id === id
+          ? {
+              ...p,
+              print_status: newPrinted ? 'SUDAH_DICETAK' : 'BELUM_DICETAK',
+              printed_at: newPrinted ? new Date().toISOString() : null,
+            }
+          : p,
+      ),
+    }));
+
+    try {
+      const res = await updateEtiketPrintStatus(
+        [id],
+        newPrinted,
+        data.batch?.id,
+        undefined,
+        data.tanggalProduksi,
+        data.waktuMakan,
+      );
+      if (res.success) {
+        broadcastProductionUpdate('ETIKET_PRINTED', 'pemorsian');
+      } else {
+        toast.error(res.message || 'Gagal mengubah status cetak.');
+        fetchLiveData(undefined, false);
+      }
+    } catch (err) {
+      console.error('Error toggling print status in DB:', err);
+      toast.error('Gagal memperbarui status cetak di database.');
+      fetchLiveData(undefined, false);
     }
-    savePrintedIds(next);
   }
 
-  function handleBatchMarkStatus(
+  async function handleBatchMarkStatus(
     ids: number[],
     newStatus: 'SUDAH_DICETAK' | 'BELUM_DICETAK',
   ) {
-    const next = new Set(printedPatientIds);
-    ids.forEach((id) => {
-      if (newStatus === 'SUDAH_DICETAK') next.add(id);
-      else next.delete(id);
-    });
-    savePrintedIds(next);
+    const isPrinted = newStatus === 'SUDAH_DICETAK';
+    const targetSet = new Set(ids);
+
+    // Optimistic UI update
+    setData((prev) => ({
+      ...prev,
+      patients: prev.patients.map((p) =>
+        targetSet.has(p.id)
+          ? {
+              ...p,
+              print_status: newStatus,
+              printed_at: isPrinted ? new Date().toISOString() : null,
+            }
+          : p,
+      ),
+    }));
     setSelectedCardIds(new Set());
+
+    try {
+      const res = await updateEtiketPrintStatus(
+        ids,
+        isPrinted,
+        data.batch?.id,
+        undefined,
+        data.tanggalProduksi,
+        data.waktuMakan,
+      );
+      if (res.success) {
+        broadcastProductionUpdate('ETIKET_PRINTED', 'pemorsian');
+        toast.success(
+          `${ids.length} pasien berhasil ditandai ${isPrinted ? 'sudah dicetak' : 'belum dicetak'}.`,
+        );
+      } else {
+        toast.error(res.message || 'Gagal mengubah status cetak massal.');
+        fetchLiveData(undefined, false);
+      }
+    } catch (err) {
+      console.error('Error batch updating print status in DB:', err);
+      toast.error('Terjadi kesalahan saat menyimpan status ke database.');
+      fetchLiveData(undefined, false);
+    }
   }
 
   // 11. Etiket Mapping Helpers
@@ -284,8 +342,10 @@ export default function PemorsianClient({ initialData }: PemorsianClientProps) {
       kelas: r.data_baru?.kelas || r.kelas,
       gedung: r.data_baru?.gedung || r.gedung,
       is_revisi: true,
-      keterangan_revisi: r.alasan || r.jenis_perubahan || r.dampak_dapur || 'Revisi Diet',
-      keterangan: r.alasan || r.jenis_perubahan || r.dampak_dapur || 'Revisi Diet',
+      keterangan_revisi:
+        r.alasan || r.jenis_perubahan || r.dampak_dapur || 'Revisi Diet',
+      keterangan:
+        r.alasan || r.jenis_perubahan || r.dampak_dapur || 'Revisi Diet',
       exp_date: data.tanggalProduksi || undefined,
     };
   }
@@ -339,15 +399,44 @@ export default function PemorsianClient({ initialData }: PemorsianClientProps) {
     setModalOpen(true);
   }
 
-  // When print succeeds, mark the pending printed IDs in localStorage
-  function handlePrintSuccess() {
+  // When print succeeds, persist printed status to DB
+  async function handlePrintSuccess() {
     const ids = pendingPrintIdsRef.current;
     if (ids && ids.length > 0) {
-      const next = new Set(printedPatientIds);
-      ids.forEach((id) => next.add(id));
-      savePrintedIds(next);
+      const targetSet = new Set(ids);
+
+      // Optimistic UI update
+      setData((prev) => ({
+        ...prev,
+        patients: prev.patients.map((p) =>
+          targetSet.has(p.id)
+            ? {
+                ...p,
+                print_status: 'SUDAH_DICETAK',
+                printed_at: new Date().toISOString(),
+              }
+            : p,
+        ),
+      }));
       setSelectedCardIds(new Set());
       setSelectedRevisiIds(new Set());
+
+      try {
+        const res = await updateEtiketPrintStatus(
+          ids,
+          true,
+          data.batch?.id,
+          undefined,
+          data.tanggalProduksi,
+          data.waktuMakan,
+        );
+        if (res.success) {
+          broadcastProductionUpdate('ETIKET_PRINTED', 'pemorsian');
+          toast.success(`${ids.length} etiket berhasil diproses cetak.`);
+        }
+      } catch (err) {
+        console.error('Error pada Sistem :', err);
+      }
     }
   }
 

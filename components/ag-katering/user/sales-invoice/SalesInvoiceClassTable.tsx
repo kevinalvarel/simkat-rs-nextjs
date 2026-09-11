@@ -1,7 +1,10 @@
 'use client';
 
 import React, { useState } from 'react';
-import type { SalesInvoiceSummary, SalesInvoiceLineItem } from '@/types/invoicetypes';
+import type {
+  SalesInvoiceSummary,
+  SalesInvoiceLineItem,
+} from '@/types/invoicetypes';
 import {
   Table,
   TableBody,
@@ -12,12 +15,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  ChevronDown,
-  ChevronUp,
-  Layers,
-  Banknote,
-} from 'lucide-react';
+import { ChevronDown, ChevronUp, Layers, Banknote } from 'lucide-react';
 
 interface SalesInvoiceClassTableProps {
   data: SalesInvoiceSummary;
@@ -81,7 +79,7 @@ export default function SalesInvoiceClassTable({
               )}
             </div>
             <p className='text-xs text-muted-foreground'>
-              Daftar item Nama Barang, Type (Kelas), Banyaknya (Porsi), Harga
+              Daftar item Nama Barang, Tipe (Kelas), Banyaknya (Porsi), Harga
               Satuan, dan Jumlah Harga.
             </p>
           </div>
@@ -109,7 +107,7 @@ export default function SalesInvoiceClassTable({
                   Nama Barang
                 </TableHead>
                 <TableHead className='font-bold text-xs text-center min-w-[100px]'>
-                  Type (Kelas)
+                  Tipe
                 </TableHead>
                 <TableHead className='font-bold text-xs text-center w-24'>
                   Banyaknya

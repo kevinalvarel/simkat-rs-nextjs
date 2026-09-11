@@ -60,7 +60,9 @@ export default function LiveKateringClient({
       const fresh = await getLiveKateringData();
       if (fresh) {
         setData(fresh);
-        setLastSyncedAt(fresh.lastUpdated || new Date().toLocaleTimeString('id-ID'));
+        setLastSyncedAt(
+          fresh.lastUpdated || new Date().toLocaleTimeString('id-ID'),
+        );
       }
     } catch (err) {
       console.error('Failed to fetch live katering data:', err);
@@ -129,9 +131,8 @@ export default function LiveKateringClient({
   }, [data.patients, searchQuery]);
 
   const kateringMappedCount = useMemo(() => {
-    return (data.patients || []).filter(
-      (p) => p.status_mapping === 'KATERING',
-    ).length;
+    return (data.patients || []).filter((p) => p.status_mapping === 'KATERING')
+      .length;
   }, [data.patients]);
 
   const rawFallbackCount = (data.patients?.length ?? 0) - kateringMappedCount;
@@ -149,24 +150,13 @@ export default function LiveKateringClient({
               variant='outline'
               className='text-[11px] sm:text-xs font-semibold px-2.5 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border-blue-300 gap-1'
             >
-              <Send className='w-3.5 h-3.5' /> Dialihkan ke AG Katering
-            </Badge>
-
-            {/* Real-time sync indicator badge */}
-            <Badge
-              variant='outline'
-              className='text-[10px] font-bold px-2 py-0.5 bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300 gap-1.5'
-            >
-              <span className='relative flex h-2 w-2'>
-                <span className='animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75'></span>
-                <span className='relative inline-flex rounded-full h-2 w-2 bg-emerald-500'></span>
-              </span>
-              Auto-Sync Aktif
+              <Send className='w-3.5 h-3.5' /> AG Katering
             </Badge>
           </div>
           <p className='text-xs sm:text-sm text-muted-foreground'>
             Daftar diet pasien yang tidak masuk ke lini produksi dapur umum
-            (misal: Bubur Saring, Sonde, dsb.) dan dilayani khusus oleh AG Katering.
+            (misal: Bubur Saring, Sonde, dsb.) dan dilayani khusus oleh AG
+            Katering.
           </p>
         </div>
 
@@ -206,10 +196,11 @@ export default function LiveKateringClient({
             Ketentuan Alur AG Katering:
           </strong>
           <span className='ml-1'>
-            Diet berstatus <strong>Alihkan ke AG Katering</strong> sengaja dikeluarkan
-            dari perhitungan live porsi dapur masak reguler. Data di bawah
-            menampilkan <em>Raw Text</em> asli pasien dari rumah sakit dan diperbarui
-            secara <strong>otomatis (real-time)</strong> setiap kali ada perubahan data pasien atau mapping.
+            Diet berstatus <strong>Alihkan ke AG Katering</strong> sengaja
+            dikeluarkan dari perhitungan live porsi dapur masak reguler. Data di
+            bawah menampilkan <em>Raw Text</em> asli pasien dari rumah sakit dan
+            diperbarui secara <strong>otomatis (real-time)</strong> setiap kali
+            ada perubahan data pasien atau mapping.
           </span>
         </div>
       </div>
@@ -343,7 +334,8 @@ export default function LiveKateringClient({
               Tidak ada pasien katering saat ini
             </h4>
             <p className='text-xs text-muted-foreground max-w-sm mx-auto mt-1'>
-              Tidak ada pasien aktif dengan diet Bubur Saring / Sonde atau yang dialihkan ke AG Katering.
+              Tidak ada pasien aktif dengan diet Bubur Saring / Sonde atau yang
+              dialihkan ke AG Katering.
             </p>
           </div>
         ) : (
@@ -392,7 +384,8 @@ export default function LiveKateringClient({
                       {p.ruangan || '-'}
                     </div>
                     <div className='text-[10px] text-muted-foreground'>
-                      {p.gedung ? `${p.gedung} - ` : ''}Bed {p.bed || '-'} ({p.kelas})
+                      {p.gedung ? `${p.gedung} - ` : ''}Bed {p.bed || '-'} (
+                      {p.kelas})
                     </div>
                   </TableCell>
                   <TableCell className='py-3'>
@@ -418,7 +411,10 @@ export default function LiveKateringClient({
                     )}
                   </TableCell>
                   <TableCell className='py-3'>
-                    <Badge variant='secondary' className='text-[10px] font-medium'>
+                    <Badge
+                      variant='secondary'
+                      className='text-[10px] font-medium'
+                    >
                       Khusus Katering
                     </Badge>
                   </TableCell>

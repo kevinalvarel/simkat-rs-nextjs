@@ -19,12 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import {
-  CalendarRange,
-  Loader2,
-  Printer,
-  Banknote,
-} from 'lucide-react';
+import { CalendarRange, Loader2, Printer, Banknote } from 'lucide-react';
 import type { SalesInvoiceSummary } from '@/types/invoicetypes';
 import SalesInvoicePrintModal from './SalesInvoicePrintModal';
 
@@ -37,8 +32,18 @@ interface MonthlyInvoiceModalProps {
 }
 
 const MONTH_NAMES = [
-  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
+  'Januari',
+  'Februari',
+  'Maret',
+  'April',
+  'Mei',
+  'Juni',
+  'Juli',
+  'Agustus',
+  'September',
+  'Oktober',
+  'November',
+  'Desember',
 ];
 
 export default function MonthlyInvoiceModal({
@@ -86,8 +91,8 @@ export default function MonthlyInvoiceModal({
               Cetak Faktur Penjualan Bulanan
             </DialogTitle>
             <DialogDescription className='text-xs text-muted-foreground'>
-              Pilih bulan dan tahun untuk membuat faktur penjualan bulanan.
-              Data akan diakumulasi dari seluruh tanggal dalam bulan tersebut.
+              Pilih bulan dan tahun untuk membuat faktur penjualan bulanan. Data
+              akan diakumulasi dari seluruh tanggal dalam bulan tersebut.
             </DialogDescription>
           </DialogHeader>
 
@@ -100,7 +105,9 @@ export default function MonthlyInvoiceModal({
                 </Label>
                 <Select
                   value={String(selectedMonth)}
-                  onValueChange={(v) => setSelectedMonth(parseInt(v || '1', 10))}
+                  onValueChange={(v) =>
+                    setSelectedMonth(parseInt(v || '1', 10))
+                  }
                 >
                   <SelectTrigger className='h-9 text-xs'>
                     <SelectValue placeholder='Pilih bulan' />
@@ -121,7 +128,11 @@ export default function MonthlyInvoiceModal({
                 </Label>
                 <Select
                   value={String(selectedYear)}
-                  onValueChange={(v) => setSelectedYear(parseInt(v || String(now.getFullYear()), 10))}
+                  onValueChange={(v) =>
+                    setSelectedYear(
+                      parseInt(v || String(now.getFullYear()), 10),
+                    )
+                  }
                 >
                   <SelectTrigger className='h-9 text-xs'>
                     <SelectValue placeholder='Pilih tahun' />
@@ -200,7 +211,7 @@ export default function MonthlyInvoiceModal({
                             Nama Barang
                           </th>
                           <th className='px-2 py-1 text-center font-bold'>
-                            Type
+                            Tipe
                           </th>
                           <th className='px-2 py-1 text-center font-bold'>
                             Qty
@@ -212,10 +223,7 @@ export default function MonthlyInvoiceModal({
                       </thead>
                       <tbody>
                         {monthlyData.lineItems.map((item, idx) => (
-                          <tr
-                            key={idx}
-                            className='border-t hover:bg-muted/10'
-                          >
+                          <tr key={idx} className='border-t hover:bg-muted/10'>
                             <td className='px-2 py-1'>{item.namaBarang}</td>
                             <td className='px-2 py-1 text-center'>
                               {item.type}

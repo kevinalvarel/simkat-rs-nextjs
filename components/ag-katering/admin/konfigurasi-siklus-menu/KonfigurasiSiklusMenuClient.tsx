@@ -71,6 +71,9 @@ function formatDisplayTanggal(
   tanggal?: string | null,
   nomorSiklus?: number,
 ): string {
+  if (nomorSiklus === 11) {
+    return 'Khusus Tanggal 31';
+  }
   const d = parseCycleDate(tanggal);
   if (d) {
     return format(d, 'd MMMM yyyy', { locale: id });
@@ -84,6 +87,9 @@ function formatShortTanggal(
   tanggal?: string | null,
   nomorSiklus?: number,
 ): string {
+  if (nomorSiklus === 11) {
+    return 'Tgl 31';
+  }
   const d = parseCycleDate(tanggal);
   if (d) {
     return format(d, 'd MMM', { locale: id });

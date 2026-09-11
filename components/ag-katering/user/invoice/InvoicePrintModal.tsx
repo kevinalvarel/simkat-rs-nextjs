@@ -437,7 +437,7 @@ export default function InvoicePrintModal({
                   Waktu Makan
                 </th>
                 <th className='border border-black px-2 py-1.5 w-32 text-center'>
-                  Kelas
+                  Tipe
                 </th>
                 <th className='border border-black px-2 py-1.5 w-24 text-center'>
                   Jumlah

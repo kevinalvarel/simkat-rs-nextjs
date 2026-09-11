@@ -3,6 +3,7 @@ export interface PemorsianPatientItem {
   nama_pasien: string;
   no_rm: string;
   ruangan: string;
+  ruangan_id?: string | number | null;
   kamar: string;
   gedung?: string;
   bed: string;

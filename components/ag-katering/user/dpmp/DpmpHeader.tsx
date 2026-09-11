@@ -22,10 +22,8 @@ interface DpmpHeaderProps {
   selectedDate: string;
   selectedWaktu: WaktuMakanType;
   onFilterChange: (date: string, waktu: WaktuMakanType) => void;
-  onOpenPrintModal: () => void;
   isRefreshing: boolean;
   onRefresh: () => void;
-  selectedCount: number;
 }
 
 export default function DpmpHeader({
@@ -33,10 +31,8 @@ export default function DpmpHeader({
   selectedDate,
   selectedWaktu,
   onFilterChange,
-  onOpenPrintModal,
   isRefreshing,
   onRefresh,
-  selectedCount,
 }: DpmpHeaderProps) {
   // Export Excel function
   function handleExportExcel() {
@@ -141,18 +137,6 @@ export default function DpmpHeader({
         >
           <Download className='w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400' />
           <span className='hidden sm:inline'>Ekspor</span> Excel
-        </Button>
-
-        {/* Print DPMP Button */}
-        <Button
-          size='sm'
-          onClick={onOpenPrintModal}
-          className='h-9 px-3.5 text-xs gap-2 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer shadow-xs font-bold'
-        >
-          <Printer className='w-3.5 h-3.5' />
-          {selectedCount > 0
-            ? `Cetak DPMP (${selectedCount} Terpilih)`
-            : 'Cetak Lembar DPMP'}
         </Button>
       </div>
     </div>

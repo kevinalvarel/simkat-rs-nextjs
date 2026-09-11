@@ -6,7 +6,12 @@
 const SYNC_CHANNEL_NAME = 'simkat_production_sync';
 
 export interface ProductionSyncMessage {
-  type: 'SYNC_NOW' | 'PATIENT_UPDATED' | 'SNAPSHOT_TRIGGERED' | 'REVISION_APPROVED';
+  type:
+    | 'SYNC_NOW'
+    | 'PATIENT_UPDATED'
+    | 'SNAPSHOT_TRIGGERED'
+    | 'REVISION_APPROVED'
+    | 'ETIKET_PRINTED';
   timestamp: number;
   source?: string;
 }

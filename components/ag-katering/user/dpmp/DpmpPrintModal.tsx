@@ -11,7 +11,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Printer } from 'lucide-react';
+import { Printer, Check } from 'lucide-react';
 import type { DpmpPatientItem, DpmpSummaryData } from '@/types/dpmptypes';
 import { isNpoPatient } from '@/lib/npo-utils';
 
@@ -118,19 +118,43 @@ export default function DpmpPrintModal({
             <div className='space-y-1 text-left'>
               <DialogTitle className='text-base sm:text-lg font-bold text-foreground flex items-center gap-2'>
                 <Printer className='w-5 h-5 text-primary' />
-                {isSingle
-                  ? `Cetak DPMP - ${singlePatient?.nama_pasien}`
-                  : groupedByRuangan.length === 1
-                    ? `Cetak DPMP - ${groupedByRuangan[0].ruanganName} (${totalPorsiToPrint} Porsi)`
-                    : `Cetak DPMP Distribusi (${totalPorsiToPrint} Porsi · ${groupedByRuangan.length} Ruangan)`}
+                Preview Cetak DPMP
               </DialogTitle>
               <DialogDescription className='text-xs text-muted-foreground'>
-                Pratinjau lembar Daftar Permintaan Makanan Pasien (DPMP) resmi
-                instalasi gizi RSUD dr. Slamet format A4 Portrait.
+                {summaryData.tanggalFormatted} · Makan{' '}
+                {summaryData.waktuMakanFormatted} (
+                {summaryData.batch?.batch_code || 'Batch Snapshot'})
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
+
+        {/* Info Ruangan yang akan dicetak */}
+        <div className='p-4 sm:p-5 bg-muted/25 border-b space-y-2.5'>
+          <div className='flex items-center justify-between'>
+            <span className='text-xs font-bold text-foreground uppercase tracking-wider'>
+              Ruangan yang akan dicetak:
+            </span>
+            <span className='text-xs font-bold text-primary'>
+              Total: {groupedByRuangan.length} ruangan ({totalPorsiToPrint} pasien / porsi)
+            </span>
+          </div>
+
+          <div className='flex flex-wrap gap-2'>
+            {groupedByRuangan.map((g) => (
+              <div
+                key={g.ruanganName}
+                className='inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-background border border-primary/30 text-xs font-semibold shadow-2xs text-foreground'
+              >
+                <Check className='w-3.5 h-3.5 text-primary shrink-0 stroke-[2.5]' />
+                <span>Ruangan {g.ruanganName}</span>
+                <span className='text-[10px] text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded'>
+                  {g.patients.length} pasien
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
 
         {/* Scrollable Printable Document Container */}
         <div className='flex-1 overflow-y-auto p-4 sm:p-6 bg-muted/40 flex justify-center'>
@@ -348,21 +372,27 @@ export default function DpmpPrintModal({
         </div>
 
         {/* Modal Footer */}
-        <DialogFooter className='pb-8 pr-8 border-t bg-muted/20 gap-3'>
-          <Button
-            variant='outline'
-            onClick={() => onOpenChange(false)}
-            className='cursor-pointer text-xs'
-          >
-            Tutup
-          </Button>
-          <Button
-            onClick={() => handlePrint()}
-            className='gap-2 bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer text-xs shadow-xs font-bold'
-          >
-            <Printer className='w-4 h-4' />
-            Cetak Dokumen DPMP (Print / PDF)
-          </Button>
+        <DialogFooter className='p-4 sm:p-5 border-t bg-muted/20 flex flex-row items-center justify-between gap-3'>
+          <div className='text-xs text-muted-foreground hidden sm:block'>
+            Pratinjau lembar cetak siap dikirim ke printer atau diunduh sebagai PDF.
+          </div>
+          <div className='flex items-center gap-2'>
+            <Button
+              variant='outline'
+              onClick={() => onOpenChange(false)}
+              className='cursor-pointer text-xs rounded-xl'
+            >
+              Batal
+            </Button>
+            <Button
+              onClick={() => handlePrint()}
+              disabled={groupedByRuangan.length === 0}
+              className='gap-2 bg-primary hover:bg-primary/90 text-primary-foreground cursor-pointer text-xs shadow-xs font-bold rounded-xl'
+            >
+              <Printer className='w-4 h-4' />
+              Cetak Sekarang
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

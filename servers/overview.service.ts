@@ -14,6 +14,10 @@ import {
 } from '@/db/schemas/master/siklus-menu';
 import { otorisasiPerubahanDietTable } from '@/db/schemas/snapshot/perizinan-revisi';
 import { isNpoPatient } from '@/lib/npo-utils';
+import {
+  resolveActiveCycleForDate,
+  normalizeDishName,
+} from '@/lib/siklus-menu-utils';
 
 import type {
   MonitoringCardData,
@@ -197,6 +201,9 @@ function mapCategoryGroup(jenis: string | null | undefined): MenuCategoryGroup {
   if (j === 'HEWANI') return 'HEWANI';
   if (j === 'NABATI') return 'NABATI';
   if (j === 'SAYUR' || j === 'SAYURAN') return 'SAYUR';
+  if (j === 'HEWANI & NABATI' || j === 'HEWANI_NABATI') return 'HEWANI & NABATI';
+  if (j === 'NABATI & SAYUR' || j === 'NABATI_SAYUR') return 'NABATI & SAYUR';
+  if (j === 'HEWANI & SAYUR' || j === 'HEWANI_SAYUR') return 'HEWANI & SAYUR';
   if (j === 'SARING') return 'SARING';
   if (j === 'POKOK' || j === 'KARBO' || j === 'BENTUK_MAKANAN') return 'POKOK';
   if (j === 'EXTRA') return 'EXTRA';
@@ -204,6 +211,215 @@ function mapCategoryGroup(jenis: string | null | undefined): MenuCategoryGroup {
   if (j === 'SNACK') return 'SNACK';
   if (j === 'NPO') return 'NPO';
   return 'LAINNYA';
+}
+
+interface DishCounter {
+  code: string;
+  name: string;
+  category: MenuCategoryGroup;
+  kelas?: string;
+  dietTag?: string;
+  catatan?: string;
+}
+
+/**
+ * Resolve candidate main dishes (Hewani, Nabati, Sayur) for a patient with combined dish consolidation
+ */
+function resolvePatientMainDishes(
+  activeSlotMenuItems: Array<typeof masterSiklusMenuTable.$inferSelect>,
+  pKelas: string,
+  kategoriCodes: string[],
+  labelMap: Map<string, string>,
+  defaultLabels: Record<string, string>,
+): DishCounter[] {
+  if (activeSlotMenuItems.length === 0) {
+    if (kategoriCodes.length > 0) {
+      return kategoriCodes.map((kc) => {
+        const dietLabel = labelMap.get(kc) || defaultLabels[kc] || kc;
+        return {
+          code: kc,
+          name: `Diet ${dietLabel}`,
+          category: 'HEWANI' as MenuCategoryGroup,
+          kelas: pKelas,
+        };
+      });
+    } else {
+      return [
+        {
+          code: 'BIASA',
+          name: `Menu Standar Siklus (${pKelas})`,
+          category: 'HEWANI' as MenuCategoryGroup,
+          kelas: pKelas,
+        },
+      ];
+    }
+  }
+
+  const resolvedCategories: Array<{
+    jenis: 'HEWANI' | 'NABATI' | 'SAYUR';
+    dish: DishCounter;
+  }> = [];
+
+  const mainKinds: Array<'HEWANI' | 'NABATI' | 'SAYUR'> = [
+    'HEWANI',
+    'NABATI',
+    'SAYUR',
+  ];
+
+  for (const jenis of mainKinds) {
+    const candidates = activeSlotMenuItems.filter(
+      (m) =>
+        m.jenis_makanan.toUpperCase() === jenis &&
+        matchesKelas(m.kelas, pKelas),
+    );
+
+    if (candidates.length > 0) {
+      let chosenDish = candidates.find((dish) => {
+        if (!dish.kategori_menu) return false;
+        const dishTags = extractCodes(dish.kategori_menu);
+        return kategoriCodes.some((kc) =>
+          dishTags.some((dt) => dt.toUpperCase() === kc.toUpperCase()),
+        );
+      });
+
+      if (!chosenDish) {
+        chosenDish =
+          candidates.find((dish) => {
+            if (!dish.kategori_menu) return true;
+            const dTag = dish.kategori_menu.toUpperCase();
+            return (
+              dTag === 'B' ||
+              dTag === 'BIASA' ||
+              dTag === 'NON DIET' ||
+              dTag === '-'
+            );
+          }) || candidates[0];
+      }
+
+      if (chosenDish) {
+        resolvedCategories.push({
+          jenis,
+          dish: {
+            code: `MENU-${chosenDish.id}`,
+            name: chosenDish.nama_makanan,
+            category: mapCategoryGroup(chosenDish.jenis_makanan),
+            kelas: chosenDish.kelas,
+            dietTag: chosenDish.kategori_menu || undefined,
+            catatan: chosenDish.catatan || undefined,
+          },
+        });
+      }
+    } else {
+      if (kategoriCodes.length > 0) {
+        for (const kc of kategoriCodes) {
+          const dietName = labelMap.get(kc) || defaultLabels[kc] || kc;
+          resolvedCategories.push({
+            jenis,
+            dish: {
+              code: kc,
+              name: `Menu ${jenis}: ${dietName}`,
+              category: mapCategoryGroup(jenis),
+              kelas: pKelas,
+            },
+          });
+        }
+      } else {
+        resolvedCategories.push({
+          jenis,
+          dish: {
+            code: `${jenis}-STD`,
+            name: `Lauk ${jenis} (Standar ${pKelas})`,
+            category: mapCategoryGroup(jenis),
+            kelas: pKelas,
+          },
+        });
+      }
+    }
+  }
+
+  // Deduplicate and consolidate combined dishes (e.g. LOAF AYAM TAHU in Hewani & Nabati)
+  const hewaniEntry = resolvedCategories.find((r) => r.jenis === 'HEWANI');
+  const nabatiEntry = resolvedCategories.find((r) => r.jenis === 'NABATI');
+  const sayurEntry = resolvedCategories.find((r) => r.jenis === 'SAYUR');
+
+  const normHewani = normalizeDishName(hewaniEntry?.dish.name);
+  const normNabati = normalizeDishName(nabatiEntry?.dish.name);
+  const normSayur = normalizeDishName(sayurEntry?.dish.name);
+
+  const finalDishes: DishCounter[] = [];
+  const handled = new Set<string>();
+
+  // 1. Check Hewani + Nabati match (e.g. LOAF AYAM TAHU)
+  if (
+    hewaniEntry &&
+    nabatiEntry &&
+    normHewani &&
+    normNabati &&
+    normHewani === normNabati
+  ) {
+    handled.add('HEWANI');
+    handled.add('NABATI');
+    finalDishes.push({
+      ...hewaniEntry.dish,
+      category: 'HEWANI & NABATI',
+      catatan:
+        hewaniEntry.dish.catatan ||
+        nabatiEntry.dish.catatan ||
+        'Lauk gabungan Hewani & Nabati',
+    });
+  }
+
+  // 2. Check Nabati + Sayur match
+  if (
+    !handled.has('NABATI') &&
+    nabatiEntry &&
+    sayurEntry &&
+    normNabati &&
+    normSayur &&
+    normNabati === normSayur
+  ) {
+    handled.add('NABATI');
+    handled.add('SAYUR');
+    finalDishes.push({
+      ...nabatiEntry.dish,
+      category: 'NABATI & SAYUR',
+      catatan:
+        nabatiEntry.dish.catatan ||
+        sayurEntry.dish.catatan ||
+        'Lauk gabungan Nabati & Sayur',
+    });
+  }
+
+  // 3. Check Hewani + Sayur match
+  if (
+    !handled.has('HEWANI') &&
+    !handled.has('SAYUR') &&
+    hewaniEntry &&
+    sayurEntry &&
+    normHewani &&
+    normSayur &&
+    normHewani === normSayur
+  ) {
+    handled.add('HEWANI');
+    handled.add('SAYUR');
+    finalDishes.push({
+      ...hewaniEntry.dish,
+      category: 'HEWANI & SAYUR',
+      catatan:
+        hewaniEntry.dish.catatan ||
+        sayurEntry.dish.catatan ||
+        'Lauk gabungan Hewani & Sayur',
+    });
+  }
+
+  // Add all remaining individual categories
+  for (const entry of resolvedCategories) {
+    if (!handled.has(entry.jenis)) {
+      finalDishes.push(entry.dish);
+    }
+  }
+
+  return finalDishes;
 }
 
 /**
@@ -258,32 +474,15 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
       .where(eq(masterSiklusTable.is_active, true))
       .orderBy(asc(masterSiklusTable.nomor_siklus));
 
-    // Determine cycle matching by assigned 'tanggal', 'hari', or 10-day rotation
-    let resolvedCycle = allMasterCycles.find(
-      (c) => c.tanggal && c.tanggal === nextCycle.tanggalProduksi,
+    // Resolve cycle using continuous auto-looping rotation and Day 31 / Siklus 11 rule
+    const cycleResolution = resolveActiveCycleForDate(
+      nextCycle.tanggalProduksi,
+      allMasterCycles,
     );
-
-    if (!resolvedCycle) {
-      resolvedCycle = allMasterCycles.find(
-        (c) => c.hari?.trim().toUpperCase() === currentHari,
-      );
-    }
-
-    if (!resolvedCycle && allMasterCycles.length > 0) {
-      // 10-day cycle standard PGRS: Day of month % 10 (or 31)
-      const dayOfMonth = targetDateObj.getDate();
-      const standardCycleNum =
-        dayOfMonth === 31 ? 31 : dayOfMonth % 10 === 0 ? 10 : dayOfMonth % 10;
-      resolvedCycle =
-        allMasterCycles.find((c) => c.nomor_siklus === standardCycleNum) ||
-        allMasterCycles[0];
-    }
-
-    const activeCycleNumber = resolvedCycle?.nomor_siklus || 1;
-    const activeCycleNama =
-      resolvedCycle?.nama_siklus || `Siklus ${activeCycleNumber}`;
+    const activeCycleNumber = cycleResolution.activeCycleNum;
+    const activeCycleNama = cycleResolution.activeCycleNama;
     const activeCycleDeskripsi =
-      resolvedCycle?.deskripsi ||
+      cycleResolution.activeCycleDeskripsi ||
       `Siklus menu ${activeCycleNama} untuk hari ${currentHari}`;
 
     // 5. Fetch Menu Items from master_siklus_menu for this cycle & waktu_makan
@@ -511,91 +710,18 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
         }
       }
 
-      // B. Main dishes from active menu cycle (HEWANI, NABATI, SAYUR, etc.)
-      if (activeSlotMenuItems.length > 0) {
-        // Group items in cycle by jenis_makanan
-        const jenisGroups = ['HEWANI', 'NABATI', 'SAYUR'];
-
-        for (const jenis of jenisGroups) {
-          const candidates = activeSlotMenuItems.filter(
-            (m) =>
-              m.jenis_makanan.toUpperCase() === jenis &&
-              matchesKelas(m.kelas, pKelas),
-          );
-
-          if (candidates.length > 0) {
-            // Find diet-specific dish matching patient's kategori diet tags (e.g. DM, RG, TKTP)
-            let chosenDish = candidates.find((dish) => {
-              if (!dish.kategori_menu) return false;
-              const dishTags = extractCodes(dish.kategori_menu);
-              return kategoriCodes.some((kc) =>
-                dishTags.some((dt) => dt.toUpperCase() === kc.toUpperCase()),
-              );
-            });
-
-            // If no diet-specific dish, fallback to standard dish (B / BIASA / NON DIET / empty)
-            if (!chosenDish) {
-              chosenDish =
-                candidates.find((dish) => {
-                  if (!dish.kategori_menu) return true;
-                  const dTag = dish.kategori_menu.toUpperCase();
-                  return dTag === 'B' || dTag === 'BIASA' || dTag === 'NON DIET' || dTag === '-';
-                }) || candidates[0];
-            }
-
-            if (chosenDish) {
-              addLiveDish({
-                code: `MENU-${chosenDish.id}`,
-                name: chosenDish.nama_makanan,
-                category: mapCategoryGroup(chosenDish.jenis_makanan),
-                kelas: chosenDish.kelas,
-                dietTag: chosenDish.kategori_menu || undefined,
-                catatan: chosenDish.catatan || undefined,
-              });
-            }
-          } else {
-            // Fallback for this category if no dish defined in cycle
-            if (kategoriCodes.length > 0) {
-              for (const kc of kategoriCodes) {
-                const dietName = labelMap.get(kc) || defaultLabels[kc] || kc;
-                addLiveDish({
-                  code: kc,
-                  name: `Menu ${jenis}: ${dietName}`,
-                  category: mapCategoryGroup(jenis),
-                  kelas: pKelas,
-                });
-              }
-            } else {
-              addLiveDish({
-                code: `${jenis}-STD`,
-                name: `Lauk ${jenis} (Standar ${pKelas})`,
-                category: mapCategoryGroup(jenis),
-                kelas: pKelas,
-              });
-            }
-          }
-        }
-      } else {
-        // Fallback if no menu items in cycle for this slot
-        if (kategoriCodes.length > 0) {
-          for (const kc of kategoriCodes) {
-            const dietLabel = labelMap.get(kc) || defaultLabels[kc] || kc;
-            addLiveDish({
-              code: kc,
-              name: `Diet ${dietLabel}`,
-              category: 'HEWANI',
-              kelas: pKelas,
-            });
-          }
-        } else {
-          addLiveDish({
-            code: 'BIASA',
-            name: `Menu Standar Siklus (${pKelas})`,
-            category: 'HEWANI',
-            kelas: pKelas,
-          });
-        }
+      // B. Main dishes from active menu cycle (HEWANI, NABATI, SAYUR with combined dish consolidation)
+      const mainDishes = resolvePatientMainDishes(
+        activeSlotMenuItems,
+        pKelas,
+        kategoriCodes,
+        labelMap,
+        defaultLabels,
+      );
+      for (const dish of mainDishes) {
+        addLiveDish(dish);
       }
+
 
       // C. Extra dishes (e.g. PUTEL -> Putih Telur Rebus)
       if (extraCodes.length > 0) {
@@ -785,85 +911,18 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
           }
         }
 
-        // Main dishes from cycle
-        if (activeSlotMenuItems.length > 0) {
-          const jenisGroups = ['HEWANI', 'NABATI', 'SAYUR'];
-          for (const jenis of jenisGroups) {
-            const candidates = activeSlotMenuItems.filter(
-              (m) =>
-                m.jenis_makanan.toUpperCase() === jenis &&
-                matchesKelas(m.kelas, pKelas),
-            );
-
-            if (candidates.length > 0) {
-              let chosenDish = candidates.find((dish) => {
-                if (!dish.kategori_menu) return false;
-                const dishTags = extractCodes(dish.kategori_menu);
-                return kategoriCodes.some((kc) =>
-                  dishTags.some((dt) => dt.toUpperCase() === kc.toUpperCase()),
-                );
-              });
-
-              if (!chosenDish) {
-                chosenDish =
-                  candidates.find((dish) => {
-                    if (!dish.kategori_menu) return true;
-                    const dTag = dish.kategori_menu.toUpperCase();
-                    return dTag === 'B' || dTag === 'BIASA' || dTag === 'NON DIET' || dTag === '-';
-                  }) || candidates[0];
-              }
-
-              if (chosenDish) {
-                addSnapshotDish({
-                  code: `MENU-${chosenDish.id}`,
-                  name: chosenDish.nama_makanan,
-                  category: mapCategoryGroup(chosenDish.jenis_makanan),
-                  kelas: chosenDish.kelas,
-                  dietTag: chosenDish.kategori_menu || undefined,
-                  catatan: chosenDish.catatan || undefined,
-                });
-              }
-            } else {
-              if (kategoriCodes.length > 0) {
-                for (const kc of kategoriCodes) {
-                  const dietName = labelMap.get(kc) || defaultLabels[kc] || kc;
-                  addSnapshotDish({
-                    code: kc,
-                    name: `Menu ${jenis}: ${dietName}`,
-                    category: mapCategoryGroup(jenis),
-                    kelas: pKelas,
-                  });
-                }
-              } else {
-                addSnapshotDish({
-                  code: `${jenis}-STD`,
-                  name: `Lauk ${jenis} (Standar ${pKelas})`,
-                  category: mapCategoryGroup(jenis),
-                  kelas: pKelas,
-                });
-              }
-            }
-          }
-        } else {
-          if (kategoriCodes.length > 0) {
-            for (const kc of kategoriCodes) {
-              const dietLabel = labelMap.get(kc) || defaultLabels[kc] || kc;
-              addSnapshotDish({
-                code: kc,
-                name: `Diet ${dietLabel}`,
-                category: 'HEWANI',
-                kelas: pKelas,
-              });
-            }
-          } else {
-            addSnapshotDish({
-              code: 'BIASA',
-              name: `Menu Standar Siklus (${pKelas})`,
-              category: 'HEWANI',
-              kelas: pKelas,
-            });
-          }
+        // Main dishes from cycle with combined dish consolidation
+        const mainDishes = resolvePatientMainDishes(
+          activeSlotMenuItems,
+          pKelas,
+          kategoriCodes,
+          labelMap,
+          defaultLabels,
+        );
+        for (const dish of mainDishes) {
+          addSnapshotDish(dish);
         }
+
 
         // Extra
         if (extraCodes.length > 0) {
@@ -951,8 +1010,11 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
     const categoryOrder: Record<string, number> = {
       POKOK: 1,
       HEWANI: 2,
+      'HEWANI & NABATI': 2.5,
       NABATI: 3,
+      'NABATI & SAYUR': 3.5,
       SAYUR: 4,
+      'HEWANI & SAYUR': 4.5,
       SARING: 5,
       EXTRA: 6,
       BUAH: 7,

@@ -1,6 +1,7 @@
 'use server';
 
-import { eq, desc, asc } from 'drizzle-orm';
+import { eq, desc, asc, and, inArray } from 'drizzle-orm';
+import { revalidatePath } from 'next/cache';
 import { db } from '@/drizzle';
 import { snapshotBatchTable } from '@/db/schemas/snapshot/snapshot-batch';
 import { snapshotDetailTable } from '@/db/schemas/snapshot/snapshot-detail';
@@ -9,6 +10,11 @@ import { waktuMakanTable } from '@/db/schemas/patient/waktu-makan';
 import { masterSiklusTable } from '@/db/schemas/master/siklus-menu';
 import { otorisasiPerubahanDietTable } from '@/db/schemas/snapshot/perizinan-revisi';
 import { isNpoPatient } from '@/lib/npo-utils';
+import { resolveActiveCycleForDate } from '@/lib/siklus-menu-utils';
+import {
+  checkAndAutoLockSnapshots,
+  triggerManualSnapshot,
+} from '@/servers/snapshot.service';
 import type {
   PemorsianBatchOption,
   PemorsianPatientItem,
@@ -114,6 +120,12 @@ export async function getAvailablePemorsianBatches(): Promise<
   PemorsianBatchOption[]
 > {
   try {
+    try {
+      await checkAndAutoLockSnapshots();
+    } catch {
+      // Ignored if auto-lock check fails or called in render context
+    }
+
     const batches = await db
       .select()
       .from(snapshotBatchTable)
@@ -206,31 +218,14 @@ export async function getLivePemorsianData(
       .where(eq(masterSiklusTable.is_active, true))
       .orderBy(asc(masterSiklusTable.nomor_siklus));
 
-    const targetDateIso = targetDateObj.toISOString().split('T')[0];
-    let resolvedCycle = allMasterCycles.find(
-      (c) => c.tanggal && (c.tanggal === targetDateIso || c.tanggal === targetDateStr),
+    const cycleResolution = resolveActiveCycleForDate(
+      targetDateStr,
+      allMasterCycles,
     );
-
-    if (!resolvedCycle) {
-      resolvedCycle = allMasterCycles.find(
-        (c) => c.hari?.trim().toUpperCase() === currentHari,
-      );
-    }
-
-    if (!resolvedCycle && allMasterCycles.length > 0) {
-      const dayOfMonth = targetDateObj.getDate();
-      const standardCycleNum =
-        dayOfMonth === 31 ? 31 : dayOfMonth % 10 === 0 ? 10 : dayOfMonth % 10;
-      resolvedCycle =
-        allMasterCycles.find((c) => c.nomor_siklus === standardCycleNum) ||
-        allMasterCycles[0];
-    }
-
-    const activeCycleNumber = resolvedCycle?.nomor_siklus || 1;
-    const activeCycleNama =
-      resolvedCycle?.nama_siklus || `Siklus ${activeCycleNumber}`;
+    const activeCycleNumber = cycleResolution.activeCycleNum;
+    const activeCycleNama = cycleResolution.activeCycleNama;
     const activeCycleDeskripsi =
-      resolvedCycle?.deskripsi ||
+      cycleResolution.activeCycleDeskripsi ||
       `Siklus menu ${activeCycleNama} untuk hari ${currentHari}`;
 
     // 5. Fetch all currently active patients in hospital (Real-time from AG RS)
@@ -381,6 +376,7 @@ export async function getLivePemorsianData(
             buah: sd.buah,
             snack: sd.snack,
             print_status: 'BUTUH_REVISI',
+            printed_at: sd.printed_at ? sd.printed_at.toISOString() : null,
             diet_lama: sd.diet_rs_raw,
             revisi_note: note,
           });
@@ -404,7 +400,8 @@ export async function getLivePemorsianData(
             extra: sd.extra,
             buah: sd.buah,
             snack: sd.snack,
-            print_status: 'BELUM_DICETAK',
+            print_status: sd.is_printed ? 'SUDAH_DICETAK' : 'BELUM_DICETAK',
+            printed_at: sd.printed_at ? sd.printed_at.toISOString() : null,
           });
         }
       }
@@ -619,3 +616,160 @@ export async function getPemorsianData(
 ): Promise<PemorsianSummaryData> {
   return getLivePemorsianData(batchId, filterDate, filterWaktuMakan);
 }
+
+/**
+ * Server Action: Update print status for specific snapshot detail records in DB.
+ * Supports single, bulk, and toggle print status operations scoped to a snapshot batch.
+ * If no batch is locked yet for the target date and meal, automatically locks/creates
+ * the snapshot batch so the print status is reliably persisted in the database per snapshot.
+ */
+export async function updateEtiketPrintStatus(
+  detailIds: number[],
+  isPrinted: boolean,
+  batchId?: number | null,
+  printedBy?: string,
+  targetDate?: string,
+  targetWaktu?: string,
+): Promise<{ success: boolean; message: string; count: number; batchId?: number }> {
+  try {
+    if (!detailIds || detailIds.length === 0) {
+      return {
+        success: false,
+        message: 'Tidak ada ID pasien yang dipilih untuk diperbarui.',
+        count: 0,
+      };
+    }
+
+    let resolvedBatchId = batchId && batchId > 0 ? batchId : null;
+
+    // If no batchId provided or currently in Live Preview, resolve or create the snapshot batch
+    const prodDate =
+      targetDate || new Date().toISOString().slice(0, 10);
+    const prodWaktu = (targetWaktu || 'SIANG').toUpperCase();
+
+    if (!resolvedBatchId) {
+      const existingBatch = await db
+        .select()
+        .from(snapshotBatchTable)
+        .where(
+          and(
+            eq(snapshotBatchTable.tanggal_produksi, prodDate),
+            eq(snapshotBatchTable.waktu_makan, prodWaktu),
+          ),
+        )
+        .limit(1);
+
+      if (existingBatch.length > 0) {
+        resolvedBatchId = existingBatch[0].id;
+      } else {
+        // Automatically create & lock snapshot batch for this meal cycle
+        const snapRes = await triggerManualSnapshot(
+          prodWaktu,
+          '12:00',
+          true,
+          prodDate,
+        );
+        if (snapRes.success) {
+          const newlyCreated = await db
+            .select()
+            .from(snapshotBatchTable)
+            .where(
+              and(
+                eq(snapshotBatchTable.tanggal_produksi, prodDate),
+                eq(snapshotBatchTable.waktu_makan, prodWaktu),
+              ),
+            )
+            .limit(1);
+          if (newlyCreated.length > 0) {
+            resolvedBatchId = newlyCreated[0].id;
+          }
+        }
+      }
+    }
+
+    if (resolvedBatchId) {
+      // Check whether detailIds are snapshotDetailTable.id or pasienTable.id
+      const targetDetailRows = await db
+        .select({
+          id: snapshotDetailTable.id,
+          no_rm: snapshotDetailTable.no_rm,
+        })
+        .from(snapshotDetailTable)
+        .where(eq(snapshotDetailTable.batch_id, resolvedBatchId));
+
+      const existingDetailIdsSet = new Set(targetDetailRows.map((r) => r.id));
+      const hasMatchingDetailIds = detailIds.some((id) =>
+        existingDetailIdsSet.has(id),
+      );
+
+      let targetIdsToUpdate: number[] = [];
+
+      if (hasMatchingDetailIds) {
+        // detailIds are already snapshot_detail_pasien IDs
+        targetIdsToUpdate = detailIds.filter((id) =>
+          existingDetailIdsSet.has(id),
+        );
+      } else {
+        // detailIds might be pasienTable IDs -> resolve matching by no_rm
+        const patientRows = await db
+          .select({ id: pasienTable.id, no_rm: pasienTable.no_rm })
+          .from(pasienTable)
+          .where(inArray(pasienTable.id, detailIds));
+
+        const targetRmSet = new Set(patientRows.map((p) => p.no_rm.trim()));
+        targetIdsToUpdate = targetDetailRows
+          .filter((sd) => targetRmSet.has(sd.no_rm.trim()))
+          .map((sd) => sd.id);
+      }
+
+      if (targetIdsToUpdate.length > 0) {
+        await db
+          .update(snapshotDetailTable)
+          .set({
+            is_printed: isPrinted,
+            printed_at: isPrinted ? new Date() : null,
+            printed_by: isPrinted ? (printedBy || 'Ahli Gizi Katering') : null,
+          })
+          .where(
+            and(
+              eq(snapshotDetailTable.batch_id, resolvedBatchId),
+              inArray(snapshotDetailTable.id, targetIdsToUpdate),
+            ),
+          );
+      }
+    } else {
+      // Fallback: update directly by ID if no batch could be resolved
+      await db
+        .update(snapshotDetailTable)
+        .set({
+          is_printed: isPrinted,
+          printed_at: isPrinted ? new Date() : null,
+          printed_by: isPrinted ? (printedBy || 'Ahli Gizi Katering') : null,
+        })
+        .where(inArray(snapshotDetailTable.id, detailIds));
+    }
+
+    try {
+      revalidatePath('/dashboard/ag-katering/cetak-etiket');
+      revalidatePath('/dashboard/ag-katering/overview/pemorsian');
+    } catch {
+      // Ignored if called during render
+    }
+
+    return {
+      success: true,
+      message: `Status cetak ${detailIds.length} pasien berhasil diperbarui di database.`,
+      count: detailIds.length,
+      batchId: resolvedBatchId || undefined,
+    };
+  } catch (error) {
+    console.error('Error updating etiket print status:', error);
+    return {
+      success: false,
+      message: 'Gagal memperbarui status cetak etiket di database.',
+      count: 0,
+    };
+  }
+}
+
+

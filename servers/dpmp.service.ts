@@ -5,6 +5,7 @@ import { db } from '@/drizzle';
 import { snapshotBatchTable } from '@/db/schemas/snapshot/snapshot-batch';
 import { snapshotDetailTable } from '@/db/schemas/snapshot/snapshot-detail';
 import { pasienTable } from '@/db/schemas/patient/pasien';
+import { ruanganTable } from '@/db/schemas/master/ruangan';
 import { isNpoPatient } from '@/lib/npo-utils';
 import type {
   DpmpSummaryData,
@@ -169,6 +170,19 @@ export async function getDpmpData(
 
     let patientItems: DpmpPatientItem[] = [];
 
+    // Build room name to room ID map from master ruanganTable
+    const roomNameToIdMap = new Map<string, string>();
+    try {
+      const allRooms = await db.select().from(ruanganTable);
+      for (const r of allRooms) {
+        if (r.nama_ruangan) {
+          roomNameToIdMap.set(r.nama_ruangan.toLowerCase().trim(), String(r.id));
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching ruanganTable for DPMP room mapping:', err);
+    }
+
     // 2. Fetch snapshot detail if batch ID is valid in DB
     if (selectedBatch && selectedBatch.id > 0) {
       try {
@@ -180,11 +194,16 @@ export async function getDpmpData(
         if (details && details.length > 0) {
           patientItems = details.map((d) => {
             const isNpo = isNpoPatient(d);
+            const rawRuangan = d.ruangan || '';
+            const matchedRoomId =
+              roomNameToIdMap.get(rawRuangan.toLowerCase().trim()) || rawRuangan;
+
             return {
               id: d.id,
               nama_pasien: d.nama_pasien,
               no_rm: d.no_rm,
               ruangan: d.ruangan,
+              ruangan_id: matchedRoomId,
               kamar: d.gedung || 'Kamar 1',
               gedung: d.gedung,
               bed: d.no_bed,
@@ -228,12 +247,16 @@ export async function getDpmpData(
         if (livePatients && livePatients.length > 0) {
           patientItems = livePatients.map((p) => {
             const isNpo = isNpoPatient(p);
+            const rawRuangan = p.ruangan || '';
+            const matchedRoomId =
+              roomNameToIdMap.get(rawRuangan.toLowerCase().trim()) || rawRuangan;
 
             return {
               id: p.id,
               nama_pasien: p.nama_pasien,
               no_rm: p.no_rm,
               ruangan: p.ruangan,
+              ruangan_id: matchedRoomId,
               kamar: p.gedung || 'Kamar 1',
               gedung: p.gedung,
               bed: p.bed,

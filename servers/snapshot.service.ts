@@ -364,6 +364,9 @@ export async function triggerManualSnapshot(
           snack: isNpo ? null : mapped?.snack || null,
           status_saat_snapshot: isNpo ? 'NPO' : p.status_pasien,
           is_emergent: false,
+          is_printed: false,
+          printed_at: null,
+          printed_by: null,
         };
       });
 

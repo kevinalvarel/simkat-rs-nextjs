@@ -41,6 +41,24 @@ const CATEGORY_STYLES: Record<
     textBadge: 'text-emerald-700 dark:text-emerald-300',
     borderBadge: 'border-emerald-500/20',
   },
+  'HEWANI & NABATI': {
+    label: 'Lauk Hewani & Nabati',
+    bgBadge: 'bg-amber-500/15 text-amber-800 dark:text-amber-200',
+    textBadge: 'text-amber-700 dark:text-amber-300',
+    borderBadge: 'border-amber-500/30 ring-1 ring-teal-500/30',
+  },
+  'NABATI & SAYUR': {
+    label: 'Lauk Nabati & Sayur',
+    bgBadge: 'bg-teal-500/15 text-teal-800 dark:text-teal-200',
+    textBadge: 'text-teal-700 dark:text-teal-300',
+    borderBadge: 'border-teal-500/30 ring-1 ring-emerald-500/30',
+  },
+  'HEWANI & SAYUR': {
+    label: 'Lauk Hewani & Sayur',
+    bgBadge: 'bg-orange-500/15 text-orange-800 dark:text-orange-200',
+    textBadge: 'text-orange-700 dark:text-orange-300',
+    borderBadge: 'border-orange-500/30 ring-1 ring-emerald-500/30',
+  },
   SARING: {
     label: 'Makanan Saring',
     bgBadge: 'bg-blue-500/10 text-blue-700 dark:text-blue-300',

@@ -56,9 +56,9 @@ export default function OverviewProductionCardsGrid({
       if (activeTab === 'ALL') return true;
       const cat = (card.category || '').toUpperCase();
       if (activeTab === 'POKOK') return cat === 'POKOK' || cat === 'SARING';
-      if (activeTab === 'HEWANI') return cat === 'HEWANI';
-      if (activeTab === 'NABATI') return cat === 'NABATI';
-      if (activeTab === 'SAYUR') return cat === 'SAYUR';
+      if (activeTab === 'HEWANI') return cat.includes('HEWANI');
+      if (activeTab === 'NABATI') return cat.includes('NABATI');
+      if (activeTab === 'SAYUR') return cat.includes('SAYUR');
       if (activeTab === 'EXTRA_BUAH')
         return cat === 'EXTRA' || cat === 'BUAH' || cat === 'SNACK';
 
@@ -85,20 +85,23 @@ export default function OverviewProductionCardsGrid({
     {
       id: 'HEWANI',
       label: 'Lauk Hewani',
-      count: validCards.filter((c) => c.category?.toUpperCase() === 'HEWANI')
-        .length,
+      count: validCards.filter((c) =>
+        (c.category?.toUpperCase() || '').includes('HEWANI'),
+      ).length,
     },
     {
       id: 'NABATI',
       label: 'Lauk Nabati',
-      count: validCards.filter((c) => c.category?.toUpperCase() === 'NABATI')
-        .length,
+      count: validCards.filter((c) =>
+        (c.category?.toUpperCase() || '').includes('NABATI'),
+      ).length,
     },
     {
       id: 'SAYUR',
       label: 'Sayuran',
-      count: validCards.filter((c) => c.category?.toUpperCase() === 'SAYUR')
-        .length,
+      count: validCards.filter((c) =>
+        (c.category?.toUpperCase() || '').includes('SAYUR'),
+      ).length,
     },
     {
       id: 'EXTRA_BUAH',

@@ -73,7 +73,7 @@ export default function SalesInvoiceHeader({
       const rows = data.lineItems.map((item) => ({
         No: item.no,
         'Nama Barang': item.namaBarang,
-        Type: item.type,
+        Tipe: item.type,
         Banyaknya: item.banyaknya,
         Satuan: item.satuan,
         'Harga Satuan (Rp)': item.hargaSatuan,
@@ -84,7 +84,7 @@ export default function SalesInvoiceHeader({
       rows.push({
         No: '' as any,
         'Nama Barang': 'TOTAL',
-        Type: '',
+        Tipe: '',
         Banyaknya: data.totalBanyaknya,
         Satuan: 'Porsi',
         'Harga Satuan (Rp)': '' as any,
@@ -164,10 +164,7 @@ export default function SalesInvoiceHeader({
               >
                 <CheckCircle2 className='w-2.5 h-2.5 text-blue-500' />
                 Batch #{data.batchId} (
-                {data.statusBatch === 'OFFICIAL_LOCKED'
-                  ? 'LOCKED'
-                  : 'PREVIEW'}
-                )
+                {data.statusBatch === 'OFFICIAL_LOCKED' ? 'LOCKED' : 'PREVIEW'})
               </Badge>
             )}
 
@@ -176,8 +173,8 @@ export default function SalesInvoiceHeader({
                 variant='outline'
                 className='text-[10px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30 gap-1 animate-pulse'
               >
-                <Sparkles className='w-2.5 h-2.5 text-amber-500' />
-                +{data.revisiTambahPasienCount} Pasien Susulan
+                <Sparkles className='w-2.5 h-2.5 text-amber-500' />+
+                {data.revisiTambahPasienCount} Pasien Susulan
               </Badge>
             )}
 
@@ -202,8 +199,8 @@ export default function SalesInvoiceHeader({
           <p className='text-xs sm:text-sm text-muted-foreground'>
             {isPerSnapshot ? (
               <>
-                Faktur penjualan dengan rincian harga satuan dan jumlah harga per
-                kelas berdasarkan snapshot {data.waktuMakan}
+                Faktur penjualan dengan rincian harga satuan dan jumlah harga
+                per kelas berdasarkan snapshot {data.waktuMakan}
                 {data.cutoffTime ? ` (Cut-off ${data.cutoffTime})` : ''}.
               </>
             ) : isRange ? (

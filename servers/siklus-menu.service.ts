@@ -476,8 +476,15 @@ export async function applyStartDateRotation(
       'SABTU',
     ];
 
-    for (let i = 0; i < cycles.length; i++) {
-      const cycle = cycles[i];
+    const regularCycles = cycles.filter(
+      (c) => c.nomor_siklus !== 11 && c.nomor_siklus !== 31,
+    );
+    const specialCycles = cycles.filter(
+      (c) => c.nomor_siklus === 11 || c.nomor_siklus === 31,
+    );
+
+    for (let i = 0; i < regularCycles.length; i++) {
+      const cycle = regularCycles[i];
       const targetDate = new Date(startDate);
       targetDate.setDate(startDate.getDate() + i);
 
@@ -501,6 +508,18 @@ export async function applyStartDateRotation(
           updated_at: new Date(),
         })
         .where(eq(masterSiklusTable.nomor_siklus, cycle.nomor_siklus));
+    }
+
+    for (const sc of specialCycles) {
+      await db
+        .update(masterSiklusTable)
+        .set({
+          tanggal: null,
+          hari: null,
+          deskripsi: `Menu khusus tanggal 31 (${sc.nama_siklus})`,
+          updated_at: new Date(),
+        })
+        .where(eq(masterSiklusTable.nomor_siklus, sc.nomor_siklus));
     }
 
     try {

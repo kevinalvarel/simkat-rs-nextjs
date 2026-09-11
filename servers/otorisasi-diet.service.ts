@@ -224,6 +224,7 @@ async function applyApprovedRevisionToSnapshot(
               (revisi.jenis_perubahan === 'NPO' ? 'NPO' : undefined),
             status_saat_snapshot:
               revisi.jenis_perubahan === 'NPO' ? 'NPO' : 'AKTIF',
+            is_printed: false,
           })
           .where(
             and(
@@ -258,6 +259,7 @@ async function applyApprovedRevisionToSnapshot(
             gedung: dataBaru.gedung || undefined,
             ruangan: dataBaru.ruangan || undefined,
             no_bed: dataBaru.bed || undefined,
+            is_printed: false,
           })
           .where(
             and(

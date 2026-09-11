@@ -31,7 +31,10 @@ export default function DpmpClient({ initialData }: DpmpPageProps) {
   );
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
-  // 1. Room Detail Modal state
+  // 1. Multi-select Room IDs state
+  const [selectedRooms, setSelectedRooms] = useState<string[]>([]);
+
+  // 2. Room Detail Modal state
   const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
   const [activeRuanganName, setActiveRuanganName] = useState<string | null>(
     null,
@@ -40,14 +43,14 @@ export default function DpmpClient({ initialData }: DpmpPageProps) {
     DpmpPatientItem[]
   >([]);
 
-  // 2. Print modal state
+  // 3. Print modal state
   const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
   const [patientsToPrint, setPatientsToPrint] = useState<DpmpPatientItem[]>([]);
   const [printDocumentTitle, setPrintDocumentTitle] = useState<
     string | undefined
   >(undefined);
 
-  // 3. Date & Meal Time Data Fetching Handlers
+  // 4. Date & Meal Time Data Fetching Handlers
   async function handleFilterChange(date: string, waktu: WaktuMakanType) {
     setSelectedDate(date);
     setSelectedWaktu(waktu);
@@ -77,7 +80,26 @@ export default function DpmpClient({ initialData }: DpmpPageProps) {
     }
   }
 
-  // 4. Modal Handlers
+  // 5. Room Selection Handlers
+  function handleToggleRoomSelect(roomId: string) {
+    setSelectedRooms((prev) => {
+      if (prev.includes(roomId)) {
+        return prev.filter((id) => id !== roomId);
+      } else {
+        return [...prev, roomId];
+      }
+    });
+  }
+
+  function handleSelectAllRooms(roomIds: string[]) {
+    setSelectedRooms(Array.from(new Set(roomIds)));
+  }
+
+  function handleClearRoomSelection() {
+    setSelectedRooms([]);
+  }
+
+  // 6. Detail Modal Handlers
   function handleOpenRuanganModal(
     ruanganName: string,
     patientList: DpmpPatientItem[],
@@ -87,7 +109,32 @@ export default function DpmpClient({ initialData }: DpmpPageProps) {
     setIsRoomModalOpen(true);
   }
 
-  // 5. Print Handlers
+  // 7. Print Handlers
+  function handlePrintSelectedRooms() {
+    if (selectedRooms.length === 0) {
+      toast.error('Pilih minimal 1 ruangan terlebih dahulu.');
+      return;
+    }
+
+    const selectedRoomsSet = new Set(selectedRooms);
+    // Filter strictly by room ID (or fallback to room name if ruangan_id is unset)
+    const selectedPatients = data.patients.filter((p) => {
+      const pRoomId = p.ruangan_id ? String(p.ruangan_id) : p.ruangan;
+      return selectedRoomsSet.has(pRoomId);
+    });
+
+    if (selectedPatients.length === 0) {
+      toast.error('Tidak ada data pasien pada ruangan yang dipilih.');
+      return;
+    }
+
+    setPatientsToPrint(selectedPatients);
+    setPrintDocumentTitle(
+      `DPMP_${selectedRooms.length}_Ruangan_${data.batch?.batch_code || 'Batch'}`,
+    );
+    setIsPrintModalOpen(true);
+  }
+
   function handleQuickPrintRuangan(
     ruanganName: string,
     patientList: DpmpPatientItem[],
@@ -118,18 +165,6 @@ export default function DpmpClient({ initialData }: DpmpPageProps) {
     setIsPrintModalOpen(true);
   }
 
-  function handlePrintAllRooms() {
-    if (data.patients.length === 0) {
-      toast.error('Tidak ada data pasien untuk dicetak.');
-      return;
-    }
-    setPatientsToPrint(data.patients);
-    setPrintDocumentTitle(
-      `DPMP_Semua_Ruangan_${data.batch?.batch_code || 'Batch'}`,
-    );
-    setIsPrintModalOpen(true);
-  }
-
   return (
     <div className='flex flex-1 flex-col gap-6 p-4 sm:p-6 md:p-8 max-w-7xl mx-auto w-full min-w-0 overflow-x-hidden'>
       {/* 1. Header with Calendar Date & Meal Time Selection & Actions */}
@@ -138,18 +173,21 @@ export default function DpmpClient({ initialData }: DpmpPageProps) {
         selectedDate={selectedDate}
         selectedWaktu={selectedWaktu}
         onFilterChange={handleFilterChange}
-        onOpenPrintModal={handlePrintAllRooms}
         isRefreshing={isRefreshing}
         onRefresh={handleRefresh}
-        selectedCount={data.patients.length}
       />
 
       {/* 2. Key Stats KPI Cards */}
       <DpmpStatsCards data={data} selectedCount={data.patients.length} />
 
-      {/* 3. Clean Ruangan Card Grid View */}
+      {/* 3. Clean Ruangan Card Grid View with Selection Support */}
       <RuanganCardGrid
         patients={data.patients}
+        selectedRoomIds={selectedRooms}
+        onToggleRoomSelect={handleToggleRoomSelect}
+        onSelectAllRooms={handleSelectAllRooms}
+        onClearRoomSelection={handleClearRoomSelection}
+        onPrintSelectedRooms={handlePrintSelectedRooms}
         onOpenRuanganModal={handleOpenRuanganModal}
         onQuickPrintRuangan={handleQuickPrintRuangan}
       />
@@ -164,7 +202,7 @@ export default function DpmpClient({ initialData }: DpmpPageProps) {
         onPrintPatients={handlePrintFromRoomModal}
       />
 
-      {/* 5. Print Modal (Official Hospital Layout useReactToPrint) */}
+      {/* 5. Print Preview Modal (Official Hospital Layout useReactToPrint) */}
       <DpmpPrintModal
         open={isPrintModalOpen}
         onOpenChange={setIsPrintModalOpen}

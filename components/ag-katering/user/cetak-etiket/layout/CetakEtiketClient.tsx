@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import type {
   PemorsianSummaryData,
   PemorsianPatientItem,
@@ -10,8 +10,14 @@ import type {
   CetakEtiketFilterOptions,
   CetakEtiketStatsData,
 } from '@/types/cetaketikettypes';
-import { getLivePemorsianData } from '@/servers/pemorsian.service';
-import { useEtiketPrintedSync } from '@/hooks/useEtiketPrintedSync';
+import {
+  getLivePemorsianData,
+  updateEtiketPrintStatus,
+} from '@/servers/pemorsian.service';
+import {
+  broadcastProductionUpdate,
+  listenProductionUpdate,
+} from '@/lib/realtime-sync';
 import { isNpoPatient } from '@/lib/npo-utils';
 import EtiketPrintPreviewModal from '@/components/ag-katering/user/cetak-etiket/layout/EtiketPrintPreviewModal';
 import CetakEtiketHeader, { type WaktuMakanType } from './CetakEtiketHeader';
@@ -60,10 +66,16 @@ export default function CetakEtiketClient({
     [],
   );
 
-  // 2. Synchronized Printed Status (shared with Live Pemorsian)
-  const { printedPatientIds, markIdsAsPrinted } = useEtiketPrintedSync(
-    data.batchCode,
-  );
+  // 2. Synchronized Printed Status from Database (per snapshot)
+  const printedPatientIds = useMemo(() => {
+    const set = new Set<number>();
+    data.patients.forEach((p) => {
+      if (p.print_status === 'SUDAH_DICETAK') {
+        set.add(p.id);
+      }
+    });
+    return set;
+  }, [data.patients]);
 
   // Fetch / Refresh Data helper with date & mealtime filter
   const fetchData = useCallback(
@@ -139,6 +151,41 @@ export default function CetakEtiketClient({
       fetchData(matching?.id, selectedDate, selectedWaktu);
     }
   }
+
+  // Cross-tab and real-time event listener (syncs immediately when printed in other tabs/pages)
+  useEffect(() => {
+    const unsubscribe = listenProductionUpdate((msg) => {
+      // Ignore if this tab itself produced the event (avoid overwriting optimistic state)
+      if (msg.source === 'cetak-etiket') return;
+
+      if (
+        msg.type === 'ETIKET_PRINTED' ||
+        msg.type === 'SYNC_NOW' ||
+        msg.type === 'REVISION_APPROVED'
+      ) {
+        if (isLive) {
+          getLivePemorsianData().then((res) => {
+            if (res && res.success !== false) setData(res);
+          });
+        } else {
+          const matching = data.availableBatches.find(
+            (b) =>
+              b.tanggal_produksi === selectedDate &&
+              b.waktu_makan.toUpperCase() === selectedWaktu.toUpperCase(),
+          );
+          getLivePemorsianData(matching?.id, selectedDate, selectedWaktu).then(
+            (res) => {
+              if (res && res.success !== false) setData(res);
+            },
+          );
+        }
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [isLive, data.availableBatches, selectedDate, selectedWaktu]);
 
   // Dynamic filter dropdown options
   const filterOptions: CetakEtiketFilterOptions = useMemo(() => {
@@ -318,18 +365,56 @@ export default function CetakEtiketClient({
   function handlePrintRevisi(revisi: PemorsianRevisiItem) {
     const etiket = revisiToEtiket(revisi);
     setEtiketList([etiket]);
-    setCurrentPrintTargetIds([revisi.pasien_id]);
+    setCurrentPrintTargetIds([revisi.id]);
     setModalTitle(`Cetak Etiket Revisi - ${revisi.nama_pasien}`);
     setModalOpen(true);
   }
 
-  // Callback on successful print to persist status (synced with Live Pemorsian)
-  function handlePrintSuccess() {
+  // Callback on successful print to persist status in DB per snapshot
+  async function handlePrintSuccess() {
     if (currentPrintTargetIds.length === 0) return;
-    markIdsAsPrinted(currentPrintTargetIds);
-    toast.success(
-      `${currentPrintTargetIds.length} etiket berhasil diproses cetak.`,
-    );
+
+    const targetIds = [...currentPrintTargetIds];
+    const targetSet = new Set(targetIds);
+
+    // 1. Optimistic UI update (0ms delay)
+    setData((prev) => ({
+      ...prev,
+      patients: prev.patients.map((p) =>
+        targetSet.has(p.id)
+          ? {
+              ...p,
+              print_status: 'SUDAH_DICETAK',
+              printed_at: new Date().toISOString(),
+            }
+          : p,
+      ),
+    }));
+
+    // 2. Persist to DB per snapshot batch
+    try {
+      const res = await updateEtiketPrintStatus(
+        targetIds,
+        true,
+        data.batch?.id,
+        undefined,
+        selectedDate,
+        selectedWaktu,
+      );
+      if (res.success) {
+        broadcastProductionUpdate('ETIKET_PRINTED', 'cetak-etiket');
+        toast.success(`${targetIds.length} etiket berhasil dicetak.`);
+        if (res.batchId && (!data.batch || data.batch.id !== res.batchId)) {
+          // If a new batch was created/resolved, silently reload the data for that batch
+          fetchData(res.batchId, selectedDate, selectedWaktu);
+        }
+      } else {
+        toast.error(res.message || 'Gagal menyimpan status cetak ke database.');
+      }
+    } catch (err) {
+      console.error('Error updating print status in DB:', err);
+      toast.error('Terjadi kesalahan saat menyimpan status cetak.');
+    }
   }
 
   // Stats Counters

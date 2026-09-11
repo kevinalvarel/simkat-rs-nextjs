@@ -14,6 +14,10 @@ import {
 import { ruanganTable } from '@/db/schemas/master/ruangan';
 import { gedungTable } from '@/db/schemas/master/gedung';
 import { isNpoPatient } from '@/lib/npo-utils';
+import {
+  resolveActiveCycleForDate,
+  consolidateSlotMenuItems,
+} from '@/lib/siklus-menu-utils';
 import type {
   TabulasiDashboardData,
   TabulasiBatchOption,
@@ -109,28 +113,15 @@ async function determineAutomaticMenuCycle(targetDate: string): Promise<{
   activeCycleNama: string;
   availableSiklus: Array<{ nomor_siklus: number; nama_siklus: string }>;
 }> {
-  const targetDateObj = new Date(targetDate);
-  const dayOfMonth = !isNaN(targetDateObj.getTime())
-    ? targetDateObj.getDate()
-    : new Date().getDate();
-
-  // 10-day cycle standard PGRS: Day of month % 10 (or 31)
-  const standardCycleNum =
-    dayOfMonth === 31 ? 31 : dayOfMonth % 10 === 0 ? 10 : dayOfMonth % 10;
-
   const masterCycles = await db
     .select()
     .from(masterSiklusTable)
-    .where(eq(masterSiklusTable.is_active, true));
+    .where(eq(masterSiklusTable.is_active, true))
+    .orderBy(asc(masterSiklusTable.nomor_siklus));
 
-  const matchingCycle =
-    masterCycles.find((c) => c.tanggal === targetDate) ||
-    masterCycles.find((c) => c.nomor_siklus === standardCycleNum) ||
-    masterCycles[0];
-
-  const activeCycleNum = matchingCycle?.nomor_siklus || standardCycleNum;
-  const activeCycleNama =
-    matchingCycle?.nama_siklus || `Siklus ${activeCycleNum}`;
+  const resolved = resolveActiveCycleForDate(targetDate, masterCycles);
+  const activeCycleNum = resolved.activeCycleNum;
+  const activeCycleNama = resolved.activeCycleNama;
 
   const availableSiklus =
     masterCycles.length > 0
@@ -557,15 +548,16 @@ export async function getTabulasiDashboardData(
       };
     });
 
-    // 6. Aggregate dishes into category groups
+    // 6. Aggregate dishes into category groups with combined dish consolidation
+    const consolidatedMenuItems = consolidateSlotMenuItems(slotMenuItems);
     const categoryGroupMap = new Map<string, TabulasiHospitalItem[]>();
 
-    for (const m of slotMenuItems) {
+    for (const m of consolidatedMenuItems) {
       let porsiLama = 0;
       let porsiBaru = 0;
 
       for (const ap of analyzed) {
-        if (matchPatientToDish(ap, m)) {
+        if (matchPatientToDish(ap, m as any)) {
           if (ap.gedungType === 'GEDUNG BARU') {
             porsiBaru++;
           } else {
@@ -651,6 +643,31 @@ export async function getTabulasiDashboardData(
         isTktp: kategori.includes('TKTP'),
       });
     }
+
+    // Sort category groups in logical culinary sequence
+    const groupSortWeight = (catName: string): number => {
+      const u = catName.toUpperCase();
+      if (u.includes('POKOK') || u.includes('BERAS') || u.includes('NASI')) return 10;
+      if (u.includes('HEWANI & NABATI')) return 25;
+      if (u.includes('HEWANI')) return 20;
+      if (u.includes('NABATI & SAYUR')) return 35;
+      if (u.includes('NABATI')) return 30;
+      if (u.includes('SAYUR')) return 40;
+      if (u.includes('HEWANI & SAYUR')) return 45;
+      if (u.includes('SARING')) return 50;
+      if (u.includes('EXTRA') && !u.includes('TKTP')) return 60;
+      if (u.includes('BUAH')) return 70;
+      if (u.includes('SNACK')) return 80;
+      if (u.includes('TKTP')) return 90;
+      return 100;
+    };
+
+    categoryGroups.sort((a, b) => {
+      const wA = groupSortWeight(a.kategori);
+      const wB = groupSortWeight(b.kategori);
+      if (wA !== wB) return wA - wB;
+      return a.kategori.localeCompare(b.kategori);
+    });
 
     const allItems = categoryGroups.flatMap((g) => g.items);
     const grandTotalPorsi = totalPortionsLama + totalPortionsBaru;
