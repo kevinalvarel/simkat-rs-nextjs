@@ -1,8 +1,10 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import type { RevisiPostSnapshotItem } from '@/servers/revisi-snapshot.service';
 import type { OtorisasiStats } from '@/servers/otorisasi-diet.service';
+import { refreshOtorisasiData } from '@/servers/otorisasi-diet.service';
+import { listenProductionUpdate } from '@/lib/realtime-sync';
 import OtorisasiSummaryCards from './OtorisasiSummaryCards';
 import OtorisasiFilterBar from './OtorisasiFilterBar';
 import OtorisasiTable from './OtorisasiTable';
@@ -10,19 +12,20 @@ import OtorisasiActionDialog from './OtorisasiActionDialog';
 import OtorisasiBulkApproveDialog from './OtorisasiBulkApproveDialog';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, ShieldCheck, CheckCircle2, Lock } from 'lucide-react';
-import { useRouter } from 'next/navigation';
 
 interface OtorisasiPerubahanClientProps {
   initialItems: RevisiPostSnapshotItem[];
   stats: OtorisasiStats;
 }
 
+const POLLING_INTERVAL_MS = 15_000; // 15 seconds
+
 export default function OtorisasiPerubahanClient({
   initialItems,
-  stats,
+  stats: initialStats,
 }: OtorisasiPerubahanClientProps) {
-  const router = useRouter();
   const [items, setItems] = useState<RevisiPostSnapshotItem[]>(initialItems);
+  const [liveStats, setLiveStats] = useState<OtorisasiStats>(initialStats);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedStatus, setSelectedStatus] = useState<string>('PENDING'); // Default focus PENDING
   const [selectedWaktu, setSelectedWaktu] = useState<string>('ALL');
@@ -39,11 +42,72 @@ export default function OtorisasiPerubahanClient({
 
   const [isBulkOpen, setIsBulkOpen] = useState<boolean>(false);
 
-  function handleRefresh() {
+  // Ref for polling interval
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    router.refresh();
-    setTimeout(() => setIsRefreshing(false), 600);
-  }
+    try {
+      const { items: freshItems, stats: freshStats } = await refreshOtorisasiData();
+      setItems(freshItems);
+      setLiveStats(freshStats);
+    } catch (err) {
+      console.error('Failed to refresh otorisasi data:', err);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  // Polling: auto-refresh every 15 seconds when tab is visible
+  useEffect(() => {
+    function startPolling() {
+      if (pollingRef.current) return;
+      pollingRef.current = setInterval(() => {
+        if (document.visibilityState === 'visible') {
+          handleRefresh();
+        }
+      }, POLLING_INTERVAL_MS);
+    }
+
+    function stopPolling() {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        handleRefresh(); // Immediate refresh when tab becomes visible
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    }
+
+    startPolling();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [handleRefresh]);
+
+  // BroadcastChannel listener for cross-tab realtime sync
+  useEffect(() => {
+    const cleanup = listenProductionUpdate((msg) => {
+      if (
+        msg.type === 'REVISION_APPROVED' ||
+        msg.type === 'REVISION_REJECTED' ||
+        msg.type === 'PATIENT_UPDATED' ||
+        msg.type === 'SYNC_NOW'
+      ) {
+        handleRefresh();
+      }
+    });
+    return cleanup;
+  }, [handleRefresh]);
 
   function handleResetFilters() {
     setSearchQuery('');
@@ -173,7 +237,7 @@ export default function OtorisasiPerubahanClient({
       </div>
 
       {/* 3. KPI Summary Cards */}
-      <OtorisasiSummaryCards stats={stats} />
+      <OtorisasiSummaryCards stats={liveStats} />
 
       {/* 4. Filter Controls */}
       <OtorisasiFilterBar

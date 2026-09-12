@@ -223,38 +223,61 @@ interface DishCounter {
 }
 
 /**
+ * Fallback yang jelas ketika kode hasil mapping-diet tidak tertera /
+ * belum didaftarkan di siklus menu aktif.
+ * Alur app: mapping-diet mengisi KARBO/HEWANI/NABATI/SAYUR/BUAH/SNACK (mis. BN, B, -),
+ * lalu overview/produksi menerjemahkannya ke hidangan siklus menu.
+ * Jika kode tidak ada di siklus menu, jangan tampilkan nama generik
+ * ("Diet X" / "Menu X" / "Makanan Pokok (X)") — tampilkan keterangan eksplisit ini.
+ */
+const MISSING_CYCLE_MENU_TEXT = 'Tidak terdaftar pada siklus menu';
+
+function buildMissingCycleMenuDish(
+  code: string,
+  jenis: string,
+  pKelas: string,
+  labelMap?: Map<string, string>,
+  defaultLabels?: Record<string, string>,
+): DishCounter {
+  const displayCode = (code || '').trim() || '-';
+  return {
+    code: displayCode,
+    name: 'Tidak terdaftar pada siklus menu',
+    category: mapCategoryGroup(jenis),
+    kelas: pKelas,
+    dietTag: displayCode,
+    catatan: 'Tidak terdaftar pada siklus menu',
+  };
+}
+
+function buildMissingCycleMenuSlotDish(
+  jenis: string,
+  pKelas: string,
+): DishCounter {
+  return {
+    code: `MISSING-${jenis}`,
+    name: 'Tidak terdaftar pada siklus menu',
+    category: mapCategoryGroup(jenis),
+    kelas: pKelas,
+    dietTag: '-',
+    catatan: 'Tidak terdaftar pada siklus menu',
+  };
+}
+
+/**
  * Resolve candidate main dishes (Hewani, Nabati, Sayur) for a patient with combined dish consolidation
  */
 function resolvePatientMainDishes(
   activeSlotMenuItems: Array<typeof masterSiklusMenuTable.$inferSelect>,
   pKelas: string,
-  kategoriCodes: string[],
+  categoryCodes: {
+    HEWANI: string[];
+    NABATI: string[];
+    SAYUR: string[];
+  },
   labelMap: Map<string, string>,
   defaultLabels: Record<string, string>,
 ): DishCounter[] {
-  if (activeSlotMenuItems.length === 0) {
-    if (kategoriCodes.length > 0) {
-      return kategoriCodes.map((kc) => {
-        const dietLabel = labelMap.get(kc) || defaultLabels[kc] || kc;
-        return {
-          code: kc,
-          name: `Diet ${dietLabel}`,
-          category: 'HEWANI' as MenuCategoryGroup,
-          kelas: pKelas,
-        };
-      });
-    } else {
-      return [
-        {
-          code: 'BIASA',
-          name: `Menu Standar Siklus (${pKelas})`,
-          category: 'HEWANI' as MenuCategoryGroup,
-          kelas: pKelas,
-        },
-      ];
-    }
-  }
-
   const resolvedCategories: Array<{
     jenis: 'HEWANI' | 'NABATI' | 'SAYUR';
     dish: DishCounter;
@@ -267,6 +290,9 @@ function resolvePatientMainDishes(
   ];
 
   for (const jenis of mainKinds) {
+    const targetCodes = categoryCodes[jenis] || [];
+    if (targetCodes.length === 0) continue;
+
     const candidates = activeSlotMenuItems.filter(
       (m) =>
         m.jenis_makanan.toUpperCase() === jenis &&
@@ -274,64 +300,52 @@ function resolvePatientMainDishes(
     );
 
     if (candidates.length > 0) {
-      let chosenDish = candidates.find((dish) => {
+      const exactMatch = candidates.find((dish) => {
         if (!dish.kategori_menu) return false;
         const dishTags = extractCodes(dish.kategori_menu);
-        return kategoriCodes.some((kc) =>
+        return targetCodes.some((kc) =>
           dishTags.some((dt) => dt.toUpperCase() === kc.toUpperCase()),
         );
       });
 
-      if (!chosenDish) {
-        chosenDish =
-          candidates.find((dish) => {
-            if (!dish.kategori_menu) return true;
-            const dTag = dish.kategori_menu.toUpperCase();
-            return (
-              dTag === 'B' ||
-              dTag === 'BIASA' ||
-              dTag === 'NON DIET' ||
-              dTag === '-'
-            );
-          }) || candidates[0];
-      }
-
-      if (chosenDish) {
+      if (exactMatch) {
         resolvedCategories.push({
           jenis,
           dish: {
-            code: `MENU-${chosenDish.id}`,
-            name: chosenDish.nama_makanan,
-            category: mapCategoryGroup(chosenDish.jenis_makanan),
-            kelas: chosenDish.kelas,
-            dietTag: chosenDish.kategori_menu || undefined,
-            catatan: chosenDish.catatan || undefined,
+            code: `MENU-${exactMatch.id}`,
+            name: exactMatch.nama_makanan,
+            category: mapCategoryGroup(exactMatch.jenis_makanan),
+            kelas: exactMatch.kelas,
+            dietTag: exactMatch.kategori_menu || undefined,
+            catatan: exactMatch.catatan || undefined,
           },
         });
-      }
-    } else {
-      if (kategoriCodes.length > 0) {
-        for (const kc of kategoriCodes) {
-          const dietName = labelMap.get(kc) || defaultLabels[kc] || kc;
+      } else {
+        // Tag terisi tapi tidak tertera di siklus menu slot ini:
+        for (const tc of targetCodes) {
           resolvedCategories.push({
             jenis,
-            dish: {
-              code: kc,
-              name: `Menu ${jenis}: ${dietName}`,
-              category: mapCategoryGroup(jenis),
-              kelas: pKelas,
-            },
+            dish: buildMissingCycleMenuDish(
+              tc,
+              jenis,
+              pKelas,
+              labelMap,
+              defaultLabels,
+            ),
           });
         }
-      } else {
+      }
+    } else {
+      for (const tc of targetCodes) {
         resolvedCategories.push({
           jenis,
-          dish: {
-            code: `${jenis}-STD`,
-            name: `Lauk ${jenis} (Standar ${pKelas})`,
-            category: mapCategoryGroup(jenis),
-            kelas: pKelas,
-          },
+          dish: buildMissingCycleMenuDish(
+            tc,
+            jenis,
+            pKelas,
+            labelMap,
+            defaultLabels,
+          ),
         });
       }
     }
@@ -355,7 +369,8 @@ function resolvePatientMainDishes(
     nabatiEntry &&
     normHewani &&
     normNabati &&
-    normHewani === normNabati
+    normHewani === normNabati &&
+    !normHewani.includes('tidak terdaftar')
   ) {
     handled.add('HEWANI');
     handled.add('NABATI');
@@ -376,7 +391,8 @@ function resolvePatientMainDishes(
     sayurEntry &&
     normNabati &&
     normSayur &&
-    normNabati === normSayur
+    normNabati === normSayur &&
+    !normNabati.includes('tidak terdaftar')
   ) {
     handled.add('NABATI');
     handled.add('SAYUR');
@@ -398,7 +414,8 @@ function resolvePatientMainDishes(
     sayurEntry &&
     normHewani &&
     normSayur &&
-    normHewani === normSayur
+    normHewani === normSayur &&
+    !normHewani.includes('tidak terdaftar')
   ) {
     handled.add('HEWANI');
     handled.add('SAYUR');
@@ -564,6 +581,8 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
       {
         bentuk_makanan: string | null;
         kategori_diet: string | null;
+        nabati: string | null;
+        sayur: string | null;
         extra: string | null;
         buah: string | null;
         snack: string | null;
@@ -572,9 +591,18 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
     >();
 
     for (const m of masterMappings) {
+      let nabati = m.nabati;
+      let sayur = m.sayur;
+      if (!nabati && !sayur && m.extra) {
+        const parts = m.extra.split(',').map((s) => s.trim());
+        nabati = parts[0] || null;
+        sayur = parts[1] || null;
+      }
       mappingByRaw.set(m.diet_rs_raw.trim().toLowerCase(), {
         bentuk_makanan: m.bentuk_makanan,
         kategori_diet: m.kategori_diet,
+        nabati,
+        sayur,
         extra: m.extra,
         buah: m.buah,
         snack: m.snack,
@@ -641,7 +669,6 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
     }
 
     // Process each active patient
-    // Process each active patient
     for (const p of activePatients) {
       // Explicit medical status flag: NPO completely excluded from kitchen production dishes
       if (isNpoPatient(p)) {
@@ -662,7 +689,9 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
       const pKelas = p.kelas || 'Kelas 1';
 
       const bentukCodes = extractCodes(mapped.bentuk_makanan);
-      const kategoriCodes = extractCodes(mapped.kategori_diet);
+      const hewaniCodes = extractCodes(mapped.kategori_diet);
+      const nabatiCodes = extractCodes(mapped.nabati);
+      const sayurCodes = extractCodes(mapped.sayur);
       const extraCodes = extractCodes(mapped.extra);
       const buahCodes = extractCodes(mapped.buah);
       const snackCodes = extractCodes(mapped.snack);
@@ -670,7 +699,7 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
       // Check if mapped to NPO / Puasa
       const isNpoMapped =
         bentukCodes.some((c) => c.toUpperCase() === 'NPO' || c.toUpperCase() === 'PUASA') ||
-        kategoriCodes.some((c) => c.toUpperCase() === 'NPO' || c.toUpperCase() === 'PUASA');
+        hewaniCodes.some((c) => c.toUpperCase() === 'NPO' || c.toUpperCase() === 'PUASA');
 
       if (isNpoMapped) {
         continue;
@@ -679,32 +708,55 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
       // Check if mapped to AG KATERING (Alihkan ke AG Katering) -> skip live production entirely
       const isKateringMapped =
         bentukCodes.some((c) => c.toUpperCase() === 'KATERING') ||
-        kategoriCodes.some((c) => c.toUpperCase() === 'KATERING');
+        hewaniCodes.some((c) => c.toUpperCase() === 'KATERING');
 
       if (isKateringMapped) {
         continue;
       }
 
-      // A. Makanan Pokok / Bentuk Makanan (e.g. BN -> Nasi Biasa, BL/TIM -> Nasi Tim, SAR -> Bubur Saring, CAIR -> Cair)
+      // A. Makanan Pokok / Kategori Diet (e.g. BN -> Nasi Biasa, BL/TIM -> Nasi Tim, SAR -> Bubur Saring, CAIR -> Cair)
       if (bentukCodes.length > 0) {
         for (const code of bentukCodes) {
           const upperCode = code.toUpperCase();
           if (upperCode === 'NPO' || upperCode === 'PUASA') continue;
 
-          let stapleName = 'Nasi Biasa';
-          if (upperCode === 'BN' || upperCode === 'BIASA') stapleName = 'Nasi Biasa';
-          else if (upperCode === 'BL' || upperCode === 'LUNAK') stapleName = 'Nasi Tim / Lunak';
-          else if (upperCode === 'TIM' || upperCode === 'TM') stapleName = 'Nasi Tim';
-          else if (upperCode === 'SAR' || upperCode === 'SARING') stapleName = 'Bubur Saring';
-          else if (upperCode === 'CAIR' || upperCode === 'CAI') stapleName = 'Makanan Cair';
+          let stapleName: string | null = 'Nasi Biasa';
+          let stapleCategory: MenuCategoryGroup = 'POKOK';
+          if (upperCode === 'BN' || upperCode === 'BIASA')
+            stapleName = 'Nasi Biasa';
+          else if (upperCode === 'BL' || upperCode === 'LUNAK')
+            stapleName = 'Nasi Tim / Lunak';
+          else if (upperCode === 'TIM' || upperCode === 'TM')
+            stapleName = 'Nasi Tim';
+          else if (upperCode === 'SAR' || upperCode === 'SARING') {
+            stapleName = 'Bubur Saring';
+            stapleCategory = 'SARING';
+          } else if (upperCode === 'CAIR' || upperCode === 'CAI')
+            stapleName = 'Makanan Cair';
           else {
-            stapleName = labelMap.get(upperCode) || defaultLabels[upperCode] || `Makanan Pokok (${code})`;
+            const knownStaple =
+              labelMap.get(upperCode) || defaultLabels[upperCode];
+            if (knownStaple) {
+              stapleName = knownStaple;
+            } else {
+              // Kode mapping tidak dikenal di master maupun siklus → tandai missing secara eksplisit.
+              addLiveDish(
+                buildMissingCycleMenuDish(
+                  code,
+                  'POKOK',
+                  pKelas,
+                  labelMap,
+                  defaultLabels,
+                ),
+              );
+              continue;
+            }
           }
 
           addLiveDish({
             code: upperCode,
             name: stapleName,
-            category: upperCode === 'SAR' ? 'SARING' : 'POKOK',
+            category: stapleCategory,
             kelas: pKelas,
           });
         }
@@ -714,7 +766,11 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
       const mainDishes = resolvePatientMainDishes(
         activeSlotMenuItems,
         pKelas,
-        kategoriCodes,
+        {
+          HEWANI: hewaniCodes,
+          NABATI: nabatiCodes,
+          SAYUR: sayurCodes,
+        },
         labelMap,
         defaultLabels,
       );
@@ -728,15 +784,25 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
         for (const code of extraCodes) {
           const upperCode = code.toUpperCase();
           const extraName =
-            labelMap.get(upperCode) ||
-            defaultLabels[upperCode] ||
-            `Extra ${code}`;
-          addLiveDish({
-            code: upperCode,
-            name: extraName,
-            category: 'EXTRA',
-            kelas: pKelas,
-          });
+            labelMap.get(upperCode) || defaultLabels[upperCode];
+          if (extraName) {
+            addLiveDish({
+              code: upperCode,
+              name: extraName,
+              category: 'EXTRA',
+              kelas: pKelas,
+            });
+          } else {
+            addLiveDish(
+              buildMissingCycleMenuDish(
+                code,
+                'EXTRA',
+                pKelas,
+                labelMap,
+                defaultLabels,
+              ),
+            );
+          }
         }
       }
 
@@ -744,16 +810,25 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
       if (buahCodes.length > 0) {
         for (const code of buahCodes) {
           const upperCode = code.toUpperCase();
-          const buahName =
-            labelMap.get(upperCode) ||
-            defaultLabels[upperCode] ||
-            `Buah ${code}`;
-          addLiveDish({
-            code: upperCode,
-            name: buahName,
-            category: 'BUAH',
-            kelas: pKelas,
-          });
+          const buahName = labelMap.get(upperCode) || defaultLabels[upperCode];
+          if (buahName) {
+            addLiveDish({
+              code: upperCode,
+              name: buahName,
+              category: 'BUAH',
+              kelas: pKelas,
+            });
+          } else {
+            addLiveDish(
+              buildMissingCycleMenuDish(
+                code,
+                'BUAH',
+                pKelas,
+                labelMap,
+                defaultLabels,
+              ),
+            );
+          }
         }
       } else {
         // Check if cycle defines a default fruit for all
@@ -775,15 +850,25 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
         for (const code of snackCodes) {
           const upperCode = code.toUpperCase();
           const snackName =
-            labelMap.get(upperCode) ||
-            defaultLabels[upperCode] ||
-            `Snack ${code}`;
-          addLiveDish({
-            code: upperCode,
-            name: snackName,
-            category: 'SNACK',
-            kelas: pKelas,
-          });
+            labelMap.get(upperCode) || defaultLabels[upperCode];
+          if (snackName) {
+            addLiveDish({
+              code: upperCode,
+              name: snackName,
+              category: 'SNACK',
+              kelas: pKelas,
+            });
+          } else {
+            addLiveDish(
+              buildMissingCycleMenuDish(
+                code,
+                'SNACK',
+                pKelas,
+                labelMap,
+                defaultLabels,
+              ),
+            );
+          }
         }
       } else {
         const defaultSnack = activeSlotMenuItems.find(
@@ -825,6 +910,8 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
           kelas: snapshotDetailTable.kelas,
           bentuk_makanan: snapshotDetailTable.bentuk_makanan,
           kategori_diet: snapshotDetailTable.kategori_diet,
+          nabati: snapshotDetailTable.nabati,
+          sayur: snapshotDetailTable.sayur,
           extra: snapshotDetailTable.extra,
           buah: snapshotDetailTable.buah,
           snack: snapshotDetailTable.snack,
@@ -841,7 +928,9 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
         const rawDiet = (sd.diet_rs_raw || '').trim();
         const pKelas = sd.kelas || 'Kelas 1';
         let bentukCodes = extractCodes(sd.bentuk_makanan);
-        let kategoriCodes = extractCodes(sd.kategori_diet);
+        let hewaniCodes = extractCodes(sd.kategori_diet);
+        let nabatiCodes = extractCodes(sd.nabati);
+        let sayurCodes = extractCodes(sd.sayur);
         let extraCodes = extractCodes(sd.extra);
         let buahCodes = extractCodes(sd.buah);
         let snackCodes = extractCodes(sd.snack);
@@ -851,7 +940,9 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
           const mapped = mappingByRaw.get(rawDiet.toLowerCase());
           if (mapped && mapped.status_mapping === 'MAPPED') {
             bentukCodes = extractCodes(mapped.bentuk_makanan);
-            kategoriCodes = extractCodes(mapped.kategori_diet);
+            hewaniCodes = extractCodes(mapped.kategori_diet);
+            nabatiCodes = extractCodes(mapped.nabati);
+            sayurCodes = extractCodes(mapped.sayur);
             extraCodes = extractCodes(mapped.extra);
             buahCodes = extractCodes(mapped.buah);
             snackCodes = extractCodes(mapped.snack);
@@ -861,7 +952,9 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
         // If not mapped, do not add snapshot dishes
         if (
           bentukCodes.length === 0 &&
-          kategoriCodes.length === 0 &&
+          hewaniCodes.length === 0 &&
+          nabatiCodes.length === 0 &&
+          sayurCodes.length === 0 &&
           extraCodes.length === 0 &&
           buahCodes.length === 0 &&
           snackCodes.length === 0
@@ -871,7 +964,7 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
 
         const isNpoMapped =
           bentukCodes.some((c) => c.toUpperCase() === 'NPO' || c.toUpperCase() === 'PUASA') ||
-          kategoriCodes.some((c) => c.toUpperCase() === 'NPO' || c.toUpperCase() === 'PUASA');
+          hewaniCodes.some((c) => c.toUpperCase() === 'NPO' || c.toUpperCase() === 'PUASA');
 
         if (isNpoMapped) {
           continue;
@@ -880,7 +973,7 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
         // Check if mapped to AG KATERING (Alihkan ke AG Katering) -> skip live production snapshot entirely
         const isKateringMapped =
           bentukCodes.some((c) => c.toUpperCase() === 'KATERING') ||
-          kategoriCodes.some((c) => c.toUpperCase() === 'KATERING');
+          hewaniCodes.some((c) => c.toUpperCase() === 'KATERING');
 
         if (isKateringMapped) {
           continue;
@@ -892,20 +985,43 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
             const upperCode = code.toUpperCase();
             if (upperCode === 'NPO' || upperCode === 'PUASA') continue;
 
-            let stapleName = 'Nasi Biasa';
-            if (upperCode === 'BN' || upperCode === 'BIASA') stapleName = 'Nasi Biasa';
-            else if (upperCode === 'BL' || upperCode === 'LUNAK') stapleName = 'Nasi Tim / Lunak';
-            else if (upperCode === 'TIM' || upperCode === 'TM') stapleName = 'Nasi Tim';
-            else if (upperCode === 'SAR' || upperCode === 'SARING') stapleName = 'Bubur Saring';
-            else if (upperCode === 'CAIR' || upperCode === 'CAI') stapleName = 'Makanan Cair';
+            let stapleName: string | null = 'Nasi Biasa';
+            let stapleCategory: MenuCategoryGroup = 'POKOK';
+            if (upperCode === 'BN' || upperCode === 'BIASA')
+              stapleName = 'Nasi Biasa';
+            else if (upperCode === 'BL' || upperCode === 'LUNAK')
+              stapleName = 'Nasi Tim / Lunak';
+            else if (upperCode === 'TIM' || upperCode === 'TM')
+              stapleName = 'Nasi Tim';
+            else if (upperCode === 'SAR' || upperCode === 'SARING') {
+              stapleName = 'Bubur Saring';
+              stapleCategory = 'SARING';
+            } else if (upperCode === 'CAIR' || upperCode === 'CAI')
+              stapleName = 'Makanan Cair';
             else {
-              stapleName = labelMap.get(upperCode) || defaultLabels[upperCode] || `Makanan Pokok (${code})`;
+              const knownStaple =
+                labelMap.get(upperCode) || defaultLabels[upperCode];
+              if (knownStaple) {
+                stapleName = knownStaple;
+              } else {
+                // Kode mapping tidak dikenal di master maupun siklus → tandai missing secara eksplisit.
+                addSnapshotDish(
+                  buildMissingCycleMenuDish(
+                    code,
+                    'POKOK',
+                    pKelas,
+                    labelMap,
+                    defaultLabels,
+                  ),
+                );
+                continue;
+              }
             }
 
             addSnapshotDish({
               code: upperCode,
               name: stapleName,
-              category: upperCode === 'SAR' ? 'SARING' : 'POKOK',
+              category: stapleCategory,
               kelas: pKelas,
             });
           }
@@ -915,7 +1031,11 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
         const mainDishes = resolvePatientMainDishes(
           activeSlotMenuItems,
           pKelas,
-          kategoriCodes,
+          {
+            HEWANI: hewaniCodes,
+            NABATI: nabatiCodes,
+            SAYUR: sayurCodes,
+          },
           labelMap,
           defaultLabels,
         );
@@ -929,15 +1049,25 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
           for (const code of extraCodes) {
             const upperCode = code.toUpperCase();
             const extraName =
-              labelMap.get(upperCode) ||
-              defaultLabels[upperCode] ||
-              `Extra ${code}`;
-            addSnapshotDish({
-              code: upperCode,
-              name: extraName,
-              category: 'EXTRA',
-              kelas: pKelas,
-            });
+              labelMap.get(upperCode) || defaultLabels[upperCode];
+            if (extraName) {
+              addSnapshotDish({
+                code: upperCode,
+                name: extraName,
+                category: 'EXTRA',
+                kelas: pKelas,
+              });
+            } else {
+              addSnapshotDish(
+                buildMissingCycleMenuDish(
+                  code,
+                  'EXTRA',
+                  pKelas,
+                  labelMap,
+                  defaultLabels,
+                ),
+              );
+            }
           }
         }
 
@@ -946,15 +1076,25 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
           for (const code of buahCodes) {
             const upperCode = code.toUpperCase();
             const buahName =
-              labelMap.get(upperCode) ||
-              defaultLabels[upperCode] ||
-              `Buah ${code}`;
-            addSnapshotDish({
-              code: upperCode,
-              name: buahName,
-              category: 'BUAH',
-              kelas: pKelas,
-            });
+              labelMap.get(upperCode) || defaultLabels[upperCode];
+            if (buahName) {
+              addSnapshotDish({
+                code: upperCode,
+                name: buahName,
+                category: 'BUAH',
+                kelas: pKelas,
+              });
+            } else {
+              addSnapshotDish(
+                buildMissingCycleMenuDish(
+                  code,
+                  'BUAH',
+                  pKelas,
+                  labelMap,
+                  defaultLabels,
+                ),
+              );
+            }
           }
         } else {
           const defaultFruit = activeSlotMenuItems.find(
@@ -975,15 +1115,25 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
           for (const code of snackCodes) {
             const upperCode = code.toUpperCase();
             const snackName =
-              labelMap.get(upperCode) ||
-              defaultLabels[upperCode] ||
-              `Snack ${code}`;
-            addSnapshotDish({
-              code: upperCode,
-              name: snackName,
-              category: 'SNACK',
-              kelas: pKelas,
-            });
+              labelMap.get(upperCode) || defaultLabels[upperCode];
+            if (snackName) {
+              addSnapshotDish({
+                code: upperCode,
+                name: snackName,
+                category: 'SNACK',
+                kelas: pKelas,
+              });
+            } else {
+              addSnapshotDish(
+                buildMissingCycleMenuDish(
+                  code,
+                  'SNACK',
+                  pKelas,
+                  labelMap,
+                  defaultLabels,
+                ),
+              );
+            }
           }
         } else {
           const defaultSnack = activeSlotMenuItems.find(

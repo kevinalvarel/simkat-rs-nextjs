@@ -33,7 +33,7 @@ export const KATEGORI_LABEL: Record<string, string> = {
   SAYUR: 'Sayur',
   BUAH: 'Buah',
   SNACK: 'Snack',
-  BENTUK_MAKANAN: 'Bentuk Makanan (Karbo)',
+  BENTUK_MAKANAN: 'Kategori Diet',
   DIIT: 'Kategori Diet',
   EXTRA: 'Extra Makanan',
 };

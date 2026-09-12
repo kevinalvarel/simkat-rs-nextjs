@@ -1,6 +1,6 @@
 'use server';
 
-import { eq, desc, inArray, and } from 'drizzle-orm';
+import { eq, desc, inArray, and, ne } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/drizzle';
 import { otorisasiPerubahanDietTable } from '@/db/schemas/snapshot/perizinan-revisi';
@@ -60,7 +60,7 @@ export async function getOtorisasiList(
         batch_code: snapshotBatchTable.batch_code,
       })
       .from(otorisasiPerubahanDietTable)
-      .leftJoin(
+      .innerJoin(
         pasienTable,
         eq(otorisasiPerubahanDietTable.pasien_id, pasienTable.id),
       )
@@ -68,6 +68,7 @@ export async function getOtorisasiList(
         snapshotBatchTable,
         eq(otorisasiPerubahanDietTable.batch_id, snapshotBatchTable.id),
       )
+      .where(ne(pasienTable.status_pasien, 'PULANG'))
       .orderBy(desc(otorisasiPerubahanDietTable.requested_at));
 
     const dbResults = await query;
@@ -399,8 +400,8 @@ export async function rejectRevisiDiet(
         })
         .where(eq(otorisasiPerubahanDietTable.id, id));
 
-      // If it was a rejected NEW_PATIENT, remove the unapproved draft from pasienTable
       if (revisi.jenis_perubahan === 'NEW_PATIENT') {
+        // NEW_PATIENT yang ditolak: hapus draft dari pasienTable (belum pernah aktif)
         await db
           .delete(pasienTable)
           .where(
@@ -409,6 +410,20 @@ export async function rejectRevisiDiet(
               eq(pasienTable.status_pasien, 'PENDING_REVISI'),
             ),
           );
+      } else {
+        // Pasien existing (DIET_CHANGE, NPO, ROOM_TRANSFER, DISCHARGE):
+        // Pastikan pasien tetap aktif setelah revisi ditolak
+        const [currentPatient] = await db
+          .select()
+          .from(pasienTable)
+          .where(eq(pasienTable.id, revisi.pasien_id));
+
+        if (currentPatient && currentPatient.status_pasien === 'PENDING_REVISI') {
+          await db
+            .update(pasienTable)
+            .set({ status_pasien: 'AKTIF', updated_at: new Date() })
+            .where(eq(pasienTable.id, revisi.pasien_id));
+        }
       }
 
       revalidatePath('/dashboard/ag-rs/data-pasien');
@@ -486,4 +501,16 @@ export async function bulkApproveRevisiDiet(
       message: 'Gagal melakukan persetujuan massal di database.',
     };
   }
+}
+
+/**
+ * Server action for client-side polling: fetch fresh items + stats in one round-trip.
+ */
+export async function refreshOtorisasiData(): Promise<{
+  items: RevisiPostSnapshotItem[];
+  stats: OtorisasiStats;
+}> {
+  const items = await getOtorisasiList();
+  const stats = await getOtorisasiStats(items);
+  return { items, stats };
 }

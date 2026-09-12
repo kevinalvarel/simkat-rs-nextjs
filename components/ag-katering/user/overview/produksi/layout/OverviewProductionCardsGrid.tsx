@@ -200,7 +200,11 @@ export default function OverviewProductionCardsGrid({
         <span>
           * Angka di atas merupakan akumulasi porsi hidangan dari{' '}
           <strong>Siklus Menu</strong> aktif yang disesuaikan dengan diet &
-          kelas pasien.
+          kelas pasien. Kartu berlabel{' '}
+          <strong className='text-amber-700 dark:text-amber-300'>
+            “Tidak ada di siklus menu”
+          </strong>{' '}
+          berarti kode mapping diet belum didaftarkan di siklus menu aktif.
         </span>
         <span className='shrink-0'>
           Target Kunci Batch:{' '}

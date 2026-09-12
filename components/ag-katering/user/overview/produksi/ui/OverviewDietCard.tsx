@@ -3,11 +3,13 @@
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ArrowUpRight, ArrowDownRight, Minus, Sparkles } from 'lucide-react';
-import type {
-  MonitoringCardData,
-  MenuCategoryGroup,
-} from '@/types/monitoringtypes';
+import {
+  ArrowUpRight,
+  ArrowDownRight,
+  Minus,
+  TriangleAlert,
+} from 'lucide-react';
+import type { MonitoringCardData } from '@/types/monitoringtypes';
 
 interface OverviewDietCardProps {
   card: MonitoringCardData;
@@ -111,6 +113,12 @@ export default function OverviewDietCard({ card }: OverviewDietCardProps) {
   const categoryKey = (card.category || 'LAINNYA').toUpperCase();
   const categoryStyle = CATEGORY_STYLES[categoryKey] || CATEGORY_STYLES.LAINNYA;
 
+  // Penanda eksplisit: kode mapping-diet tidak terdaftar di siklus menu aktif.
+  const isMissingFromCycleMenu =
+    (card.name || '').toLowerCase().includes('tidak terdaftar pada siklus menu') ||
+    (card.name || '').toLowerCase().includes('tidak ada di siklus menu') ||
+    (card.code || '').startsWith('MISSING-');
+
   const styles = (() => {
     if (change > 0) {
       return {
@@ -146,31 +154,52 @@ export default function OverviewDietCard({ card }: OverviewDietCardProps) {
 
   return (
     <Card
-      className={`transition-all duration-300 border hover:shadow-md flex flex-col justify-between overflow-hidden rounded-xl animate-in fade-in zoom-in-95 duration-200 ${styles.bg} ${
-        change !== 0 ? 'ring-1 ring-primary/15' : ''
-      }`}
+      className={`transition-all duration-300 border hover:shadow-md flex flex-col justify-between overflow-hidden rounded-xl animate-in fade-in zoom-in-95 duration-200 ${
+        isMissingFromCycleMenu
+          ? 'bg-amber-500/5 dark:bg-amber-950/20 border-amber-500/40 border-dashed ring-1 ring-amber-500/20'
+          : styles.bg
+      } ${change !== 0 && !isMissingFromCycleMenu ? 'ring-1 ring-primary/15' : ''}`}
+      title={card.catatan || card.name}
     >
       {/* Header with Category Badge & Dish Name */}
       <div className='border-b border-border/60 p-2.5 text-left bg-muted/30 space-y-1.5'>
-        <div className='flex items-center justify-center gap-1 flex-wrap'>
+        <div className='flex items-center justify-center gap-1.5 flex-wrap'>
+          <Badge
+            variant='outline'
+            className={`text-[10px] font-semibold px-2 py-0.5 ${categoryStyle.bgBadge} ${categoryStyle.borderBadge}`}
+          >
+            {categoryStyle.label}
+          </Badge>
           {/* Special Diet or Kelas Tag */}
-          {card.dietTag && (
-            <span className='inline-flex items-center px-1.5 py-0.2 rounded text-[16px] font-mono font-semibold bg-primary/10 text-primary border border-primary/20'>
+          {card.dietTag && card.dietTag !== '-' && (
+            <span className='inline-flex items-center px-1.5 py-0.2 rounded text-[13px] font-mono font-semibold bg-primary/10 text-primary border border-primary/20'>
               {card.dietTag}
             </span>
           )}
         </div>
 
         {/* Dish Name */}
-        <h4
-          className='font-bold text-xs sm:text-sm text-foreground tracking-tight leading-snug line-clamp-2 min-h-[2rem] text-center'
-          title={card.name}
-        >
-          {card.name}
-        </h4>
+        {isMissingFromCycleMenu ? (
+          <div className='flex flex-col items-center justify-center gap-1 min-h-[2rem] py-0.5'>
+            <Badge
+              variant='secondary'
+              className='text-[11px] font-medium gap-1 px-2.5 py-1 bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-500/30'
+            >
+              <TriangleAlert className='w-3.5 h-3.5 shrink-0 text-amber-600 dark:text-amber-400' />
+              Tidak terdaftar pada siklus menu
+            </Badge>
+          </div>
+        ) : (
+          <h4
+            className='font-bold text-xs sm:text-sm tracking-tight leading-snug line-clamp-2 min-h-[2rem] text-center text-foreground'
+            title={card.catatan || card.name}
+          >
+            {card.name}
+          </h4>
+        )}
 
         {card.kelas && card.kelas !== 'Semua Kelas' && (
-          <span className='text-[10px] text-muted-foreground block truncate'>
+          <span className='text-[10px] text-muted-foreground block truncate text-center'>
             Khusus: <strong>{card.kelas}</strong>
           </span>
         )}

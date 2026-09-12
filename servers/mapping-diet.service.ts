@@ -145,9 +145,9 @@ export async function getUnmappedDietItems(): Promise<UnmappedDietItem[]> {
 
       const kelasList = Array.from(kelasMap.get(rawDiet) || []).sort();
 
-      let nabati: string | null = null;
-      let sayur: string | null = null;
-      if (existing?.extra) {
+      let nabati: string | null = existing?.nabati ?? null;
+      let sayur: string | null = existing?.sayur ?? null;
+      if (!nabati && !sayur && existing?.extra) {
         const parts = existing.extra.split(',').map((s) => s.trim());
         if (parts.length >= 2) {
           nabati = parts[0];
@@ -261,9 +261,9 @@ export async function getMappedDietItems(): Promise<UnmappedDietItem[]> {
       const jumlahPasien = countMap.get(key) ?? 0;
       const kelasList = Array.from(kelasMap.get(key) || []).sort();
 
-      let nabati: string | null = null;
-      let sayur: string | null = null;
-      if (m.extra) {
+      let nabati: string | null = m.nabati ?? null;
+      let sayur: string | null = m.sayur ?? null;
+      if (!nabati && !sayur && m.extra) {
         const parts = m.extra.split(',').map((s) => s.trim());
         if (parts.length >= 2) {
           nabati = parts[0];
@@ -428,13 +428,22 @@ export async function saveDietMapping(
   }
   // Mode 3: Standard mapping
   else {
-    const isMapped = Boolean(bentuk_makanan && kategori_diet);
+    const isMapped = Boolean(
+      bentuk_makanan &&
+      kategori_diet &&
+      nabati &&
+      sayur &&
+      buah &&
+      snack
+    );
     const isPartial = Boolean(
       bentuk_makanan ||
-        kategori_diet ||
-        extraCombined?.trim() ||
-        buah ||
-        snack,
+      kategori_diet ||
+      nabati ||
+      sayur ||
+      buah ||
+      snack ||
+      extraCombined?.trim()
     );
     status_mapping = isMapped ? 'MAPPED' : isPartial ? 'PARTIAL' : 'UNMAPPED';
   }
@@ -451,6 +460,8 @@ export async function saveDietMapping(
         .set({
           bentuk_makanan,
           kategori_diet,
+          nabati,
+          sayur,
           extra: extraCombined,
           buah,
           snack,
@@ -465,6 +476,8 @@ export async function saveDietMapping(
         diet_rs_raw: raw,
         bentuk_makanan,
         kategori_diet,
+        nabati,
+        sayur,
         extra: extraCombined,
         buah,
         snack,

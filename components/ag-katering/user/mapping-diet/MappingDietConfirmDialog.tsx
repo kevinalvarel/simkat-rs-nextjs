@@ -131,11 +131,18 @@ export default function MappingDietConfirmDialog({
                       <div className='font-mono font-bold text-foreground truncate'>
                         {it.diet_rs_raw}
                       </div>
-                      <div className='text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5'>
+                      <div className='text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5 flex-wrap'>
                         <span>Karbo: <strong>{it.karbo}</strong></span>
                         <span>•</span>
                         <span>Hewani: <strong>{it.hewani}</strong></span>
-                        {it.sayur && <span>• Sayur: {it.sayur}</span>}
+                        <span>•</span>
+                        <span>Nabati: <strong>{it.nabati}</strong></span>
+                        <span>•</span>
+                        <span>Sayur: <strong>{it.sayur}</strong></span>
+                        <span>•</span>
+                        <span>Buah: <strong>{it.buah}</strong></span>
+                        <span>•</span>
+                        <span>Snack: <strong>{it.snack}</strong></span>
                       </div>
                     </div>
                     {it.karbo === 'NPO' ? (

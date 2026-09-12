@@ -359,6 +359,8 @@ export async function triggerManualSnapshot(
           diet_rs_raw: p.diet,
           bentuk_makanan: isNpo ? 'NPO' : mapped?.bentuk_makanan || null,
           kategori_diet: isNpo ? 'NPO' : mapped?.kategori_diet || null,
+          nabati: isNpo ? 'NPO' : mapped?.nabati || null,
+          sayur: isNpo ? 'NPO' : mapped?.sayur || null,
           extra: isNpo ? null : mapped?.extra || null,
           buah: isNpo ? null : mapped?.buah || null,
           snack: isNpo ? null : mapped?.snack || null,

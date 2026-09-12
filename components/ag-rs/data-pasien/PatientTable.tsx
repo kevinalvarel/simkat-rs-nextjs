@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Fragment, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Patient } from '@/servers/patient.service';
 import { createPatient, updatePatientField } from '@/servers/patient.service';
@@ -11,7 +11,8 @@ import type {
   EditingTarget,
   ContextMenuState,
 } from '@/types/data-pasien';
-import { Table, TableBody } from '@/components/ui/table';
+import { Table, TableBody, TableRow, TableCell } from '@/components/ui/table';
+import { DoorClosed, BedDouble } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { PatientTableHeader } from './ui/PatientTableHeader';
@@ -103,9 +104,29 @@ export default function PatientTable({
     kelasOptions[0] ||
     'Kelas 1';
 
-  function startInlineAdd(bedLabel: string) {
-    setInlineAddBedKey(bedLabel);
-    const activeKamarValue = kamar || roomKamarOptions[0] || 'Kamar 1';
+  const isSemuaKamar =
+    !kamar ||
+    kamar.trim() === '' ||
+    kamar.toLowerCase().startsWith('semua kamar') ||
+    kamar.toLowerCase().startsWith('semua') ||
+    kamar === 'ALL';
+
+  const normalizeKamar = (s: string | null | undefined) =>
+    (s || '').trim().toLowerCase();
+
+  function makeInlineKey(kamarName: string, bedLabel: string) {
+    return `${kamarName}|||${bedLabel}`;
+  }
+
+  function resolveKamarGroupForBed(kamarGroup?: string) {
+    if (kamarGroup && kamarGroup.trim() !== '') return kamarGroup;
+    if (!isSemuaKamar && kamar && kamar.trim() !== '') return kamar;
+    return roomKamarOptions[0] || 'Kamar 1';
+  }
+
+  function startInlineAdd(bedLabel: string, kamarGroup?: string) {
+    const activeKamarValue = resolveKamarGroupForBed(kamarGroup);
+    setInlineAddBedKey(makeInlineKey(activeKamarValue, bedLabel));
     setInlineAddDraft({
       nama_pasien: '',
       no_rm: '',
@@ -131,7 +152,7 @@ export default function PatientTable({
     setInlineAddDraft((prev) => (prev ? { ...prev, [field]: value } : prev));
   }
 
-  async function handleSaveInlineAdd(bedKey: string) {
+  async function handleSaveInlineAdd(bedKey: string, kamarGroup?: string) {
     if (!inlineAddDraft || isSavingInline) return;
 
     if (!inlineAddDraft.nama_pasien?.trim()) {
@@ -147,13 +168,14 @@ export default function PatientTable({
       return;
     }
 
-    const activeKamarValue = kamar || roomKamarOptions[0] || 'Kamar 1';
+    const activeKamarValue =
+      inlineAddDraft.gedung || resolveKamarGroupForBed(kamarGroup);
     const payload: PatientFormValues = {
       nama_pasien: inlineAddDraft.nama_pasien.trim(),
       no_rm: inlineAddDraft.no_rm.trim(),
       diet: inlineAddDraft.diet.trim(),
       kelas: inlineAddDraft.kelas || defaultRoomKelas,
-      gedung: inlineAddDraft.gedung || activeKamarValue,
+      gedung: activeKamarValue,
       ruangan: inlineAddDraft.ruangan || ruangan,
       bed: inlineAddDraft.bed || bedKey,
       status_pasien: inlineAddDraft.status_pasien || 'AKTIF',
@@ -193,16 +215,22 @@ export default function PatientTable({
   function handleRowBlur(
     e: React.FocusEvent<HTMLTableRowElement>,
     bedKey: string,
+    kamarGroup?: string,
   ) {
     const currentTarget = e.currentTarget;
     if (!currentTarget.contains(e.relatedTarget as Node)) {
-      // Focus moved OUTSIDE this row! Auto-save if draft has content
+      // Focus moved OUTSIDE this row! Auto-save if draft has content.
+      // Hanya satu draft inline aktif dalam satu waktu, jadi cukup cocokkan bedKey
+      // (abaikan prefix kamar agar ganti select kamar tidak menggagalkan auto-save).
+      const isSameBed =
+        inlineAddBedKey === makeInlineKey(resolveKamarGroupForBed(kamarGroup), bedKey) ||
+        (inlineAddBedKey?.endsWith(`|||${bedKey}`) ?? false);
       if (
         inlineAddDraft &&
-        inlineAddBedKey === bedKey &&
+        isSameBed &&
         (inlineAddDraft.nama_pasien.trim() || inlineAddDraft.no_rm.trim())
       ) {
-        handleSaveInlineAdd(bedKey);
+        handleSaveInlineAdd(bedKey, kamarGroup);
       }
     }
   }
@@ -307,35 +335,133 @@ export default function PatientTable({
   }
 
   const activePatients = patients.filter((p) => p.status_pasien !== 'PULANG');
+  const isSearching = searchQuery.trim() !== '';
 
-  const targetCapacity = Math.max(
-    activePatients.length,
-    totalBedCapacity > 0 ? totalBedCapacity : 6,
+  type KamarGroup = {
+    nomorKamar: string;
+    jumlahBed: number;
+    isFallback?: boolean;
+  };
+
+  const kamarGroups: KamarGroup[] = useMemo(() => {
+    const list = currentRuanganObj?.kamarList;
+    if (list && list.length > 0) {
+      if (!isSemuaKamar) {
+        // Single-kamar mode: only the selected kamar
+        const selected =
+          currentKamarObj ||
+          list.find(
+            (k) => normalizeKamar(k.nomorKamar) === normalizeKamar(kamar),
+          ) ||
+          list[0];
+        return [
+          {
+            nomorKamar: selected.nomorKamar,
+            jumlahBed:
+              selected.jumlahBed > 0
+                ? selected.jumlahBed
+                : totalBedCapacity > 0
+                  ? totalBedCapacity
+                  : 6,
+          },
+        ];
+      }
+      // Semua-kamar mode: one group per kamar, bed numbers restart per group
+      return list.map((k) => ({
+        nomorKamar: k.nomorKamar,
+        jumlahBed: k.jumlahBed > 0 ? k.jumlahBed : 1,
+      }));
+    }
+    // Legacy fallback: no kamarList configured
+    const fallbackName =
+      !isSemuaKamar && kamar && kamar.trim() !== ''
+        ? kamar
+        : roomKamarOptions[0] || 'Kamar 1';
+    return [
+      {
+        nomorKamar: fallbackName,
+        jumlahBed: totalBedCapacity > 0 ? totalBedCapacity : 6,
+      },
+    ];
+  }, [
+    currentRuanganObj?.kamarList,
+    currentKamarObj,
+    isSemuaKamar,
+    kamar,
+    roomKamarOptions,
+    totalBedCapacity,
+  ]);
+
+  function buildBedSlotsForKamar(
+    capacity: number,
+    patientsInKamar: Patient[],
+  ): (Patient | null)[] {
+    const target = Math.max(
+      patientsInKamar.length,
+      capacity > 0 ? capacity : 1,
+    );
+    const slots: (Patient | null)[] = Array(target).fill(null);
+    const overflow: Patient[] = [];
+    patientsInKamar.forEach((p) => {
+      const slotIdx = getBedSlotIndex(p.bed);
+      if (slotIdx !== null && slotIdx <= target && !slots[slotIdx - 1]) {
+        slots[slotIdx - 1] = p;
+      } else {
+        overflow.push(p);
+      }
+    });
+    overflow.forEach((p) => {
+      const emptyIndex = slots.findIndex((slot) => slot === null);
+      if (emptyIndex !== -1) {
+        slots[emptyIndex] = p;
+      } else {
+        slots.push(p);
+      }
+    });
+    return slots;
+  }
+
+  type GroupedSlots = {
+    group: KamarGroup;
+    slots: (Patient | null)[];
+  };
+
+  const groupedSlots: GroupedSlots[] = useMemo(() => {
+    const matchedNames = new Set(
+      kamarGroups.map((g) => normalizeKamar(g.nomorKamar)),
+    );
+    const unassigned = activePatients.filter(
+      (p) => !matchedNames.has(normalizeKamar(p.gedung)),
+    );
+
+    const result: GroupedSlots[] = kamarGroups.map((group) => {
+      const inGroup = activePatients.filter(
+        (p) => normalizeKamar(p.gedung) === normalizeKamar(group.nomorKamar),
+      );
+      return { group, slots: buildBedSlotsForKamar(group.jumlahBed, inGroup) };
+    });
+
+    if (unassigned.length > 0) {
+      result.push({
+        group: {
+          nomorKamar: 'Lainnya / Tanpa Kamar',
+          jumlahBed: unassigned.length,
+          isFallback: true,
+        },
+        slots: buildBedSlotsForKamar(unassigned.length, unassigned),
+      });
+    }
+    return result;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePatients, kamarGroups]);
+
+  const totalGroupedCapacity = groupedSlots.reduce(
+    (acc, g) => acc + g.slots.length,
+    0,
   );
-  const bedSlots: (Patient | null)[] = Array(targetCapacity).fill(null);
-  const unassignedPatients: Patient[] = [];
 
-  activePatients.forEach((p) => {
-    const slotIdx = getBedSlotIndex(p.bed);
-    if (
-      slotIdx !== null &&
-      slotIdx <= targetCapacity &&
-      !bedSlots[slotIdx - 1]
-    ) {
-      bedSlots[slotIdx - 1] = p;
-    } else {
-      unassignedPatients.push(p);
-    }
-  });
-
-  unassignedPatients.forEach((p) => {
-    const emptyIndex = bedSlots.findIndex((slot) => slot === null);
-    if (emptyIndex !== -1) {
-      bedSlots[emptyIndex] = p;
-    } else {
-      bedSlots.push(p);
-    }
-  });
+  // Global running number across groups for the "No" column
+  let globalRowCounter = 0;
 
   return (
     <div className='space-y-3'>
@@ -356,7 +482,7 @@ export default function PatientTable({
           <span>
             Tidak ada pasien terdaftar yang sesuai dengan pencarian &quot;
             {searchQuery}&quot;. Menampilkan tabel formulir bed kosong (
-            {targetCapacity} Bed).
+            {totalGroupedCapacity} Bed).
           </span>
         </div>
       )}
@@ -366,70 +492,113 @@ export default function PatientTable({
           <Table>
             <PatientTableHeader />
             <TableBody>
-              {bedSlots.map((patient, index) => {
-                const bedNumber = index + 1;
-                const defaultBedLabel = `Bed ${bedNumber}`;
-
-                if (!patient) {
-                  if (inlineAddBedKey === defaultBedLabel && inlineAddDraft) {
-                    return (
-                      <InlineAddRow
-                        key={`inline-add-${bedNumber}`}
-                        bedNumber={bedNumber}
-                        defaultBedLabel={defaultBedLabel}
-                        inlineAddDraft={inlineAddDraft}
-                        ruangan={ruangan}
-                        gedung={gedung}
-                        kamar={kamar}
-                        kamarOptions={roomKamarOptions}
-                        kelasOptions={kelasOptions}
-                        statusOptions={STATUS_OPTIONS}
-                        isSavingInline={isSavingInline}
-                        onUpdateDraft={updateDraft}
-                        onSave={handleSaveInlineAdd}
-                        onCancel={cancelInlineAdd}
-                        onRowBlur={handleRowBlur}
-                      />
-                    );
-                  }
-
-                  return (
-                    <EmptyBedRow
-                      key={`empty-bed-${bedNumber}`}
-                      bedNumber={bedNumber}
-                      defaultBedLabel={defaultBedLabel}
-                      ruangan={ruangan}
-                      gedung={gedung}
-                      kamar={kamar}
-                      onStartInlineAdd={startInlineAdd}
-                    />
-                  );
-                }
-
+              {groupedSlots.map(({ group, slots }) => {
+                const filledCount = slots.filter((s) => s !== null).length;
                 return (
-                  <PatientTableRow
-                    key={patient.id}
-                    patient={patient}
-                    index={index}
-                    editingTarget={editingTarget}
-                    isModifiedRow={Boolean(modifiedFields[patient.id])}
-                    modifiedFields={modifiedFields[patient.id]}
-                    kelasOptions={kelasOptions}
-                    gedungOptions={gedungOptions}
-                    gedungList={gedungList}
-                    statusOptions={STATUS_OPTIONS}
-                    kamar={kamar}
-                    onStartEditField={(patientId, field: EditableField) =>
-                      setEditingTarget({ patientId, field })
-                    }
-                    onSaveField={handleSaveField}
-                    onCancelEdit={() => setEditingTarget(null)}
-                    onContextMenu={handleContextMenu}
-                    onEdit={onEdit}
-                    onOpenPindah={(pt) => setPindahPatient(pt)}
-                    onQuickPulang={handleQuickPulang}
-                    onDelete={onDelete}
-                  />
+                  <Fragment key={`kamar-group-${group.nomorKamar}`}>
+                    {isSemuaKamar && groupedSlots.length > 1 && (
+                      <TableRow
+                        key={`header-${group.nomorKamar}`}
+                        className='bg-muted/60 hover:bg-muted/60 border-y-2 border-border'
+                      >
+                        <TableCell colSpan={10} className='py-2.5 px-4'>
+                          <div className='flex items-center gap-2 text-xs sm:text-sm font-semibold'>
+                            <span className='flex items-center justify-center w-7 h-7 rounded-full bg-primary/10 text-primary'>
+                              <DoorClosed className='w-4 h-4' />
+                            </span>
+                            <span>{group.nomorKamar}</span>
+                            <span className='inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium text-muted-foreground bg-background'>
+                              <BedDouble className='w-3 h-3 text-primary' />
+                              {group.jumlahBed} Bed
+                            </span>
+                            <span className='text-[11px] font-normal text-muted-foreground'>
+                              ({filledCount} terisi / {slots.length} slot)
+                            </span>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    {slots.map((patient, slotIndex) => {
+                      globalRowCounter += 1;
+                      const globalNo = globalRowCounter;
+                      const perKamarBedNumber = slotIndex + 1;
+                      const defaultBedLabel = `Bed ${perKamarBedNumber}`;
+                      const inlineKey = makeInlineKey(
+                        group.nomorKamar,
+                        defaultBedLabel,
+                      );
+
+                      if (!patient) {
+                        // Saat searching, sembunyikan bed kosong agar hasil jelas
+                        if (isSearching) return null;
+                        if (
+                          inlineAddBedKey === inlineKey &&
+                          inlineAddDraft
+                        ) {
+                          return (
+                            <InlineAddRow
+                              key={`inline-add-${group.nomorKamar}-${perKamarBedNumber}`}
+                              bedNumber={globalNo}
+                              defaultBedLabel={defaultBedLabel}
+                              inlineAddDraft={inlineAddDraft}
+                              ruangan={ruangan}
+                              gedung={gedung}
+                              kamar={kamar}
+                              kamarGroup={group.nomorKamar}
+                              kamarOptions={roomKamarOptions}
+                              kelasOptions={kelasOptions}
+                              statusOptions={STATUS_OPTIONS}
+                              isSavingInline={isSavingInline}
+                              onUpdateDraft={updateDraft}
+                              onSave={handleSaveInlineAdd}
+                              onCancel={cancelInlineAdd}
+                              onRowBlur={handleRowBlur}
+                            />
+                          );
+                        }
+
+                        return (
+                          <EmptyBedRow
+                            key={`empty-${group.nomorKamar}-${perKamarBedNumber}`}
+                            bedNumber={globalNo}
+                            defaultBedLabel={defaultBedLabel}
+                            ruangan={ruangan}
+                            gedung={gedung}
+                            kamar={kamar}
+                            kamarGroup={group.nomorKamar}
+                            onStartInlineAdd={startInlineAdd}
+                          />
+                        );
+                      }
+
+                      return (
+                        <PatientTableRow
+                          key={patient.id}
+                          patient={patient}
+                          index={globalNo - 1}
+                          editingTarget={editingTarget}
+                          isModifiedRow={Boolean(modifiedFields[patient.id])}
+                          modifiedFields={modifiedFields[patient.id]}
+                          kelasOptions={kelasOptions}
+                          gedungOptions={gedungOptions}
+                          gedungList={gedungList}
+                          statusOptions={STATUS_OPTIONS}
+                          kamar={kamar}
+                          kamarGroup={group.nomorKamar}
+                          onStartEditField={(patientId, field: EditableField) =>
+                            setEditingTarget({ patientId, field })
+                          }
+                          onSaveField={handleSaveField}
+                          onCancelEdit={() => setEditingTarget(null)}
+                          onContextMenu={handleContextMenu}
+                          onEdit={onEdit}
+                          onOpenPindah={(pt) => setPindahPatient(pt)}
+                          onQuickPulang={handleQuickPulang}
+                          onDelete={onDelete}
+                        />
+                      );
+                    })}
+                  </Fragment>
                 );
               })}
             </TableBody>

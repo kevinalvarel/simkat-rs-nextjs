@@ -83,7 +83,7 @@ export default function OtorisasiActionDialog({
       const res = await rejectRevisiDiet(item.id, reviewNotes, 'Admin Head Gizi');
       if (res.success) {
         toast.success(res.message);
-        broadcastProductionUpdate('REVISION_APPROVED');
+        broadcastProductionUpdate('REVISION_REJECTED');
         onSuccess();
         onOpenChange(false);
       } else {

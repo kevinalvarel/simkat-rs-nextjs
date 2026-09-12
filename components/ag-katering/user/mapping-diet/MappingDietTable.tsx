@@ -183,18 +183,40 @@ export default function MappingDietTable({
     [options],
   );
 
-  const nabatiOptions = useMemo(
-    () =>
-      options.filter(
-        (o) => o.namaKategori === 'NABATI' || o.namaKategori === 'EXTRA',
+  const nabatiOptions = useMemo(() => {
+    const list = [
+      ...options.filter(
+        (o) =>
+          o.namaKategori === 'NABATI' ||
+          o.namaKategori === 'DIIT' ||
+          o.namaKategori === 'EXTRA' ||
+          o.kodeItem === 'B',
       ),
-    [options],
-  );
+    ];
+    const seen = new Set<string>();
+    return list.filter((o) => {
+      if (seen.has(o.kodeItem)) return false;
+      seen.add(o.kodeItem);
+      return true;
+    });
+  }, [options]);
 
-  const sayurOptions = useMemo(
-    () => options.filter((o) => o.namaKategori === 'SAYUR'),
-    [options],
-  );
+  const sayurOptions = useMemo(() => {
+    const list = [
+      ...options.filter(
+        (o) =>
+          o.namaKategori === 'SAYUR' ||
+          o.namaKategori === 'DIIT' ||
+          o.kodeItem === 'B',
+      ),
+    ];
+    const seen = new Set<string>();
+    return list.filter((o) => {
+      if (seen.has(o.kodeItem)) return false;
+      seen.add(o.kodeItem);
+      return true;
+    });
+  }, [options]);
 
   const buahOptions = useMemo(
     () => options.filter((o) => o.namaKategori === 'BUAH'),
@@ -330,7 +352,14 @@ export default function MappingDietTable({
       const isKatering =
         state.karbo === 'KATERING' || state.hewani === 'KATERING';
 
-      const isStandardReady = Boolean(state.karbo && state.hewani);
+      const isStandardReady = Boolean(
+        state.karbo &&
+        state.hewani &&
+        state.nabati &&
+        state.sayur &&
+        state.buah &&
+        state.snack,
+      );
 
       if (isNpo || isKatering || isStandardReady) {
         result.push({
@@ -570,7 +599,16 @@ export default function MappingDietTable({
                 row.hewani === 'KATERING';
 
               const isComplete =
-                isNpoRow || isKateringRow || Boolean(row.karbo && row.hewani);
+                isNpoRow ||
+                isKateringRow ||
+                Boolean(
+                  row.karbo &&
+                  row.hewani &&
+                  row.nabati &&
+                  row.sayur &&
+                  row.buah &&
+                  row.snack,
+                );
 
               return (
                 <TableRow
@@ -694,14 +732,14 @@ export default function MappingDietTable({
                       isComplete ? (
                         <span
                           className='inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200 border border-amber-300'
-                          title='2 Diet utama terisi — siap dikonfirmasi lewat tombol floating'
+                          title='Seluruh komponen terisi — siap dikonfirmasi lewat tombol floating'
                         >
                           Siap Simpan
                         </span>
                       ) : (
                         <span
                           className='inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground'
-                          title='Lengkapi minimal Karbo & Hewani'
+                          title='Lengkapi seluruh 6 kolom komponen diet'
                         >
                           Draft
                         </span>

@@ -7,9 +7,9 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export const metadata: Metadata = {
-  title: 'Live Katering — Ahli Gizi Katering',
+  title: 'Daftar Pasien Diet Khusus Katering — Ahli Gizi Katering',
   description:
-    'Layar pemantauan diet khusus katering (Bubur Saring, Sonde, Formula Khusus) yang dialihkan dari lini produksi umum.',
+    'Daftar pasien diet khusus katering (Bubur Saring, Sonde, Formula Khusus) yang dialihkan dari lini produksi umum.',
 };
 
 export default async function KateringPage() {

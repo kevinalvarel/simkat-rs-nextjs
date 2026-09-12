@@ -161,7 +161,10 @@ export default function CetakEtiketClient({
       if (
         msg.type === 'ETIKET_PRINTED' ||
         msg.type === 'SYNC_NOW' ||
-        msg.type === 'REVISION_APPROVED'
+        msg.type === 'PATIENT_UPDATED' ||
+        msg.type === 'REVISION_APPROVED' ||
+        msg.type === 'REVISION_REJECTED' ||
+        msg.type === 'SNAPSHOT_TRIGGERED'
       ) {
         if (isLive) {
           getLivePemorsianData().then((res) => {

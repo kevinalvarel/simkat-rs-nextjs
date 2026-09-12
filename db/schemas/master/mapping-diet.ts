@@ -12,6 +12,8 @@ export const dietMappingTable = pgTable('master_diet_mapping', {
   diet_rs_raw: text('diet_rs_raw').notNull().unique(),
   bentuk_makanan: text('bentuk_makanan'),
   kategori_diet: text('kategori_diet'),
+  nabati: text('nabati'),
+  sayur: text('sayur'),
   extra: text('extra'),
   buah: text('buah'),
   snack: text('snack'),

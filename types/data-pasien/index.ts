@@ -123,6 +123,7 @@ export interface InlineAddRowProps {
   ruangan: string;
   gedung: string;
   kamar?: string;
+  kamarGroup?: string;
   kamarOptions?: string[];
   kelasOptions: string[];
   statusOptions: string[];
@@ -131,8 +132,12 @@ export interface InlineAddRowProps {
     field: K,
     value: PatientFormValues[K],
   ) => void;
-  onSave: (bedKey: string) => void;
+  onSave: (bedKey: string, kamarGroup?: string) => void;
   onCancel: () => void;
-  onRowBlur: (e: React.FocusEvent<HTMLTableRowElement>, bedKey: string) => void;
+  onRowBlur: (
+    e: React.FocusEvent<HTMLTableRowElement>,
+    bedKey: string,
+    kamarGroup?: string,
+  ) => void;
 }
 

@@ -38,6 +38,7 @@ interface PatientTableRowProps {
   gedungList: GedungWithRuangan[];
   statusOptions: string[];
   kamar?: string;
+  kamarGroup?: string;
   onStartEditField: (patientId: number, field: EditableField) => void;
   onSaveField: (patient: Patient, field: keyof PatientFormValues, value: string | boolean) => void;
   onCancelEdit: () => void;
@@ -59,6 +60,7 @@ export function PatientTableRow({
   gedungList,
   statusOptions,
   kamar,
+  kamarGroup,
   onStartEditField,
   onSaveField,
   onCancelEdit,
@@ -96,7 +98,13 @@ export function PatientTableRow({
   const displayKamarValue =
     patient.gedung && kamarOptions.includes(patient.gedung)
       ? patient.gedung
-      : kamar || kamarOptions[0] || 'Kamar 1';
+      : kamarGroup ||
+        (kamar &&
+        kamar.trim() !== '' &&
+        !kamar.toLowerCase().startsWith('semua') &&
+        kamar !== 'ALL'
+          ? kamar
+          : kamarOptions[0] || 'Kamar 1');
 
   return (
     <TableRow

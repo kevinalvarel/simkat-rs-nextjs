@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type {
   UnmappedDietItem,
   KategoriMenuOption,
@@ -16,6 +16,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { listenProductionUpdate } from '@/lib/realtime-sync';
 import MappingDietStats from './MappingDietStats';
 import MappingDietFilterBar from './MappingDietFilterBar';
 import MappingDietTable from './MappingDietTable';
@@ -69,6 +70,25 @@ export default function MappingDietClient({
     router.refresh();
     setTimeout(() => setIsRefreshing(false), 600);
   }
+
+  // Refresh otomatis saat data pasien RS berubah (atau hasil otorisasi),
+  // agar user yang sedang membuka halaman ini langsung melihat diet baru
+  // tanpa harus pindah halaman dulu. Abaikan event dari diri sendiri.
+  useEffect(() => {
+    const unsubscribe = listenProductionUpdate((msg) => {
+      if (msg.source === 'mapping-diet') return;
+      if (
+        msg.type === 'PATIENT_UPDATED' ||
+        msg.type === 'SYNC_NOW' ||
+        msg.type === 'REVISION_APPROVED' ||
+        msg.type === 'REVISION_REJECTED' ||
+        msg.type === 'SNAPSHOT_TRIGGERED'
+      ) {
+        router.refresh();
+      }
+    });
+    return unsubscribe;
+  }, [router]);
 
   function handleTabChange(tab: 'UNMAPPED' | 'MAPPED') {
     setActiveTab(tab);

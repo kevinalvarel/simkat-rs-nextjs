@@ -72,7 +72,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               >
                 <SidebarMenuItem>
                   <SidebarMenuButton render={<CollapsibleTrigger />}>
-                    {item.title}{' '}
+                    <span className='flex-1 truncate'>{item.title}</span>
                     <PlusIcon className='ml-auto group-aria-expanded/menu-button:hidden' />
                     <MinusIcon className='ml-auto hidden group-aria-expanded/menu-button:block' />
                   </SidebarMenuButton>
@@ -85,7 +85,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                               isActive={pathname === subItem.url}
                               render={<Link href={subItem.url} />}
                             >
-                              {subItem.title}
+                              <span className='flex-1 truncate'>
+                                {subItem.title}
+                              </span>
                             </SidebarMenuSubButton>
                           </SidebarMenuSubItem>
                         ))}

@@ -20,6 +20,7 @@ export function InlineAddRow({
   ruangan,
   gedung,
   kamar,
+  kamarGroup,
   kamarOptions,
   kelasOptions,
   statusOptions,
@@ -29,10 +30,12 @@ export function InlineAddRow({
   onCancel,
   onRowBlur,
 }: InlineAddRowProps) {
+  const effectiveKamar =
+    inlineAddDraft.gedung || kamarGroup || kamar || kamarOptions?.[0] || 'Kamar 1';
   return (
     <TableRow
       key={`inline-add-${bedNumber}`}
-      onBlur={(e) => onRowBlur(e, defaultBedLabel)}
+      onBlur={(e) => onRowBlur(e, defaultBedLabel, kamarGroup)}
       className='bg-amber-500/10 dark:bg-amber-950/30 border-2 border-amber-500/50 transition-colors animate-in fade-in duration-200'
     >
       {/* 1. Index */}
@@ -49,7 +52,7 @@ export function InlineAddRow({
           autoFocus
           className='h-8 text-xs font-semibold bg-background border-primary/50 focus-visible:ring-primary'
           onKeyDown={(e) => {
-            if (e.key === 'Enter') onSave(defaultBedLabel);
+            if (e.key === 'Enter') onSave(defaultBedLabel, kamarGroup);
             if (e.key === 'Escape') onCancel();
           }}
         />
@@ -63,7 +66,7 @@ export function InlineAddRow({
           placeholder='No. RM *'
           className='h-8 text-xs font-mono bg-background'
           onKeyDown={(e) => {
-            if (e.key === 'Enter') onSave(defaultBedLabel);
+            if (e.key === 'Enter') onSave(defaultBedLabel, kamarGroup);
             if (e.key === 'Escape') onCancel();
           }}
         />
@@ -77,7 +80,7 @@ export function InlineAddRow({
           placeholder='Diet (misal: MB, NPO)'
           className='h-8 text-xs font-semibold text-primary bg-background'
           onKeyDown={(e) => {
-            if (e.key === 'Enter') onSave(defaultBedLabel);
+            if (e.key === 'Enter') onSave(defaultBedLabel, kamarGroup);
             if (e.key === 'Escape') onCancel();
           }}
         />
@@ -117,7 +120,7 @@ export function InlineAddRow({
           placeholder='Bed'
           className='h-8 text-xs font-mono font-semibold bg-background w-20'
           onKeyDown={(e) => {
-            if (e.key === 'Enter') onSave(defaultBedLabel);
+            if (e.key === 'Enter') onSave(defaultBedLabel, kamarGroup);
             if (e.key === 'Escape') onCancel();
           }}
         />
@@ -127,7 +130,7 @@ export function InlineAddRow({
       <TableCell className='p-1.5 min-w-[110px]'>
         {kamarOptions && kamarOptions.length > 0 ? (
           <Select
-            value={inlineAddDraft.gedung || kamar || kamarOptions[0] || 'Kamar 1'}
+            value={effectiveKamar}
             onValueChange={(val) => {
               if (val) onUpdateDraft('gedung', val);
             }}
@@ -145,7 +148,7 @@ export function InlineAddRow({
           </Select>
         ) : (
           <span className='text-xs text-muted-foreground font-medium'>
-            {kamar || inlineAddDraft.gedung || 'Kamar 1'}
+            {effectiveKamar}
           </span>
         )}
       </TableCell>
@@ -176,7 +179,7 @@ export function InlineAddRow({
         <div className='flex items-center justify-end gap-1'>
           <Button
             size='sm'
-            onClick={() => onSave(defaultBedLabel)}
+            onClick={() => onSave(defaultBedLabel, kamarGroup)}
             disabled={isSavingInline}
             className='h-8 px-2.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1 shadow-sm'
             title='Simpan Pasien Baru (Enter)'

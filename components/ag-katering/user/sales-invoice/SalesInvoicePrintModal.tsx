@@ -59,8 +59,18 @@ function generateDefaultNomorFaktur(
   batchId?: number | null,
 ): string {
   const romanMonths = [
-    'I', 'II', 'III', 'IV', 'V', 'VI',
-    'VII', 'VIII', 'IX', 'X', 'XI', 'XII',
+    'I',
+    'II',
+    'III',
+    'IV',
+    'V',
+    'VI',
+    'VII',
+    'VIII',
+    'IX',
+    'X',
+    'XI',
+    'XII',
   ];
   const cleanStr = dateStr?.includes(' ') ? dateStr.split(' ')[0] : dateStr;
   const d = cleanStr ? new Date(cleanStr) : new Date();
@@ -115,7 +125,9 @@ export default function SalesInvoicePrintModal({
   const [keterangan, setKeterangan] = useState('Harga sudah termasuk pajak');
 
   // Price overrides
-  const [prices, setPrices] = useState<SalesInvoicePriceConfig>(data.priceConfig);
+  const [prices, setPrices] = useState<SalesInvoicePriceConfig>(
+    data.priceConfig,
+  );
 
   function handleResetMetadata() {
     setNomorFaktur(defaultNomor);
@@ -207,8 +219,14 @@ export default function SalesInvoicePrintModal({
       // Enrich snapshot summaries with sales data
       return data.snapshotSummaries.map((snap) => {
         const snapItems = buildSnapshotLineItems(snap, prices);
-        const snapTotal = snapItems.reduce((sum, item) => sum + item.jumlahHarga, 0);
-        const snapBanyaknya = snapItems.reduce((sum, item) => sum + item.banyaknya, 0);
+        const snapTotal = snapItems.reduce(
+          (sum, item) => sum + item.jumlahHarga,
+          0,
+        );
+        const snapBanyaknya = snapItems.reduce(
+          (sum, item) => sum + item.banyaknya,
+          0,
+        );
         return {
           ...snap,
           lineItems: snapItems,
@@ -435,7 +453,7 @@ export default function SalesInvoicePrintModal({
                   Nama Barang
                 </th>
                 <th className='border border-black px-2 py-1.5 w-24 text-center'>
-                  Type
+                  Tipe
                 </th>
                 <th
                   className='border border-black px-2 py-1.5 text-center'
@@ -514,9 +532,7 @@ export default function SalesInvoicePrintModal({
 
         {/* 6. Keterangan */}
         <div className='pt-1 text-left text-xs'>
-          <p className='font-normal pl-6'>
-            Keterangan : {keterangan}
-          </p>
+          <p className='font-normal pl-6'>Keterangan : {keterangan}</p>
         </div>
 
         {/* 7. Signatures: PPK (Left) & Direktur PT Tradco (Right) */}
@@ -588,7 +604,9 @@ export default function SalesInvoicePrintModal({
                     title='Cetak total akumulasi periode dalam 1 lembar faktur'
                   >
                     <Layers className='w-3.5 h-3.5' />
-                    <span>{isMonthly ? 'Rekap Bulanan' : 'Rekap (1 Lembar)'}</span>
+                    <span>
+                      {isMonthly ? 'Rekap Bulanan' : 'Rekap (1 Lembar)'}
+                    </span>
                   </button>
 
                   {!isMonthly && (
@@ -796,7 +814,9 @@ export default function SalesInvoicePrintModal({
                       <Input
                         type='number'
                         value={prices.tktpKelas1}
-                        onChange={(e) => updatePrice('tktpKelas1', e.target.value)}
+                        onChange={(e) =>
+                          updatePrice('tktpKelas1', e.target.value)
+                        }
                         className='h-7 text-xs font-mono'
                       />
                     </div>
@@ -807,7 +827,9 @@ export default function SalesInvoicePrintModal({
                       <Input
                         type='number'
                         value={prices.tktpKelas2}
-                        onChange={(e) => updatePrice('tktpKelas2', e.target.value)}
+                        onChange={(e) =>
+                          updatePrice('tktpKelas2', e.target.value)
+                        }
                         className='h-7 text-xs font-mono'
                       />
                     </div>
@@ -818,7 +840,9 @@ export default function SalesInvoicePrintModal({
                       <Input
                         type='number'
                         value={prices.tktpKelas3}
-                        onChange={(e) => updatePrice('tktpKelas3', e.target.value)}
+                        onChange={(e) =>
+                          updatePrice('tktpKelas3', e.target.value)
+                        }
                         className='h-7 text-xs font-mono'
                       />
                     </div>

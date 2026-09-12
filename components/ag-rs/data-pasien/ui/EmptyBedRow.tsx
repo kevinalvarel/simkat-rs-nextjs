@@ -10,7 +10,8 @@ interface EmptyBedRowProps {
   ruangan: string;
   gedung: string;
   kamar?: string;
-  onStartInlineAdd: (bedLabel: string) => void;
+  kamarGroup?: string;
+  onStartInlineAdd: (bedLabel: string, kamarGroup?: string) => void;
 }
 
 export function EmptyBedRow({
@@ -19,12 +20,21 @@ export function EmptyBedRow({
   ruangan,
   gedung,
   kamar,
+  kamarGroup,
   onStartInlineAdd,
 }: EmptyBedRowProps) {
+  const displayKamar =
+    kamarGroup ||
+    (kamar &&
+    kamar.trim() !== '' &&
+    !kamar.toLowerCase().startsWith('semua') &&
+    kamar !== 'ALL'
+      ? kamar
+      : 'Kamar 1');
   return (
     <TableRow
       key={`empty-bed-${bedNumber}`}
-      onClick={() => onStartInlineAdd(defaultBedLabel)}
+      onClick={() => onStartInlineAdd(defaultBedLabel, kamarGroup)}
       className='group hover:bg-primary/5 transition-colors cursor-pointer border-dashed/60'
     >
       <TableCell className='text-center text-xs text-muted-foreground/60 font-mono'>
@@ -49,7 +59,7 @@ export function EmptyBedRow({
         {defaultBedLabel}
       </TableCell>
       <TableCell className='text-xs text-muted-foreground/60'>
-        {kamar || 'Kamar 1'}
+        {displayKamar}
       </TableCell>
       <TableCell>
         <span className='inline-flex items-center rounded-md border border-dashed border-muted-foreground/30 px-2 py-0.5 text-[10px] font-medium text-muted-foreground/40 bg-muted/20'>
@@ -62,7 +72,7 @@ export function EmptyBedRow({
           size='sm'
           onClick={(e) => {
             e.stopPropagation();
-            onStartInlineAdd(defaultBedLabel);
+            onStartInlineAdd(defaultBedLabel, kamarGroup);
           }}
           className='h-7 text-xs text-primary hover:text-primary gap-1 opacity-70 group-hover:opacity-100'
         >
