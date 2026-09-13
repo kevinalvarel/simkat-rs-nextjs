@@ -604,6 +604,7 @@ export default function KonfigurasiSiklusMenuClient({
             { id: 'NABATI', label: '🫘 Nabati' },
             { id: 'SAYUR', label: '🥦 Sayur' },
             { id: 'SARING', label: '🥣 Saring' },
+            { id: 'SNACK', label: '🍪 Snack' },
           ].map((tab) => {
             const isActive = selectedJenisFilter === tab.id;
             return (

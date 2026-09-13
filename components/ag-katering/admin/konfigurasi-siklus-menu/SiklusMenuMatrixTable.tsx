@@ -76,6 +76,8 @@ interface MatrixRowDefinition {
   kelas: string;
   jenis_makanan: string;
   isSaringSlot?: boolean;
+  /** Jika true, slot SORE dinonaktifkan (mis. SNACK hanya Pagi & Siang) */
+  hanyaPagiSiang?: boolean;
 }
 
 // Preset standard hospital rows layout (matching reference image)
@@ -85,6 +87,13 @@ const STANDARD_ROWS: MatrixRowDefinition[] = [
   { id: 'II-III-HEWANI', kelas: 'II-III', jenis_makanan: 'HEWANI' },
   { id: 'SEMUA-NABATI', kelas: 'Semua Kelas', jenis_makanan: 'NABATI' },
   { id: 'SEMUA-SAYUR', kelas: 'Semua Kelas', jenis_makanan: 'SAYUR' },
+  // Baris snack — hanya ada 2 waktu: Pagi dan Siang (Sore dinonaktifkan)
+  {
+    id: 'SEMUA-SNACK',
+    kelas: 'Semua Kelas',
+    jenis_makanan: 'SNACK',
+    hanyaPagiSiang: true,
+  },
 ];
 
 export default function SiklusMenuMatrixTable({
@@ -111,8 +120,9 @@ export default function SiklusMenuMatrixTable({
 
   // Add any dynamic rows present in database items
   for (const item of items) {
-    // Treat SARING as special or row
-    if (item.jenis_makanan === 'SARING') continue;
+    // Treat SARING & SNACK as special rows (sudah punya baris baku)
+    if (item.jenis_makanan === 'SARING' || item.jenis_makanan === 'SNACK')
+      continue;
     // Skip 'Semua Kelas' items — they are shared data, not separate rows
     if (
       item.kelas === 'Semua Kelas' ||
@@ -395,10 +405,25 @@ export default function SiklusMenuMatrixTable({
                       {renderSlotCell(row.kelas, row.jenis_makanan, 'SIANG')}
                     </TableCell>
 
-                    {/* MAKAN SORE */}
-                    <TableCell className='border-r align-top p-1 bg-background'>
-                      {renderSlotCell(row.kelas, row.jenis_makanan, 'SORE')}
-                    </TableCell>
+                    {/* MAKAN SORE — dinonaktifkan untuk baris SNACK (hanya Pagi & Siang) */}
+                    {row.hanyaPagiSiang || row.jenis_makanan === 'SNACK' ? (
+                      <TableCell className='border-r align-top p-1 bg-muted/40'>
+                        <div className='min-h-[90px] p-2 flex flex-col items-center justify-center gap-1 rounded-lg text-center select-none'>
+                          <span className='text-[11px] font-semibold text-muted-foreground'>
+                            —
+                          </span>
+                          <span className='text-[10px] leading-tight text-muted-foreground/70 italic'>
+                            Snack hanya
+                            <br />
+                            Pagi & Siang
+                          </span>
+                        </div>
+                      </TableCell>
+                    ) : (
+                      <TableCell className='border-r align-top p-1 bg-background'>
+                        {renderSlotCell(row.kelas, row.jenis_makanan, 'SORE')}
+                      </TableCell>
+                    )}
 
                     {/* SARING (SIANG) (Shown on row 0 with rowSpan across all rows) */}
                     {idx === 0 && (

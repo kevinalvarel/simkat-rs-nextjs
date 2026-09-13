@@ -22,7 +22,24 @@ export const routeDataProduksi = {
       ],
     },
     {
-      title: 'Faktur',
+      title: 'Pasien',
+      items: [
+        {
+          title: 'Mapping Diet Pasien',
+          url: '/dashboard/ag-katering/mapping-diet',
+        },
+        {
+          title: 'Cetak Etiket',
+          url: '/dashboard/ag-katering/cetak-etiket',
+        },
+        {
+          title: 'Cetak DPMP',
+          url: '/dashboard/ag-katering/cetak-dpmp',
+        },
+      ],
+    },
+    {
+      title: 'Cetak Faktur',
       items: [
         {
           title: 'Faktur Pengiriman',
@@ -37,18 +54,6 @@ export const routeDataProduksi = {
     {
       title: 'Master Data',
       items: [
-        {
-          title: 'Mapping Diet Pasien',
-          url: '/dashboard/ag-katering/mapping-diet',
-        },
-        {
-          title: 'Cetak Etiket',
-          url: '/dashboard/ag-katering/cetak-etiket',
-        },
-        {
-          title: 'Cetak DPMP',
-          url: '/dashboard/ag-katering/cetak-dpmp',
-        },
         {
           title: 'Tabulasi Rekapitulasi',
           url: '/dashboard/ag-katering/tabulasi',

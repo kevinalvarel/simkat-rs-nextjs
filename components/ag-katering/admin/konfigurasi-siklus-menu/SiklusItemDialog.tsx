@@ -76,6 +76,7 @@ const JENIS_MAKANAN_OPTIONS = [
   { value: 'NABATI', label: 'NABATI (Lauk Nabati)' },
   { value: 'SAYUR', label: 'SAYUR (Sayur Mayur)' },
   { value: 'SARING', label: 'SARING (Makanan Saring / Lunak)' },
+  { value: 'SNACK', label: 'SNACK (Snack Pagi / Siang)' },
 ];
 
 const WAKTU_MAKAN_OPTIONS = [
