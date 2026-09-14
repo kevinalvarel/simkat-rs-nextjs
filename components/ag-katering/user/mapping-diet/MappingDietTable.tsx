@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useTransition } from 'react';
+import React, { useState, useMemo, useTransition } from 'react';
 import type {
   UnmappedDietItem,
   KategoriMenuOption,
@@ -39,9 +39,11 @@ import MappingDietFloatingBar, {
   type ReadyDietRow,
 } from './MappingDietFloatingBar';
 import MappingDietConfirmDialog from './MappingDietConfirmDialog';
+import { hasFormFoodMapping, selectBentukMakanan } from '@/lib/mapping-diet-fields';
 
 interface MappingDietTableProps {
   items: UnmappedDietItem[];
+  allItems: UnmappedDietItem[];
   options: KategoriMenuOption[];
   selectedRaws: string[];
   onToggleSelect: (raw: string) => void;
@@ -52,14 +54,31 @@ interface MappingDietTableProps {
 }
 
 interface RowFormState {
-  karbo: string;
+  bentukMakanan: string;
   hewani: string;
   nabati: string;
   sayur: string;
   buah: string;
   snack: string;
+  mode: 'STANDARD' | 'NPO' | 'KATERING';
   status: 'idle' | 'saving' | 'saved' | 'error';
   isDirty?: boolean;
+}
+
+function rowFromItem(item: UnmappedDietItem): RowFormState {
+  const legacyParts = item.extra?.split(',').map((part) => part.trim()) || [];
+  const useLegacyExtra = !item.nabati && !item.sayur;
+  return {
+    bentukMakanan: item.bentuk_makanan ?? '',
+    hewani: item.kategori_diet ?? '',
+    nabati: item.nabati || (useLegacyExtra ? legacyParts[0] : '') || '',
+    sayur: item.sayur || (useLegacyExtra ? legacyParts[1] : '') || '',
+    buah: item.buah ?? '',
+    snack: item.snack ?? '',
+    mode: item.status_mapping === 'KATERING' ? 'KATERING' : item.diet_rs_raw.trim().toUpperCase() === 'NPO' || item.bentuk_makanan === 'NPO' ? 'NPO' : 'STANDARD',
+    status: 'idle',
+    isDirty: false,
+  };
 }
 
 interface CategoryCellProps {
@@ -67,6 +86,8 @@ interface CategoryCellProps {
   options: KategoriMenuOption[];
   onChange: (val: string) => void;
   isBold?: boolean;
+  disabled?: boolean;
+  includeSpecial?: boolean;
 }
 
 function CategorySelectCell({
@@ -74,11 +95,14 @@ function CategorySelectCell({
   options,
   onChange,
   isBold = false,
+  disabled = false,
+  includeSpecial = false,
 }: CategoryCellProps) {
   return (
     <Select
       value={value || '__EMPTY__'}
       onValueChange={(val) => onChange(!val || val === '__EMPTY__' ? '' : val)}
+      disabled={disabled}
     >
       <SelectTrigger
         className={`w-full h-9 px-2 text-xs bg-transparent border-0 rounded-none shadow-none hover:bg-black/5 dark:hover:bg-white/5 focus-visible:ring-1 focus-visible:ring-primary transition-colors cursor-pointer data-[state=open]:bg-background ${
@@ -100,6 +124,12 @@ function CategorySelectCell({
         </SelectValue>
       </SelectTrigger>
       <SelectContent className='max-h-64 min-w-[180px] w-full z-50'>
+        {includeSpecial && (
+          <>
+            <SelectItem value='NPO'>NPO / Puasa</SelectItem>
+            <SelectItem value='KATERING'>AG Katering</SelectItem>
+          </>
+        )}
         <SelectItem
           value='__EMPTY__'
           className='text-xs text-muted-foreground italic cursor-pointer'
@@ -107,27 +137,7 @@ function CategorySelectCell({
           -- Kosong / Hapus --
         </SelectItem>
 
-        {/* Khusus: NPO & KATERING */}
-        <SelectItem
-          value='NPO'
-          className='text-xs font-bold text-purple-700 dark:text-purple-300 cursor-pointer bg-purple-500/5 hover:bg-purple-500/10'
-        >
-          <span className='font-mono font-bold mr-1.5'>NPO</span>
-          <span className='text-muted-foreground text-[11px]'>
-            (Puasa / NPO)
-          </span>
-        </SelectItem>
-        <SelectItem
-          value='KATERING'
-          className='text-xs font-bold text-blue-700 dark:text-blue-300 cursor-pointer bg-blue-500/5 hover:bg-blue-500/10 border-b pb-1 mb-1'
-        >
-          <span className='font-mono font-bold mr-1.5'>KATERING</span>
-          <span className='text-muted-foreground text-[11px]'>
-            (Alihkan ke AG Katering)
-          </span>
-        </SelectItem>
-
-        {options.map((opt) => (
+        {options.filter((opt) => opt.kodeItem !== 'NPO' && opt.kodeItem !== 'KATERING').map((opt) => (
           <SelectItem
             key={opt.id}
             value={opt.kodeItem}
@@ -150,6 +160,7 @@ function CategorySelectCell({
 
 export default function MappingDietTable({
   items,
+  allItems,
   options,
   selectedRaws,
   onToggleSelect,
@@ -228,143 +239,40 @@ export default function MappingDietTable({
     [options],
   );
 
-  // Sync items from server into local rowStates (preserve uncommitted dirty drafts)
-  useEffect(() => {
-    setRowStates((prev) => {
-      const next = { ...prev };
-      items.forEach((item) => {
-        let nabati = item.nabati ?? '';
-        let sayur = item.sayur ?? '';
-        if (!nabati && !sayur && item.extra) {
-          const parts = item.extra.split(',').map((s) => s.trim());
-          if (parts.length >= 2) {
-            nabati = parts[0];
-            sayur = parts[1];
-          } else if (parts.length === 1 && parts[0]) {
-            nabati = parts[0];
-          }
-        }
-
-        // If not already in local state, initialize
-        if (!next[item.diet_rs_raw]) {
-          next[item.diet_rs_raw] = {
-            karbo: item.bentuk_makanan ?? '',
-            hewani: item.kategori_diet ?? '',
-            nabati: nabati,
-            sayur: sayur,
-            buah: item.buah ?? '',
-            snack: item.snack ?? '',
-            status: 'idle',
-            isDirty: false,
-          };
-        } else {
-          // If already in local state, only overwrite if not dirty
-          const curr = next[item.diet_rs_raw];
-          if (!curr.isDirty) {
-            next[item.diet_rs_raw] = {
-              ...curr,
-              karbo: item.bentuk_makanan ?? '',
-              hewani: item.kategori_diet ?? '',
-              nabati: nabati,
-              sayur: sayur,
-              buah: item.buah ?? '',
-              snack: item.snack ?? '',
-              status: 'idle',
-            };
-          }
-        }
-      });
-      return next;
-    });
-  }, [items]);
-
   // Handle instant inline change of a single cell — DRAFT ONLY, NO AUTO-SAVE!
   function handleCellChange(
     diet_rs_raw: string,
-    field: 'karbo' | 'hewani' | 'nabati' | 'sayur' | 'buah' | 'snack',
+    field: 'bentukMakanan' | 'hewani' | 'nabati' | 'sayur' | 'buah' | 'snack',
     value: string,
   ) {
-    const currentRow = rowStates[diet_rs_raw] || {
-      karbo: '',
-      hewani: '',
-      nabati: '',
-      sayur: '',
-      buah: '',
-      snack: '',
-      status: 'idle',
-      isDirty: false,
-    };
-
-    let updatedRow: RowFormState;
-
-    if (value === 'NPO' && (field === 'karbo' || field === 'hewani')) {
-      updatedRow = {
-        karbo: 'NPO',
-        hewani: 'NPO',
-        nabati: 'NPO',
-        sayur: 'NPO',
-        buah: 'NPO',
-        snack: 'NPO',
-        status: 'idle',
-        isDirty: true,
-      };
-    } else if (
-      value === 'KATERING' &&
-      (field === 'karbo' || field === 'hewani')
-    ) {
-      updatedRow = {
-        karbo: 'KATERING',
-        hewani: 'KATERING',
-        nabati: '',
-        sayur: '',
-        buah: '',
-        snack: '',
-        status: 'idle',
-        isDirty: true,
-      };
-    } else {
-      updatedRow = {
-        ...currentRow,
-        [field]: value,
-        status: 'idle',
-        isDirty: true,
-      };
-    }
+    const item = allItems.find((entry) => entry.diet_rs_raw === diet_rs_raw);
+    if (!item) return;
+    const currentRow = rowStates[diet_rs_raw] || rowFromItem(item);
 
     setRowStates((prev) => ({
       ...prev,
-      [diet_rs_raw]: updatedRow,
+      [diet_rs_raw]: {
+        ...(field === 'bentukMakanan'
+          ? selectBentukMakanan(currentRow, value)
+          : { ...currentRow, [field]: value }),
+        status: 'idle',
+        isDirty: true,
+      },
     }));
   }
 
-  // Detect rows where 2 main diets are filled and pending confirmation
+  // Pending drafts across the active tab, including rows hidden by filters.
   const readyToConfirmRows: ReadyDietRow[] = useMemo(() => {
     const result: ReadyDietRow[] = [];
-    for (const item of items) {
+    for (const item of allItems) {
       const state = rowStates[item.diet_rs_raw];
       if (!state || !state.isDirty) continue;
 
-      const isNpo =
-        state.karbo === 'NPO' ||
-        state.hewani === 'NPO' ||
-        item.diet_rs_raw.trim().toUpperCase() === 'NPO';
-
-      const isKatering =
-        state.karbo === 'KATERING' || state.hewani === 'KATERING';
-
-      const isStandardReady = Boolean(
-        state.karbo &&
-        state.hewani &&
-        state.nabati &&
-        state.sayur &&
-        state.buah &&
-        state.snack,
-      );
-
-      if (isNpo || isKatering || isStandardReady) {
+      if (state.mode !== 'STANDARD' || hasFormFoodMapping(state)) {
         result.push({
           diet_rs_raw: item.diet_rs_raw,
-          karbo: state.karbo,
+          mode: state.mode,
+          bentukMakanan: state.bentukMakanan,
           hewani: state.hewani,
           nabati: state.nabati,
           sayur: state.sayur,
@@ -375,36 +283,15 @@ export default function MappingDietTable({
       }
     }
     return result;
-  }, [items, rowStates]);
+  }, [allItems, rowStates]);
+
+  const dirtyCount = useMemo(() => allItems.filter((item) => rowStates[item.diet_rs_raw]?.isDirty).length, [allItems, rowStates]);
 
   // Reset all uncommitted draft changes back to initial server values
   function handleResetDrafts() {
     setRowStates((prev) => {
       const next = { ...prev };
-      items.forEach((item) => {
-        let nabati = item.nabati ?? '';
-        let sayur = item.sayur ?? '';
-        if (!nabati && !sayur && item.extra) {
-          const parts = item.extra.split(',').map((s) => s.trim());
-          if (parts.length >= 2) {
-            nabati = parts[0];
-            sayur = parts[1];
-          } else if (parts.length === 1 && parts[0]) {
-            nabati = parts[0];
-          }
-        }
-
-        next[item.diet_rs_raw] = {
-          karbo: item.bentuk_makanan ?? '',
-          hewani: item.kategori_diet ?? '',
-          nabati,
-          sayur,
-          buah: item.buah ?? '',
-          snack: item.snack ?? '',
-          status: 'idle',
-          isDirty: false,
-        };
-      });
+      allItems.forEach((item) => { delete next[item.diet_rs_raw]; });
       return next;
     });
     toast.info('Perubahan draft dibatalkan.');
@@ -416,52 +303,47 @@ export default function MappingDietTable({
     setIsSubmittingConfirm(true);
 
     try {
-      let savedCount = 0;
+      const savedRaws: string[] = [];
+      const failedRaws: string[] = [];
       for (const row of readyToConfirmRows) {
-        const mode =
-          row.karbo === 'NPO' || row.hewani === 'NPO'
-            ? 'NPO'
-            : row.karbo === 'KATERING' || row.hewani === 'KATERING'
-              ? 'KATERING'
-              : 'STANDARD';
-
-        const res = await saveDietMapping({
-          diet_rs_raw: row.diet_rs_raw,
-          mode,
-          bentuk_makanan: row.karbo || null,
-          kategori_diet: row.hewani || null,
-          nabati: row.nabati || null,
-          sayur: row.sayur || null,
-          buah: row.buah || null,
-          snack: row.snack || null,
-          mapped_by: 'Admin Gizi',
-        });
-        if (res.success) savedCount++;
+        try {
+          const res = await saveDietMapping({
+            diet_rs_raw: row.diet_rs_raw,
+            mode: row.mode || 'STANDARD',
+            bentuk_makanan: row.bentukMakanan || null,
+            kategori_diet: row.hewani || null,
+            nabati: row.nabati || null,
+            sayur: row.sayur || null,
+            buah: row.buah || null,
+            snack: row.snack || null,
+            mapped_by: 'Admin Gizi',
+          });
+          if (res.success) savedRaws.push(row.diet_rs_raw);
+          else failedRaws.push(row.diet_rs_raw);
+        } catch {
+          failedRaws.push(row.diet_rs_raw);
+        }
       }
 
-      toast.success(
-        `${savedCount} mapping diet berhasil dikonfirmasi dan disimpan.`,
-      );
+      if (savedRaws.length) toast.success(`${savedRaws.length} mapping diet berhasil disimpan.`);
+      if (failedRaws.length) toast.error(`${failedRaws.length} mapping gagal: ${failedRaws.join(', ')}.`);
       setIsConfirmOpen(false);
 
       setRowStates((prev) => {
         const next = { ...prev };
-        for (const row of readyToConfirmRows) {
-          if (next[row.diet_rs_raw]) {
-            next[row.diet_rs_raw] = {
-              ...next[row.diet_rs_raw],
-              status: 'saved',
-              isDirty: false,
-            };
-          }
+        for (const raw of savedRaws) {
+          if (next[raw]) next[raw] = { ...next[raw], status: 'saved', isDirty: false };
+        }
+        for (const raw of failedRaws) {
+          if (next[raw]) next[raw] = { ...next[raw], status: 'error', isDirty: true };
         }
         return next;
       });
 
-      startTransition(() => {
-        onRefresh?.();
-      });
-      broadcastProductionUpdate('SYNC_NOW', 'mapping-diet');
+      if (savedRaws.length) {
+        startTransition(() => onRefresh?.());
+        broadcastProductionUpdate('SYNC_NOW', 'mapping-diet');
+      }
     } catch (err) {
       console.error('Error confirming mappings:', err);
       toast.error('Gagal menyimpan konfirmasi mapping diet.');
@@ -470,7 +352,7 @@ export default function MappingDietTable({
     }
   }
 
-  if (items.length === 0) {
+  if (allItems.length === 0) {
     return (
       <div className='flex flex-col items-center justify-center p-12 bg-card rounded-2xl border text-center shadow-xs'>
         <div className='w-12 h-12 rounded-full bg-muted flex items-center justify-center text-muted-foreground mb-3'>
@@ -522,7 +404,7 @@ export default function MappingDietTable({
               {/* Category Columns */}
               <TableHead className='min-w-[125px] w-[135px] font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider text-center border-r border-slate-300 dark:border-slate-700 py-2.5'>
                 <div className='flex items-center justify-center gap-1'>
-                  <span>KARBO</span>
+                  <span>BENTUK MAKANAN</span>
                   <Filter className='w-3 h-3 text-slate-400' />
                 </div>
               </TableHead>
@@ -576,39 +458,18 @@ export default function MappingDietTable({
 
           {/* Excel-style Body */}
           <TableBody>
+            {items.length === 0 && (
+              <TableRow><TableCell colSpan={10} className='py-8 text-center text-xs text-muted-foreground'>Tidak ada diet yang cocok dengan filter. Draft di tab ini tetap dapat dikonfirmasi melalui tombol di bawah.</TableCell></TableRow>
+            )}
             {items.map((item, idx) => {
               const isSelected = selectedRaws.includes(item.diet_rs_raw);
-              const row = rowStates[item.diet_rs_raw] || {
-                karbo: item.bentuk_makanan ?? '',
-                hewani: item.kategori_diet ?? '',
-                nabati: item.nabati ?? '',
-                sayur: item.sayur ?? '',
-                buah: item.buah ?? '',
-                snack: item.snack ?? '',
-                status: 'idle',
-              };
+              const row = rowStates[item.diet_rs_raw] || rowFromItem(item);
 
-              const isNpoRow =
-                row.karbo === 'NPO' ||
-                row.hewani === 'NPO' ||
-                item.diet_rs_raw.trim().toUpperCase() === 'NPO';
+              const isNpoRow = row.mode === 'NPO';
 
-              const isKateringRow =
-                item.status_mapping === 'KATERING' ||
-                row.karbo === 'KATERING' ||
-                row.hewani === 'KATERING';
+              const isKateringRow = row.mode === 'KATERING';
 
-              const isComplete =
-                isNpoRow ||
-                isKateringRow ||
-                Boolean(
-                  row.karbo &&
-                  row.hewani &&
-                  row.nabati &&
-                  row.sayur &&
-                  row.buah &&
-                  row.snack,
-                );
+              const isComplete = isNpoRow || isKateringRow || hasFormFoodMapping(row);
 
               return (
                 <TableRow
@@ -658,13 +519,15 @@ export default function MappingDietTable({
                     )}
                   </TableCell>
 
-                  {/* KARBO Select Cell */}
+                  {/* BENTUK MAKANAN Select Cell */}
                   <TableCell className='p-0 border-r border-slate-200 dark:border-slate-800 align-middle bg-[#ffe8ec]/60 dark:bg-[#381a22]/30 hover:bg-[#ffe8ec] dark:hover:bg-[#381a22]/50 transition-colors'>
                     <CategorySelectCell
-                      value={row.karbo}
+                      value={row.bentukMakanan}
                       options={karboOptions}
+                      disabled={isSubmittingConfirm}
+                      includeSpecial
                       onChange={(val) =>
-                        handleCellChange(item.diet_rs_raw, 'karbo', val)
+                        handleCellChange(item.diet_rs_raw, 'bentukMakanan', val)
                       }
                       isBold
                     />
@@ -675,6 +538,7 @@ export default function MappingDietTable({
                     <CategorySelectCell
                       value={row.hewani}
                       options={hewaniOptions}
+                      disabled={isSubmittingConfirm || row.mode !== 'STANDARD'}
                       onChange={(val) =>
                         handleCellChange(item.diet_rs_raw, 'hewani', val)
                       }
@@ -687,6 +551,7 @@ export default function MappingDietTable({
                     <CategorySelectCell
                       value={row.nabati}
                       options={nabatiOptions}
+                      disabled={isSubmittingConfirm || row.mode !== 'STANDARD'}
                       onChange={(val) =>
                         handleCellChange(item.diet_rs_raw, 'nabati', val)
                       }
@@ -698,6 +563,7 @@ export default function MappingDietTable({
                     <CategorySelectCell
                       value={row.sayur}
                       options={sayurOptions}
+                      disabled={isSubmittingConfirm || row.mode !== 'STANDARD'}
                       onChange={(val) =>
                         handleCellChange(item.diet_rs_raw, 'sayur', val)
                       }
@@ -709,6 +575,7 @@ export default function MappingDietTable({
                     <CategorySelectCell
                       value={row.buah}
                       options={buahOptions}
+                      disabled={isSubmittingConfirm || row.mode !== 'STANDARD'}
                       onChange={(val) =>
                         handleCellChange(item.diet_rs_raw, 'buah', val)
                       }
@@ -720,6 +587,7 @@ export default function MappingDietTable({
                     <CategorySelectCell
                       value={row.snack}
                       options={snackOptions}
+                      disabled={isSubmittingConfirm || row.mode !== 'STANDARD'}
                       onChange={(val) =>
                         handleCellChange(item.diet_rs_raw, 'snack', val)
                       }
@@ -728,18 +596,20 @@ export default function MappingDietTable({
 
                   {/* Status Indicator */}
                   <TableCell className='p-1 text-center align-middle border-r border-slate-200 dark:border-slate-800'>
-                    {row.isDirty ? (
+                    {row.isDirty && row.status === 'error' ? (
+                      <span className='text-[10px] font-semibold text-rose-600' title='Gagal menyimpan, coba konfirmasi lagi'>Gagal, coba lagi</span>
+                    ) : row.isDirty ? (
                       isComplete ? (
                         <span
                           className='inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200 border border-amber-300'
-                          title='Seluruh komponen terisi — siap dikonfirmasi lewat tombol floating'
+                          title='Minimal satu jenis makanan terisi — siap dikonfirmasi'
                         >
                           Siap Simpan
                         </span>
                       ) : (
                         <span
                           className='inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground'
-                          title='Lengkapi seluruh 6 kolom komponen diet'
+                          title='Isi minimal satu jenis makanan'
                         >
                           Draft
                         </span>
@@ -757,11 +627,11 @@ export default function MappingDietTable({
                         <AlertCircle className='w-4 h-4 text-rose-600 mx-auto' />
                       </span>
                     ) : isComplete ? (
-                      <span title='Lengkap (MAPPED)'>
+                      <span title='Mapping tersedia'>
                         <CheckCircle2 className='w-3.5 h-3.5 text-emerald-500/80 mx-auto' />
                       </span>
                     ) : (
-                      <span title='Wajib minimal isi Karbo & Hewani'>
+                      <span title='Isi minimal satu jenis makanan'>
                         <HelpCircle className='w-3.5 h-3.5 text-muted-foreground/40 mx-auto' />
                       </span>
                     )}
@@ -791,6 +661,7 @@ export default function MappingDietTable({
       {/* Floating Confirmation Bar */}
       <MappingDietFloatingBar
         readyRows={readyToConfirmRows}
+        dirtyCount={dirtyCount}
         onConfirm={() => setIsConfirmOpen(true)}
         onReset={handleResetDrafts}
         isSubmitting={isSubmittingConfirm}
@@ -807,12 +678,9 @@ export default function MappingDietTable({
         }
         mode={
           readyToConfirmRows.length === 1 &&
-          readyToConfirmRows[0].karbo === 'NPO'
-            ? 'NPO'
-            : readyToConfirmRows.length === 1 &&
-                readyToConfirmRows[0].karbo === 'KATERING'
-              ? 'KATERING'
-              : 'STANDARD'
+          readyToConfirmRows[0].mode
+            ? readyToConfirmRows[0].mode
+            : 'STANDARD'
         }
         values={
           readyToConfirmRows.length === 1

@@ -67,7 +67,7 @@ export default function MappingDietFilterBar({
                   UNMAPPED (Belum Dipetakan)
                 </SelectItem>
                 <SelectItem value='PARTIAL'>
-                  PARTIAL (Sebagian Dipetakan)
+                  PARTIAL (Data Lama)
                 </SelectItem>
               </>
             ) : (

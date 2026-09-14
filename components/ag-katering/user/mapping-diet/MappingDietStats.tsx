@@ -27,7 +27,7 @@ export default function MappingDietStats({ stats }: MappingDietStatsProps) {
     {
       label: 'Partial Mapping',
       value: stats.partialCount,
-      sub: 'Perlu dilengkapi',
+      sub: 'Data lama perlu ditinjau',
       color: 'amber',
       icon: GitBranch,
       accent: 'border-l-amber-500',

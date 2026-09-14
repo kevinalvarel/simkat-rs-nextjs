@@ -330,6 +330,7 @@ export default function MappingDietClient({
       {/* ── 7. Main Table ─────────────────────────────────────────────────── */}
       <MappingDietTable
         items={filteredItems}
+        allItems={activeTab === 'UNMAPPED' ? unmappedList : mappedList}
         options={options}
         selectedRaws={selectedRaws}
         onToggleSelect={handleToggleSelect}

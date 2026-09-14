@@ -45,7 +45,7 @@ const CATEGORY_OPTIONS = [
   { value: 'BUAH', label: '🍊 BUAH (Buah Segar)' },
   { value: 'SNACK', label: '🍪 SNACK (Makanan Selingan)' },
   { value: 'DIIT', label: '🩺 DIIT (Diet Khusus)' },
-  { value: 'BENTUK_MAKANAN', label: '🍚 BENTUK_MAKANAN (Kategori Diet)' },
+  { value: 'BENTUK_MAKANAN', label: '🍚 BENTUK_MAKANAN (Bentuk Makanan)' },
   { value: 'EXTRA', label: '🥛 EXTRA (Extra Makanan)' },
 ];
 

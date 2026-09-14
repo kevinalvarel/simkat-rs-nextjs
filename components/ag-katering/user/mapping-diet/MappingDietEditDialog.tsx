@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm, Controller, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
+import { mappingDietFormSchema, type MappingDietFormValues } from '@/lib/mapping-diet-schema';
+import { hasFormFoodMapping, selectBentukMakanan } from '@/lib/mapping-diet-fields';
 import type {
   UnmappedDietItem,
   KategoriMenuOption,
@@ -22,8 +23,6 @@ import {
   Edit,
   Save,
   Sparkles,
-  Send,
-  Utensils,
   Info,
 } from 'lucide-react';
 import { SelectField, KATEGORI_LABEL } from './ui/SelectField';
@@ -40,64 +39,7 @@ export interface MappingDietEditDialogProps {
   onSuccess: () => void;
 }
 
-const MappingEditSchema = z
-  .object({
-    mode: z.enum(['STANDARD', 'NPO', 'KATERING']),
-    karbo: z.string().optional(),
-    hewani: z.string().optional(),
-    nabati: z.string().optional(),
-    sayur: z.string().optional(),
-    buah: z.string().optional(),
-    snack: z.string().optional(),
-  })
-  .superRefine((val, ctx) => {
-    if (val.mode === 'STANDARD') {
-      if (!val.karbo?.trim()) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'Karbohidrat wajib dipilih.',
-          path: ['karbo'],
-        });
-      }
-      if (!val.hewani?.trim()) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'Lauk Hewani wajib dipilih.',
-          path: ['hewani'],
-        });
-      }
-      if (!val.nabati?.trim()) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'Lauk Nabati wajib dipilih.',
-          path: ['nabati'],
-        });
-      }
-      if (!val.sayur?.trim()) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'Sayur wajib dipilih.',
-          path: ['sayur'],
-        });
-      }
-      if (!val.buah?.trim()) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'Buah wajib dipilih.',
-          path: ['buah'],
-        });
-      }
-      if (!val.snack?.trim()) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'Snack wajib dipilih.',
-          path: ['snack'],
-        });
-      }
-    }
-  });
-
-type MappingEditValues = z.infer<typeof MappingEditSchema>;
+type MappingEditValues = MappingDietFormValues;
 
 export default function MappingDietEditDialog({
   open,
@@ -175,15 +117,14 @@ export default function MappingDietEditDialog({
   const {
     control,
     handleSubmit,
-    watch,
     setValue,
     reset,
     formState: { errors },
   } = useForm<MappingEditValues>({
-    resolver: zodResolver(MappingEditSchema),
+    resolver: zodResolver(mappingDietFormSchema),
     defaultValues: {
       mode: 'STANDARD',
-      karbo: '',
+      bentukMakanan: '',
       hewani: '',
       nabati: '',
       sayur: '',
@@ -192,13 +133,14 @@ export default function MappingDietEditDialog({
     },
   });
 
-  const mode = watch('mode');
-  const karbo = watch('karbo') || '';
-  const hewani = watch('hewani') || '';
-  const nabati = watch('nabati') || '';
-  const sayur = watch('sayur') || '';
-  const buah = watch('buah') || '';
-  const snack = watch('snack') || '';
+  const values = useWatch({ control });
+  const mode = values.mode || 'STANDARD';
+  const bentukMakanan = values.bentukMakanan || '';
+  const hewani = values.hewani || '';
+  const nabati = values.nabati || '';
+  const sayur = values.sayur || '';
+  const buah = values.buah || '';
+  const snack = values.snack || '';
 
   // Initialize form when item changes
   useEffect(() => {
@@ -229,7 +171,7 @@ export default function MappingDietEditDialog({
     if (isNpo) {
       reset({
         mode: 'NPO',
-        karbo: 'NPO',
+        bentukMakanan: 'NPO',
         hewani: 'NPO',
         nabati: 'NPO',
         sayur: 'NPO',
@@ -239,7 +181,7 @@ export default function MappingDietEditDialog({
     } else if (isKatering) {
       reset({
         mode: 'KATERING',
-        karbo: 'KATERING',
+        bentukMakanan: 'KATERING',
         hewani: 'KATERING',
         nabati: '',
         sayur: '',
@@ -249,7 +191,7 @@ export default function MappingDietEditDialog({
     } else {
       reset({
         mode: 'STANDARD',
-        karbo: item.bentuk_makanan ?? '',
+        bentukMakanan: item.bentuk_makanan ?? '',
         hewani: item.kategori_diet ?? '',
         nabati: initNabati,
         sayur: initSayur,
@@ -259,32 +201,15 @@ export default function MappingDietEditDialog({
     }
   }, [item, open, reset]);
 
-  // Handle Mode Switch
-  function handleModeChange(newMode: 'STANDARD' | 'NPO' | 'KATERING') {
-    setValue('mode', newMode);
-    if (newMode === 'NPO') {
-      setValue('karbo', 'NPO');
-      setValue('hewani', 'NPO');
-      setValue('nabati', 'NPO');
-      setValue('sayur', 'NPO');
-      setValue('buah', 'NPO');
-      setValue('snack', 'NPO');
-    } else if (newMode === 'KATERING') {
-      setValue('karbo', 'KATERING');
-      setValue('hewani', 'KATERING');
-      setValue('nabati', '');
-      setValue('sayur', '');
-      setValue('buah', '');
-      setValue('snack', '');
-    } else {
-      // Return to standard values
-      setValue('karbo', (karbo === 'NPO' || karbo === 'KATERING') ? (item?.bentuk_makanan || '') : karbo);
-      setValue('hewani', (hewani === 'NPO' || hewani === 'KATERING') ? (item?.kategori_diet || '') : hewani);
-      setValue('nabati', nabati === 'NPO' ? (item?.nabati || '') : nabati);
-      setValue('sayur', sayur === 'NPO' ? (item?.sayur || '') : sayur);
-      setValue('buah', buah === 'NPO' ? (item?.buah || '') : buah);
-      setValue('snack', snack === 'NPO' ? (item?.snack || '') : snack);
-    }
+  function handleBentukMakananChange(value: string) {
+    const next = selectBentukMakanan({ hewani, nabati, sayur, buah, snack }, value);
+    setValue('mode', next.mode);
+    setValue('bentukMakanan', next.bentukMakanan, { shouldValidate: true });
+    setValue('hewani', next.hewani);
+    setValue('nabati', next.nabati);
+    setValue('sayur', next.sayur);
+    setValue('buah', next.buah);
+    setValue('snack', next.snack);
   }
 
   const onValidSubmit = () => {
@@ -293,7 +218,7 @@ export default function MappingDietEditDialog({
 
   const onInvalidSubmit = (fieldErrors: typeof errors) => {
     const firstError = Object.values(fieldErrors)[0]?.message;
-    toast.error(firstError || 'Semua kolom form mapping wajib diisi.');
+    toast.error(firstError || 'Isi minimal satu jenis makanan.');
   };
 
   async function handleFinalSave() {
@@ -306,7 +231,7 @@ export default function MappingDietEditDialog({
         diet_rs_raw: item.diet_rs_raw,
         mode: mode,
         status_mapping: mode === 'KATERING' ? 'KATERING' : undefined,
-        bentuk_makanan: karbo || null,
+        bentuk_makanan: bentukMakanan || null,
         kategori_diet: hewani || null,
         nabati: nabati || null,
         sayur: sayur || null,
@@ -335,14 +260,7 @@ export default function MappingDietEditDialog({
 
   if (!item) return null;
 
-  const isFormIncomplete =
-    mode === 'STANDARD' &&
-    (!karbo.trim() ||
-      !hewani.trim() ||
-      !nabati.trim() ||
-      !sayur.trim() ||
-      !buah.trim() ||
-      !snack.trim());
+  const isFormIncomplete = mode === 'STANDARD' && !hasFormFoodMapping({ bentukMakanan, hewani, nabati, sayur, buah, snack });
 
   return (
     <>
@@ -372,7 +290,7 @@ export default function MappingDietEditDialog({
               Edit Mapping Diet Pasien
             </DialogTitle>
             <DialogDescription className='text-xs text-muted-foreground'>
-              Tentukan kategori menu lengkap (6 komponen), otomatisasi NPO, atau alihkan ke Live Katering.
+              Isi minimal satu kategori menu, pilih NPO, atau alihkan ke Live Katering.
             </DialogDescription>
           </DialogHeader>
 
@@ -395,77 +313,12 @@ export default function MappingDietEditDialog({
                 </div>
               </div>
 
-              {/* Mode Mapping Switcher */}
-              <div className='space-y-1.5'>
-                <label className='text-xs font-bold text-foreground block'>
-                  Pilih Mode Mapping:
-                </label>
-                <div className='grid grid-cols-1 sm:grid-cols-3 gap-2'>
-                  {/* 1. Standard */}
-                  <button
-                    type='button'
-                    onClick={() => handleModeChange('STANDARD')}
-                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col gap-1 ${
-                      mode === 'STANDARD'
-                        ? 'border-primary bg-primary/10 shadow-xs ring-1 ring-primary'
-                        : 'border-border bg-background hover:bg-muted/40'
-                    }`}
-                  >
-                    <div className='flex items-center gap-1.5 font-bold text-foreground text-xs'>
-                      <Utensils className='w-3.5 h-3.5 text-primary' />
-                      <span>Menu Standar</span>
-                    </div>
-                    <p className='text-[10px] text-muted-foreground leading-snug'>
-                      Pilih lengkap 6 kategori menu dapur umum.
-                    </p>
-                  </button>
-
-                  {/* 2. NPO */}
-                  <button
-                    type='button'
-                    onClick={() => handleModeChange('NPO')}
-                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col gap-1 ${
-                      mode === 'NPO'
-                        ? 'border-purple-600 bg-purple-500/15 shadow-xs ring-1 ring-purple-600 text-purple-950 dark:text-purple-200'
-                        : 'border-border bg-background hover:bg-purple-500/5'
-                    }`}
-                  >
-                    <div className='flex items-center gap-1.5 font-bold text-xs text-purple-700 dark:text-purple-300'>
-                      <Sparkles className='w-3.5 h-3.5' />
-                      <span>NPO / Puasa</span>
-                    </div>
-                    <p className='text-[10px] text-muted-foreground leading-snug'>
-                      Semua kriteria otomatis diset NPO (tidak makan).
-                    </p>
-                  </button>
-
-                  {/* 3. Alihkan ke AG Katering */}
-                  <button
-                    type='button'
-                    onClick={() => handleModeChange('KATERING')}
-                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col gap-1 ${
-                      mode === 'KATERING'
-                        ? 'border-blue-600 bg-blue-500/15 shadow-xs ring-1 ring-blue-600 text-blue-950 dark:text-blue-200'
-                        : 'border-border bg-background hover:bg-blue-500/5'
-                    }`}
-                  >
-                    <div className='flex items-center gap-1.5 font-bold text-xs text-blue-700 dark:text-blue-300'>
-                      <Send className='w-3.5 h-3.5' />
-                      <span>AG Katering</span>
-                    </div>
-                    <p className='text-[10px] text-muted-foreground leading-snug'>
-                      Bubur saring / sonde dialihkan ke Live Katering.
-                    </p>
-                  </button>
-                </div>
-              </div>
-
               {/* Mode-specific Banner */}
               {mode === 'NPO' && (
                 <div className='flex items-start gap-2.5 p-3 rounded-xl border border-purple-200 dark:border-purple-900 bg-purple-500/10 text-purple-900 dark:text-purple-200 text-xs'>
                   <Sparkles className='w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0 mt-0.5' />
                   <p>
-                    <strong>Mode NPO Aktif:</strong> Karbohidrat, Lauk Hewani,
+                    <strong>Mode NPO Aktif:</strong> Bentuk Makanan, Lauk Hewani,
                     Nabati, Sayur, Buah, dan Snack otomatis dipetakan sebagai{' '}
                     <span className='font-mono font-bold'>NPO</span>.
                   </p>
@@ -483,26 +336,21 @@ export default function MappingDietEditDialog({
               )}
 
               {/* Category Form Fields */}
-              <div
-                className={`space-y-3.5 pt-1 ${
-                  mode !== 'STANDARD' ? 'opacity-70 pointer-events-none' : ''
-                }`}
-              >
+              <div className='space-y-3.5 pt-1'>
                 <div className='grid grid-cols-1 sm:grid-cols-2 gap-3.5'>
-                  {/* 1. KARBO */}
+                  {/* 1. BENTUK MAKANAN */}
                   <Controller
                     control={control}
-                    name='karbo'
+                    name='bentukMakanan'
                     render={({ field }) => (
                       <SelectField
-                        label={KATEGORI_LABEL['KARBO']}
-                        required={mode === 'STANDARD'}
+                        label={KATEGORI_LABEL['BENTUK_MAKANAN']}
                         value={field.value || ''}
-                        onChange={field.onChange}
-                        placeholder='Pilih Karbohidrat...'
+                        onChange={handleBentukMakananChange}
+                        placeholder='Pilih Bentuk Makanan...'
                         options={karboOptions}
-                        disabled={mode !== 'STANDARD'}
-                        error={errors.karbo?.message}
+                        includeSpecial
+                        error={errors.bentukMakanan?.message}
                       />
                     )}
                   />
@@ -514,7 +362,6 @@ export default function MappingDietEditDialog({
                     render={({ field }) => (
                       <SelectField
                         label={KATEGORI_LABEL['HEWANI']}
-                        required={mode === 'STANDARD'}
                         value={field.value || ''}
                         onChange={field.onChange}
                         placeholder='Pilih Lauk Hewani...'
@@ -532,7 +379,6 @@ export default function MappingDietEditDialog({
                     render={({ field }) => (
                       <SelectField
                         label={KATEGORI_LABEL['NABATI']}
-                        required={mode === 'STANDARD'}
                         value={field.value || ''}
                         onChange={field.onChange}
                         placeholder='Pilih Lauk Nabati...'
@@ -550,7 +396,6 @@ export default function MappingDietEditDialog({
                     render={({ field }) => (
                       <SelectField
                         label={KATEGORI_LABEL['SAYUR']}
-                        required={mode === 'STANDARD'}
                         value={field.value || ''}
                         onChange={field.onChange}
                         placeholder='Pilih Sayur...'
@@ -568,7 +413,6 @@ export default function MappingDietEditDialog({
                     render={({ field }) => (
                       <SelectField
                         label={KATEGORI_LABEL['BUAH']}
-                        required={mode === 'STANDARD'}
                         value={field.value || ''}
                         onChange={field.onChange}
                         placeholder='Pilih Buah...'
@@ -586,7 +430,6 @@ export default function MappingDietEditDialog({
                     render={({ field }) => (
                       <SelectField
                         label={KATEGORI_LABEL['SNACK']}
-                        required={mode === 'STANDARD'}
                         value={field.value || ''}
                         onChange={field.onChange}
                         placeholder='Pilih Snack...'
@@ -631,7 +474,7 @@ export default function MappingDietEditDialog({
         diet_rs_raw={item.diet_rs_raw}
         mode={mode}
         values={{
-          karbo,
+          bentukMakanan,
           hewani,
           nabati,
           sayur,

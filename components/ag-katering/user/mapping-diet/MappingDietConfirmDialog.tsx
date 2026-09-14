@@ -28,7 +28,7 @@ export interface MappingDietConfirmDialogProps {
   diet_rs_raw: string;
   mode: 'STANDARD' | 'NPO' | 'KATERING';
   values?: {
-    karbo: string;
+    bentukMakanan: string;
     hewani: string;
     nabati: string;
     sayur: string;
@@ -47,7 +47,7 @@ export default function MappingDietConfirmDialog({
   diet_rs_raw,
   mode,
   values = {
-    karbo: '',
+    bentukMakanan: '',
     hewani: '',
     nabati: '',
     sayur: '',
@@ -132,30 +132,30 @@ export default function MappingDietConfirmDialog({
                         {it.diet_rs_raw}
                       </div>
                       <div className='text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5 flex-wrap'>
-                        <span>Karbo: <strong>{it.karbo}</strong></span>
+                        <span>Bentuk Makanan: <strong>{it.bentukMakanan || '-'}</strong></span>
                         <span>•</span>
-                        <span>Hewani: <strong>{it.hewani}</strong></span>
+                        <span>Hewani: <strong>{it.hewani || '-'}</strong></span>
                         <span>•</span>
-                        <span>Nabati: <strong>{it.nabati}</strong></span>
+                        <span>Nabati: <strong>{it.nabati || '-'}</strong></span>
                         <span>•</span>
-                        <span>Sayur: <strong>{it.sayur}</strong></span>
+                        <span>Sayur: <strong>{it.sayur || '-'}</strong></span>
                         <span>•</span>
-                        <span>Buah: <strong>{it.buah}</strong></span>
+                        <span>Buah: <strong>{it.buah || '-'}</strong></span>
                         <span>•</span>
-                        <span>Snack: <strong>{it.snack}</strong></span>
+                        <span>Snack: <strong>{it.snack || '-'}</strong></span>
                       </div>
                     </div>
-                    {it.karbo === 'NPO' ? (
+                    {it.mode === 'NPO' || it.bentukMakanan === 'NPO' ? (
                       <Badge className='text-[10px] bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'>
                         NPO
                       </Badge>
-                    ) : it.karbo === 'KATERING' ? (
+                    ) : it.mode === 'KATERING' || it.bentukMakanan === 'KATERING' ? (
                       <Badge className='text-[10px] bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'>
                         AG KATERING
                       </Badge>
                     ) : (
                       <Badge variant='outline' className='text-[10px] font-mono'>
-                        LENGKAP
+                        SIAP
                       </Badge>
                     )}
                   </div>
@@ -165,6 +165,11 @@ export default function MappingDietConfirmDialog({
           )}
 
           {/* Mode-specific explanations */}
+          {isMulti && mode === 'STANDARD' && (
+            <p className='text-[11px] text-muted-foreground rounded-lg border bg-muted/20 p-2.5'>
+              Kolom yang kosong pada mapping massal tidak menghapus nilai lama pada diet terpilih.
+            </p>
+          )}
           {!isMulti && mode === 'NPO' && (
             <div className='p-3.5 rounded-xl border border-purple-300 dark:border-purple-800 bg-purple-500/10 text-purple-950 dark:text-purple-200 space-y-1.5'>
               <div className='flex items-center gap-2 font-bold text-xs text-purple-800 dark:text-purple-300'>
@@ -172,7 +177,7 @@ export default function MappingDietConfirmDialog({
                 <span>Otomatisasi Kriteria NPO (Puasa)</span>
               </div>
               <p className='text-[11px] leading-relaxed text-purple-900/90 dark:text-purple-200/90'>
-                Semua jenis kriteria (<strong>Karbo, Hewani, Nabati, Sayur, Buah, Snack</strong>) akan otomatis dipetakan sebagai <strong>NPO</strong>. Pasien dengan diet ini tidak akan mendapatkan porsi makanan reguler di dapur produksi.
+                Semua jenis kriteria (<strong>Bentuk Makanan, Hewani, Nabati, Sayur, Buah, Snack</strong>) akan otomatis dipetakan sebagai <strong>NPO</strong>. Pasien dengan diet ini tidak akan mendapatkan porsi makanan reguler di dapur produksi.
               </p>
             </div>
           )}
@@ -196,9 +201,9 @@ export default function MappingDietConfirmDialog({
               </p>
               <div className='grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs'>
                 <div className='p-2 rounded-lg bg-background border'>
-                  <span className='text-[10px] text-muted-foreground block'>Karbohidrat:</span>
+                  <span className='text-[10px] text-muted-foreground block'>Bentuk Makanan:</span>
                   <span className='font-mono font-bold text-foreground truncate block'>
-                    {values.karbo || '-'}
+                    {values.bentukMakanan || '-'}
                   </span>
                 </div>
                 <div className='p-2 rounded-lg bg-background border'>

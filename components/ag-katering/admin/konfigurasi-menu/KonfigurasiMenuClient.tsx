@@ -39,7 +39,7 @@ const CATEGORY_TABS: Array<{ id: string; label: string; icon: string }> = [
   { id: 'BUAH', label: 'Buah', icon: '🍊' },
   { id: 'SNACK', label: 'Snack', icon: '🍪' },
   { id: 'DIIT', label: 'Diet Khusus', icon: '🩺' },
-  { id: 'BENTUK_MAKANAN', label: 'Kategori Diet', icon: '🍚' },
+  { id: 'BENTUK_MAKANAN', label: 'Bentuk Makanan', icon: '🍚' },
   { id: 'EXTRA', label: 'Extra', icon: '🥛' },
 ];
 

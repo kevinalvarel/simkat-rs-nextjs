@@ -7,12 +7,16 @@ import { pasienTable } from '@/db/schemas/patient/pasien';
 import { dietMappingTable } from '@/db/schemas/master/mapping-diet';
 import { kategoriMenuTable } from '@/db/schemas/master/kategori-menu';
 import { otorisasiPerubahanDietTable } from '@/db/schemas/snapshot/perizinan-revisi';
+import { hasFoodMapping, mergeFoodMapping } from '@/lib/mapping-diet-fields';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type MutationResult = {
   success: boolean;
   message: string;
+  savedCount?: number;
+  skippedRaws?: string[];
+  failedRaws?: string[];
 };
 
 export type KategoriMenuOption = {
@@ -400,7 +404,6 @@ export async function saveDietMapping(
   // Mode 1: NPO / Puasa
   if (
     payload.mode === 'NPO' ||
-    (bentuk_makanan === 'NPO' && kategori_diet === 'NPO') ||
     raw.toUpperCase() === 'NPO'
   ) {
     bentuk_makanan = 'NPO';
@@ -415,9 +418,7 @@ export async function saveDietMapping(
   // Mode 2: Alihkan ke AG Katering
   else if (
     payload.mode === 'KATERING' ||
-    payload.status_mapping === 'KATERING' ||
-    bentuk_makanan === 'KATERING' ||
-    kategori_diet === 'KATERING'
+    payload.status_mapping === 'KATERING'
   ) {
     bentuk_makanan = 'KATERING';
     kategori_diet = 'KATERING';
@@ -428,24 +429,13 @@ export async function saveDietMapping(
   }
   // Mode 3: Standard mapping
   else {
-    const isMapped = Boolean(
-      bentuk_makanan &&
-      kategori_diet &&
-      nabati &&
-      sayur &&
-      buah &&
-      snack
-    );
-    const isPartial = Boolean(
-      bentuk_makanan ||
-      kategori_diet ||
-      nabati ||
-      sayur ||
-      buah ||
-      snack ||
-      extraCombined?.trim()
-    );
-    status_mapping = isMapped ? 'MAPPED' : isPartial ? 'PARTIAL' : 'UNMAPPED';
+    if ([bentuk_makanan, kategori_diet, nabati, sayur, buah, snack].some((value) => value === 'NPO' || value === 'KATERING')) {
+      return { success: false, message: 'Pilih mode NPO atau AG Katering untuk nilai khusus.' };
+    }
+    if (!hasFoodMapping({ bentuk_makanan, kategori_diet, nabati, sayur, buah, snack })) {
+      return { success: false, message: 'Isi minimal satu jenis makanan sebelum menyimpan mapping.' };
+    }
+    status_mapping = 'MAPPED';
   }
 
   try {
@@ -526,10 +516,55 @@ export async function bulkSaveDietMapping(
     return { success: false, message: 'Tidak ada item yang dipilih.' };
   }
 
+  const isStandard = !mappingValues.mode || mappingValues.mode === 'STANDARD';
+  if (isStandard && !hasFoodMapping({
+    bentuk_makanan: mappingValues.bentuk_makanan,
+    kategori_diet: mappingValues.kategori_diet,
+    nabati: mappingValues.nabati,
+    sayur: mappingValues.sayur,
+    buah: mappingValues.buah,
+    snack: mappingValues.snack,
+  })) {
+    return { success: false, message: 'Pilih minimal satu jenis makanan untuk mapping massal.' };
+  }
+
+  const existingRecords = await db.select().from(dietMappingTable)
+    .where(inArray(dietMappingTable.diet_rs_raw, dietRawList.map((raw) => raw.trim())));
+  const existingByRaw = new Map(existingRecords.map((record) => [record.diet_rs_raw, record]));
+  const skippedRaws: string[] = [];
+  const failedRaws: string[] = [];
   let successCount = 0;
   for (const raw of dietRawList) {
-    const res = await saveDietMapping({ ...mappingValues, diet_rs_raw: raw });
+    const stored = existingByRaw.get(raw.trim());
+    const existing = stored?.is_active ? stored : null;
+    if (isStandard && (raw.trim().toUpperCase() === 'NPO' || existing?.status_mapping === 'KATERING' ||
+      existing?.bentuk_makanan === 'NPO' || existing?.kategori_diet === 'NPO' ||
+      existing?.bentuk_makanan === 'KATERING' || existing?.kategori_diet === 'KATERING')) {
+      skippedRaws.push(raw);
+      continue;
+    }
+
+    let merged: Omit<SaveMappingPayload, 'diet_rs_raw'> = mappingValues;
+    if (isStandard) {
+      const legacyParts = existing?.extra?.split(',').map((part) => part.trim()) || [];
+      const useLegacyExtra = !existing?.nabati && !existing?.sayur;
+      const foodFields = mergeFoodMapping({
+        bentuk_makanan: existing?.bentuk_makanan,
+        kategori_diet: existing?.kategori_diet,
+        nabati: existing?.nabati || (useLegacyExtra ? legacyParts[0] : null),
+        sayur: existing?.sayur || (useLegacyExtra ? legacyParts[1] : null),
+        buah: existing?.buah,
+        snack: existing?.snack,
+      }, mappingValues);
+      merged = {
+        mode: 'STANDARD',
+        ...foodFields,
+        mapped_by: mappingValues.mapped_by,
+      };
+    }
+    const res = await saveDietMapping({ ...merged, diet_rs_raw: raw });
     if (res.success) successCount++;
+    else failedRaws.push(raw);
   }
 
   try {
@@ -543,7 +578,10 @@ export async function bulkSaveDietMapping(
   }
 
   return {
-    success: true,
-    message: `${successCount} dari ${dietRawList.length} mapping berhasil disimpan.`,
+    success: successCount > 0,
+    savedCount: successCount,
+    skippedRaws,
+    failedRaws,
+    message: `${successCount} mapping disimpan${skippedRaws.length ? `, ${skippedRaws.length} mode khusus dilewati` : ''}${failedRaws.length ? `, ${failedRaws.length} gagal` : ''}.`,
   };
 }
