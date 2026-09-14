@@ -74,6 +74,9 @@ export interface PemorsianRevisiItem {
   review_notes?: string | null;
   batch_id?: number | null;
   batch_code?: string | null;
+  revision_signature?: string;
+  revision_print_status?: 'BELUM_DICETAK' | 'SUDAH_DICETAK';
+  revision_printed_at?: string | null;
 }
 
 export interface PemorsianSummaryData {
@@ -141,4 +144,3 @@ export interface EtiketData {
   quote?: string;
   catatan_alat?: string;
 }
-

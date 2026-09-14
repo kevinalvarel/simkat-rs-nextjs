@@ -1,7 +1,9 @@
 'use server';
 
-import { eq, desc, asc, and, inArray } from 'drizzle-orm';
+import { eq, desc, asc, and, inArray, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
+import { headers } from 'next/headers';
+import { auth } from '@/lib/auth';
 import { db } from '@/drizzle';
 import { snapshotBatchTable } from '@/db/schemas/snapshot/snapshot-batch';
 import { snapshotDetailTable } from '@/db/schemas/snapshot/snapshot-detail';
@@ -9,6 +11,8 @@ import { pasienTable } from '@/db/schemas/patient/pasien';
 import { waktuMakanTable } from '@/db/schemas/patient/waktu-makan';
 import { masterSiklusTable } from '@/db/schemas/master/siklus-menu';
 import { otorisasiPerubahanDietTable } from '@/db/schemas/snapshot/perizinan-revisi';
+import { revisiEtiketPrintTable } from '@/db/schemas/snapshot/revisi-etiket-print';
+import { canPrintRevision, revisionSignature } from '@/lib/revisi-etiket';
 import { isNpoPatient } from '@/lib/npo-utils';
 import { resolveActiveCycleForDate } from '@/lib/siklus-menu-utils';
 import {
@@ -252,6 +256,9 @@ export async function getLivePemorsianData(
 
     // ─── SCENARIO A: SNAPSHOT IS LOCKED ──────────────────────────────────
     if (selectedBatch && selectedBatch.id > 0) {
+      const revisionPrintRows = await db.select().from(revisiEtiketPrintTable)
+        .where(eq(revisiEtiketPrintTable.batch_id, selectedBatch.id));
+      const revisionPrintByRm = new Map(revisionPrintRows.map((row) => [row.no_rm.trim(), row]));
       const snapshotDetails = await db
         .select()
         .from(snapshotDetailTable)
@@ -315,6 +322,16 @@ export async function getLivePemorsianData(
         }
 
         if (isChanged) {
+          const signature = revisionSignature({
+            jenis: changeType,
+            diet: liveP?.diet || '',
+            ruangan: liveP?.ruangan || sd.ruangan,
+            bed: liveP?.bed || sd.no_bed,
+            kelas: liveP?.kelas || sd.kelas,
+            updatedAt: liveP?.updated_at,
+            authorizationAt: otorisasi?.requested_at,
+          });
+          const printRow = revisionPrintByRm.get(sd.no_rm.trim());
           // Add to Butuh Revisi section
           revisiItems.push({
             id: sd.id,
@@ -354,6 +371,9 @@ export async function getLivePemorsianData(
             requested_at: new Date().toLocaleTimeString('id-ID'),
             batch_id: selectedBatch.id,
             batch_code: selectedBatch.batch_code,
+            revision_signature: signature,
+            revision_print_status: printRow?.revision_signature === signature ? 'SUDAH_DICETAK' : 'BELUM_DICETAK',
+            revision_printed_at: printRow?.revision_signature === signature ? printRow.printed_at.toISOString() : null,
           });
 
           // Add to patient items with BUTUH_REVISI status
@@ -412,6 +432,11 @@ export async function getLivePemorsianData(
         if (!snapshotRmSet.has(p.no_rm.trim())) {
           // Pasien Baru Susulan (Post-Snapshot Addition)
           const newRevId = 900000 + p.id;
+          const signature = revisionSignature({
+            jenis: 'NEW_PATIENT', diet: p.diet, ruangan: p.ruangan,
+            bed: p.bed, kelas: p.kelas, updatedAt: p.updated_at,
+          });
+          const printRow = revisionPrintByRm.get(p.no_rm.trim());
           revisiItems.push({
             id: newRevId,
             pasien_id: p.id,
@@ -440,6 +465,9 @@ export async function getLivePemorsianData(
             requested_at: new Date().toLocaleTimeString('id-ID'),
             batch_id: selectedBatch.id,
             batch_code: selectedBatch.batch_code,
+            revision_signature: signature,
+            revision_print_status: printRow?.revision_signature === signature ? 'SUDAH_DICETAK' : 'BELUM_DICETAK',
+            revision_printed_at: printRow?.revision_signature === signature ? printRow.printed_at.toISOString() : null,
           });
 
           const isNewNpo = isNpoPatient(p);
@@ -772,4 +800,53 @@ export async function updateEtiketPrintStatus(
   }
 }
 
+/** Stores the print state of the current revision, independently of the snapshot label. */
+export async function updateRevisionEtiketPrintStatus(
+  batchId: number,
+  targets: { id: number; signature: string }[],
+): Promise<{ success: boolean; message: string; count: number }> {
+  if (!Number.isInteger(batchId) || batchId <= 0 || !Array.isArray(targets) || targets.length === 0 || targets.length > 1000 || targets.some((target) => !Number.isInteger(target?.id) || typeof target?.signature !== 'string')) {
+    return { success: false, message: 'Batch atau revisi tidak valid.', count: 0 };
+  }
 
+  try {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session?.user) {
+      return { success: false, message: 'Sesi pengguna tidak tersedia.', count: 0 };
+    }
+    const current = await getLivePemorsianData(batchId);
+    if (!current.success || current.batch?.id !== batchId) {
+      return { success: false, message: 'Batch revisi tidak ditemukan.', count: 0 };
+    }
+
+    const currentById = new Map(current.revisiItems.map((item) => [item.id, item]));
+    const uniqueTargets = new Map(targets.map((target) => [target.id, target.signature]));
+    const rows = [...uniqueTargets].map(([id, signature]) => {
+      const item = currentById.get(id);
+      if (!item || !canPrintRevision(item.jenis_perubahan) || item.revision_signature !== signature) return null;
+      return item;
+    });
+    if (rows.some((row) => row === null)) {
+      return { success: false, message: 'Data revisi telah berubah. Muat ulang sebelum menyimpan status cetak.', count: 0 };
+    }
+
+    const printableRows = rows.filter((item): item is PemorsianRevisiItem => item !== null);
+    const printedAt = new Date();
+    await db.insert(revisiEtiketPrintTable).values(printableRows.map((item) => ({
+      batch_id: batchId,
+      no_rm: item.no_rm.trim(),
+      revision_signature: item.revision_signature!,
+      printed_at: printedAt,
+      printed_by: session.user.name || session.user.email || 'Ahli Gizi Katering',
+    }))).onConflictDoUpdate({
+        target: [revisiEtiketPrintTable.batch_id, revisiEtiketPrintTable.no_rm],
+        set: { revision_signature: sql`excluded.revision_signature`, printed_at: printedAt, printed_by: session.user.name || session.user.email || 'Ahli Gizi Katering' },
+      });
+
+    revalidatePath('/dashboard/ag-katering/cetak-etiket');
+    return { success: true, message: 'Status cetak revisi berhasil disimpan.', count: printableRows.length };
+  } catch (error) {
+    console.error('Error updating revision etiket print status:', error);
+    return { success: false, message: 'Gagal menyimpan status cetak revisi.', count: 0 };
+  }
+}

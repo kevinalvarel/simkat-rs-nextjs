@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
-import { useForm, Controller } from 'react-hook-form';
+import React, { useEffect, useMemo } from 'react';
+import { useForm, Controller, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import {
@@ -23,7 +23,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Save, UtensilsCrossed, Loader2, Tag, Plus, X } from 'lucide-react';
+import { Save, UtensilsCrossed, Loader2, Tag, X } from 'lucide-react';
+import {
+  getMenuTagOptions,
+  normalizeMenuTags,
+  parseMenuTags,
+  type MenuTagOption,
+} from '@/lib/siklus-menu-tags';
 import type {
   SiklusMenuItem,
   MasterSiklusItem,
@@ -44,25 +50,10 @@ interface SiklusItemDialogProps {
     jenis_makanan?: string;
     waktu_makan?: string;
   } | null;
-  dietOptions?: Array<{ kode: string; label: string; kategori: string }>;
+  dietOptions?: MenuTagOption[];
   availableCycles?: MasterSiklusItem[] | number[];
   onSuccess: () => void;
 }
-
-const COMMON_DIET_TAGS = [
-  'B',
-  'Diit',
-  'DM',
-  'RG',
-  'DJ',
-  'DH',
-  'RP',
-  'RS',
-  'RL',
-  'RKol',
-  'TKTP',
-  'SARING',
-];
 
 const KELAS_OPTIONS = [
   { value: 'Semua Kelas', label: 'Semua Kelas' },
@@ -76,6 +67,7 @@ const JENIS_MAKANAN_OPTIONS = [
   { value: 'NABATI', label: 'NABATI (Lauk Nabati)' },
   { value: 'SAYUR', label: 'SAYUR (Sayur Mayur)' },
   { value: 'SARING', label: 'SARING (Makanan Saring / Lunak)' },
+  { value: 'BUAH', label: 'BUAH (Buah Pagi / Siang)' },
   { value: 'SNACK', label: 'SNACK (Snack Pagi / Siang)' },
 ];
 
@@ -95,7 +87,10 @@ const ItemSchema = z.object({
   kategori_menu: z.string().optional().nullable(),
   catatan: z.string().optional().nullable(),
   urutan: z.number().min(0, 'Urutan minimal 0.'),
-});
+}).refine(
+  (value) => value.jenis_makanan !== 'BUAH' || ['PAGI', 'SIANG'].includes(value.waktu_makan),
+  { path: ['waktu_makan'], message: 'Buah hanya tersedia untuk Pagi dan Siang.' },
+);
 
 type ItemFormValues = z.infer<typeof ItemSchema>;
 
@@ -109,7 +104,6 @@ export default function SiklusItemDialog({
   onSuccess,
 }: SiklusItemDialogProps) {
   const isEdit = Boolean(itemToEdit);
-  const [customTagInput, setCustomTagInput] = useState('');
 
   const cycleOptions = useMemo<{ value: number; label: string }[]>(() => {
     if (availableCycles && availableCycles.length > 0) {
@@ -131,7 +125,6 @@ export default function SiklusItemDialog({
     register,
     handleSubmit,
     setValue,
-    watch,
     reset,
     formState: { errors, isSubmitting },
   } = useForm<ItemFormValues>({
@@ -142,21 +135,18 @@ export default function SiklusItemDialog({
       jenis_makanan: 'HEWANI',
       waktu_makan: 'PAGI',
       nama_makanan: '',
-      kategori_menu: 'B',
+      kategori_menu: '',
       catatan: '',
       urutan: 1,
     },
   });
 
-  const selectedTagsString = watch('kategori_menu') || '';
-
-  // Parse tags from comma separated string
-  const currentTags = selectedTagsString
-    ? selectedTagsString
-        .split(',')
-        .map((t) => t.trim())
-        .filter(Boolean)
-    : [];
+  const selectedTagsString = useWatch({ control, name: 'kategori_menu' }) || '';
+  const selectedJenis = useWatch({ control, name: 'jenis_makanan' });
+  const selectedWaktu = useWatch({ control, name: 'waktu_makan' });
+  const currentTags = parseMenuTags(selectedTagsString);
+  const availableTags = getMenuTagOptions(dietOptions, selectedJenis);
+  const { invalid: invalidTags } = normalizeMenuTags(selectedTagsString, availableTags);
 
   useEffect(() => {
     if (open) {
@@ -178,7 +168,7 @@ export default function SiklusItemDialog({
           jenis_makanan: defaultSlot?.jenis_makanan ?? 'HEWANI',
           waktu_makan: defaultSlot?.waktu_makan ?? 'PAGI',
           nama_makanan: '',
-          kategori_menu: 'B',
+          kategori_menu: '',
           catatan: '',
           urutan: 1,
         });
@@ -188,25 +178,26 @@ export default function SiklusItemDialog({
 
   function handleToggleTag(tag: string) {
     let nextTags: string[];
-    if (currentTags.includes(tag)) {
-      nextTags = currentTags.filter((t) => t !== tag);
+    if (currentTags.some((current) => current.toUpperCase() === tag.toUpperCase())) {
+      nextTags = currentTags.filter((current) => current.toUpperCase() !== tag.toUpperCase());
     } else {
       nextTags = [...currentTags, tag];
     }
-    setValue('kategori_menu', nextTags.join(', '));
+    setValue('kategori_menu', nextTags.join(', '), { shouldDirty: true, shouldValidate: true });
   }
 
-  function handleAddCustomTag() {
-    const trimmed = customTagInput.trim();
-    if (!trimmed) return;
-    if (!currentTags.includes(trimmed)) {
-      const nextTags = [...currentTags, trimmed];
-      setValue('kategori_menu', nextTags.join(', '));
-    }
-    setCustomTagInput('');
+  function handleRemoveTag(tag: string) {
+    setValue('kategori_menu', currentTags.filter((current) => current !== tag).join(', '), {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
   }
 
   async function onSubmit(data: ItemFormValues) {
+    if (normalizeMenuTags(data.kategori_menu, getMenuTagOptions(dietOptions, data.jenis_makanan)).invalid.length) {
+      toast.error('Hapus tag yang tidak tersedia untuk jenis makanan ini.');
+      return;
+    }
     try {
       if (isEdit && itemToEdit) {
         const res = await updateSiklusMenuItem(itemToEdit.id, data);
@@ -232,11 +223,6 @@ export default function SiklusItemDialog({
       toast.error('Gagal menyimpan hidangan siklus menu.');
     }
   }
-
-  // Combine common tags and master db tags
-  const availableTags = Array.from(
-    new Set([...COMMON_DIET_TAGS, ...dietOptions.map((d) => d.kode)]),
-  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -305,7 +291,9 @@ export default function SiklusItemDialog({
                       <SelectValue placeholder='Pilih waktu makan...' />
                     </SelectTrigger>
                     <SelectContent>
-                      {WAKTU_MAKAN_OPTIONS.map((opt) => (
+                      {WAKTU_MAKAN_OPTIONS.filter((opt) =>
+                        selectedJenis !== 'BUAH' || opt.value === 'PAGI' || opt.value === 'SIANG',
+                      ).map((opt) => (
                         <SelectItem key={opt.value} value={opt.value}>
                           {opt.label}
                         </SelectItem>
@@ -314,6 +302,9 @@ export default function SiklusItemDialog({
                   </Select>
                 )}
               />
+              {errors.waktu_makan && (
+                <p className='text-[11px] text-destructive'>{errors.waktu_makan.message}</p>
+              )}
             </div>
           </div>
 
@@ -356,7 +347,16 @@ export default function SiklusItemDialog({
                 render={({ field }) => (
                   <Select
                     value={field.value}
-                    onValueChange={(val) => val && field.onChange(val)}
+                    onValueChange={(val) => {
+                      if (!val || val === field.value) return;
+                      const nextOptions = getMenuTagOptions(dietOptions, val);
+                      const retained = normalizeMenuTags(selectedTagsString, nextOptions).codes;
+                      field.onChange(val);
+                      setValue('kategori_menu', retained.join(', '), { shouldDirty: true, shouldValidate: true });
+                      if (val === 'BUAH' && selectedWaktu !== 'PAGI' && selectedWaktu !== 'SIANG') {
+                        setValue('waktu_makan', 'PAGI', { shouldDirty: true, shouldValidate: true });
+                      }
+                    }}
                   >
                     <SelectTrigger className='w-full h-9 text-xs bg-background'>
                       <SelectValue placeholder='Pilih jenis...' />
@@ -405,59 +405,48 @@ export default function SiklusItemDialog({
 
             {/* Quick Clickable Tag Chips */}
             <div className='flex flex-wrap gap-1.5 max-h-28 overflow-y-auto py-1'>
-              {availableTags.map((tag) => {
-                const isSelected = currentTags.includes(tag);
+              {availableTags.map((option) => {
+                const isSelected = currentTags.some((tag) => tag.toUpperCase() === option.kode.toUpperCase());
                 return (
                   <button
-                    key={tag}
+                    key={option.kode}
                     type='button'
-                    onClick={() => handleToggleTag(tag)}
+                    onClick={() => handleToggleTag(option.kode)}
                     className={`text-xs px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer border ${
                       isSelected
                         ? 'bg-primary text-primary-foreground border-primary shadow-xs'
                         : 'bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground'
                     }`}
                   >
-                    {tag}
+                    {option.kode} · {option.label}
                   </button>
                 );
               })}
             </div>
 
-            {/* Selected Tags Display & Custom Input */}
-            <div className='pt-1 space-y-1.5'>
-              <div className='flex items-center gap-2'>
-                <Input
-                  value={customTagInput}
-                  onChange={(e) => setCustomTagInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAddCustomTag();
-                    }
-                  }}
-                  placeholder='Ketik tag diet kustom (mis. DJ, DH, RS)...'
-                  className='h-8 text-xs bg-background'
-                />
-                <Button
-                  type='button'
-                  size='sm'
-                  variant='outline'
-                  onClick={handleAddCustomTag}
-                  className='h-8 px-2.5 text-xs shrink-0'
-                >
-                  <Plus className='w-3.5 h-3.5 mr-1' /> Tambah
-                </Button>
+            {availableTags.length === 0 && (
+              <p className='text-[11px] text-muted-foreground'>
+                Belum ada tag aktif untuk kategori {selectedJenis}. Tambahkan di Konfigurasi Master Menu.
+              </p>
+            )}
+            {invalidTags.length > 0 && (
+              <div className='space-y-1.5'>
+                <p className='text-[11px] text-destructive'>Tag lama berikut tidak tersedia untuk kategori ini. Hapus sebelum menyimpan.</p>
+                <div className='flex flex-wrap gap-1.5'>
+                  {invalidTags.map((tag) => (
+                    <Badge key={tag} variant='destructive' className='gap-1'>
+                      {tag}
+                      <button type='button' onClick={() => handleRemoveTag(tag)} aria-label={`Hapus tag ${tag}`}>
+                        <X className='w-3 h-3' />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
               </div>
-
-              {/* Direct text editor for comma-separated tags */}
-              <div className='flex items-center gap-1 text-[11px] text-muted-foreground'>
-                <span>Format tersimpan:</span>
-                <span className='font-mono font-bold text-foreground bg-background px-1.5 py-0.5 rounded border'>
-                  ({selectedTagsString || 'Standar'})
-                </span>
-              </div>
-            </div>
+            )}
+            <p className='text-[11px] text-muted-foreground'>
+              Kode tersimpan: {selectedTagsString || 'Tanpa tag'}
+            </p>
           </div>
 
           {/* Catatan Khusus & Urutan */}

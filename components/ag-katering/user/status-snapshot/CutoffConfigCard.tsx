@@ -68,6 +68,7 @@ export default function CutoffConfigCard({
   );
   const [newTime, setNewTime] = useState<string>('00:00');
   const [isUpdatingTime, setIsUpdatingTime] = useState<boolean>(false);
+  const [isConfirmingTime, setIsConfirmingTime] = useState(false);
 
   // State for manual trigger dialog
   const [triggeringTarget, setTriggeringTarget] = useState<{
@@ -80,15 +81,15 @@ export default function CutoffConfigCard({
   const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
-    setNow(new Date());
+    const initial = setTimeout(() => setNow(new Date()), 0);
     const interval = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(interval);
+    return () => { clearTimeout(initial); clearInterval(interval); };
   }, []);
 
   const currentTimeStr = now
-    ? `${String(now.getHours()).padStart(2, '0')}:${String(
-        now.getMinutes(),
-      ).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`
+    ? new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+      }).format(now)
     : '00:00:00';
 
   // Compute live cycle statuses for PAGI, SIANG, MALAM
@@ -98,6 +99,14 @@ export default function CutoffConfigCard({
 
   async function handleSaveCutoffTime() {
     if (!editingConfig || !newTime) return;
+    if (newTime === editingConfig.waktu) {
+      setEditingConfig(null);
+      return;
+    }
+    if (!isConfirmingTime) {
+      setIsConfirmingTime(true);
+      return;
+    }
     setIsUpdatingTime(true);
     try {
       const res = await updateWaktuMakanConfig(
@@ -107,6 +116,7 @@ export default function CutoffConfigCard({
       if (res.success) {
         toast.success(res.message);
         setEditingConfig(null);
+        setIsConfirmingTime(false);
         broadcastProductionUpdate('SNAPSHOT_TRIGGERED');
         if (onSnapshotTriggered) onSnapshotTriggered();
       } else {
@@ -187,7 +197,7 @@ export default function CutoffConfigCard({
               </span>
             </h3>
             <p className='text-xs text-muted-foreground'>
-              Data diet pasien terkunci otomatis saat jam cut-off tercapai
+              Slot terbuka setelah snapshot sebelumnya terkunci; cut-off mengunci slot yang terbuka.
             </p>
           </div>
         </div>
@@ -211,7 +221,7 @@ export default function CutoffConfigCard({
             ) : (
               <>
                 <Lock className='w-3.5 h-3.5' />
-                {configs.length - lockedCount} Siklus Menunggu Cut-off
+                {cycleData.activeCycle ? `Makan ${cycleData.activeCycle.jenis_makan} Terbuka` : 'Menunggu Snapshot Sebelumnya'}
               </>
             )}
           </Badge>
@@ -241,6 +251,7 @@ export default function CutoffConfigCard({
           };
 
           const isLocked = status.isLocked;
+          const isWaiting = !isLocked && !status.isAvailable;
 
           return (
             <Card
@@ -248,7 +259,7 @@ export default function CutoffConfigCard({
               className={`border-2 ${
                 isLocked
                   ? 'border-rose-500/40 bg-rose-500/[0.02]'
-                  : `${meta.color} hover:shadow-md ring-1 ring-emerald-500/20`
+                  : isWaiting ? 'border-muted bg-muted/30' : `${meta.color} hover:shadow-md ring-1 ring-emerald-500/20`
               } shadow-sm transition-all duration-200 relative overflow-hidden flex flex-col justify-between`}
             >
               <CardHeader className='pb-3 flex flex-row items-start justify-between space-y-0'>
@@ -278,6 +289,10 @@ export default function CutoffConfigCard({
                     className='text-[10px] font-semibold flex items-center gap-1 bg-rose-600 dark:bg-rose-950 text-white dark:text-rose-200 border-rose-500/50'
                   >
                     <Lock className='w-3 h-3' /> TERKUNCI
+                  </Badge>
+                ) : isWaiting ? (
+                  <Badge variant='secondary' className='text-[10px] font-semibold flex items-center gap-1'>
+                    <Lock className='w-3 h-3' /> MENUNGGU
                   </Badge>
                 ) : (
                   <Badge
@@ -310,7 +325,11 @@ export default function CutoffConfigCard({
                   </div>
 
                   {/* Countdown Timer or Lock Notice */}
-                  {!isLocked ? (
+                  {isWaiting ? (
+                    <div className='bg-muted/50 p-2.5 rounded-lg border text-xs text-muted-foreground'>
+                      Menunggu snapshot sebelumnya terkunci.
+                    </div>
+                  ) : !isLocked ? (
                     <div className='bg-emerald-500/10 dark:bg-emerald-950/40 p-2.5 rounded-lg border border-emerald-500/30 flex items-center justify-between text-xs animate-in fade-in duration-200'>
                       <span className='text-emerald-800 dark:text-emerald-300 font-medium flex items-center gap-1.5'>
                         <Timer className='w-3.5 h-3.5 animate-spin' /> Sisa Waktu
@@ -364,6 +383,7 @@ export default function CutoffConfigCard({
                     onClick={() => {
                       setEditingConfig(config);
                       setNewTime(config.waktu);
+                      setIsConfirmingTime(false);
                     }}
                   >
                     <Pencil className='w-3.5 h-3.5' /> Edit Jam
@@ -372,18 +392,21 @@ export default function CutoffConfigCard({
                   <Button
                     size='sm'
                     className={`flex-1 gap-1.5 text-xs ${
-                      isLocked
+                      isLocked || isWaiting
                         ? 'bg-muted text-muted-foreground hover:bg-muted/80'
                         : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
                     }`}
                     onClick={() =>
                       setTriggeringTarget({ config, status })
                     }
+                    disabled={isLocked || isWaiting}
                   >
                     {isLocked ? (
                       <>
-                        <Lock className='w-3.5 h-3.5' /> Re-Snapshot
+                        <Lock className='w-3.5 h-3.5' /> Terkunci
                       </>
+                    ) : isWaiting ? (
+                      <><Lock className='w-3.5 h-3.5' /> Menunggu</>
                     ) : (
                       <>
                         <Play className='w-3.5 h-3.5 fill-current' /> Kunci &
@@ -413,7 +436,7 @@ export default function CutoffConfigCard({
               <DialogDescription>
                 Tentukan jam cut-off baru untuk siklus{' '}
                 {editingConfig.jenis_makan}. Data pasien akan terkunci secara
-                otomatis tepat pada jam ini.
+                otomatis setelah slot sebelumnya terkunci dan jam ini tercapai.
               </DialogDescription>
             </DialogHeader>
 
@@ -424,10 +447,16 @@ export default function CutoffConfigCard({
               <Input
                 type='time'
                 value={newTime}
-                onChange={(e) => setNewTime(e.target.value)}
+                onChange={(e) => { setNewTime(e.target.value); setIsConfirmingTime(false); }}
                 className='font-mono text-base'
               />
             </div>
+
+            {isConfirmingTime && (
+              <p className='text-xs text-amber-800 dark:text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3'>
+                Jam baru berlaku untuk slot yang belum terkunci. Jika waktu baru sudah terlewati, snapshot slot yang terbuka dapat langsung diproses otomatis. Batch yang sudah terkunci tidak berubah.
+              </p>
+            )}
 
             <DialogFooter>
               <Button
@@ -444,7 +473,7 @@ export default function CutoffConfigCard({
                     Menyimpan...
                   </>
                 ) : (
-                  'Simpan Jam Cut-off'
+                  isConfirmingTime ? 'Konfirmasi Perubahan Jam' : 'Simpan Jam Cut-off'
                 )}
               </Button>
             </DialogFooter>

@@ -36,6 +36,7 @@ import {
 import { Calendar } from '@/components/ui/calendar';
 import { format, parseISO, isValid } from 'date-fns';
 import { id } from 'date-fns/locale';
+import type { MenuTagOption } from '@/lib/siklus-menu-tags';
 import type {
   SiklusMenuItem,
   MasterSiklusItem,
@@ -103,7 +104,7 @@ function formatShortTanggal(
 interface KonfigurasiSiklusMenuClientProps {
   initialItems: SiklusMenuItem[];
   initialMasterSiklus: MasterSiklusItem[];
-  dietOptions: Array<{ kode: string; label: string; kategori: string }>;
+  dietOptions: MenuTagOption[];
 }
 
 export default function KonfigurasiSiklusMenuClient({
@@ -604,6 +605,7 @@ export default function KonfigurasiSiklusMenuClient({
             { id: 'NABATI', label: '🫘 Nabati' },
             { id: 'SAYUR', label: '🥦 Sayur' },
             { id: 'SARING', label: '🥣 Saring' },
+            { id: 'BUAH', label: '🍎 Buah' },
             { id: 'SNACK', label: '🍪 Snack' },
           ].map((tab) => {
             const isActive = selectedJenisFilter === tab.id;
@@ -696,6 +698,7 @@ export default function KonfigurasiSiklusMenuClient({
         open={isSlotDialogOpen}
         onOpenChange={setIsSlotDialogOpen}
         slotContext={slotContext}
+        dietOptions={dietOptions}
         onSuccess={() => refreshData(activeSiklus)}
       />
 

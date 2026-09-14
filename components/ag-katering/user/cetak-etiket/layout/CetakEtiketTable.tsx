@@ -21,6 +21,7 @@ interface CetakEtiketTableProps {
   patients: PemorsianPatientItem[];
   selectedIds: Set<number>;
   printedPatientIds: Set<number>;
+  revisedPatientIds: Set<number>;
   waktuMakan?: string;
   onToggleSelect: (id: number) => void;
   onToggleSelectAll: () => void;
@@ -32,6 +33,7 @@ export default function CetakEtiketTable({
   patients,
   selectedIds,
   printedPatientIds,
+  revisedPatientIds,
   waktuMakan,
   onToggleSelect,
   onToggleSelectAll,
@@ -39,7 +41,7 @@ export default function CetakEtiketTable({
   onPrintSelected,
 }: CetakEtiketTableProps) {
   const feedingPatients = patients.filter(
-    (p) => !isNpoPatient(p) && p.status !== 'NPO',
+    (p) => !isNpoPatient(p) && p.status !== 'NPO' && p.status !== 'PULANG' && !revisedPatientIds.has(p.id),
   );
   const isAllSelected =
     feedingPatients.length > 0 &&
@@ -99,7 +101,9 @@ export default function CetakEtiketTable({
           ) : (
             patients.map((patient, index) => {
               const isNpo = isNpoPatient(patient) || patient.status === 'NPO';
-              const isSelected = selectedIds.has(patient.id) && !isNpo;
+              const isRevised = revisedPatientIds.has(patient.id);
+              const isUnavailable = isNpo || patient.status === 'PULANG' || isRevised;
+              const isSelected = selectedIds.has(patient.id) && !isUnavailable;
               const isPrinted = printedPatientIds.has(patient.id);
 
               return (
@@ -116,7 +120,7 @@ export default function CetakEtiketTable({
                 >
                   {/* Checkbox */}
                   <TableCell className='pl-4'>
-                    {isNpo ? (
+                    {isUnavailable ? (
                       <Checkbox
                         checked={false}
                         disabled
@@ -192,6 +196,10 @@ export default function CetakEtiketTable({
                         <span className='inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-100/80 dark:bg-amber-950/40 px-1.5 py-0.5 rounded'>
                           Puasa (NPO)
                         </span>
+                      ) : isRevised ? (
+                        <span className='text-[10px] font-bold text-amber-700'>{isPrinted ? 'Revisi Sudah Tercetak' : 'Revisi Belum Tercetak'}</span>
+                      ) : patient.status === 'PULANG' ? (
+                        <span className='text-[10px] text-muted-foreground'>Pasien Pulang</span>
                       ) : isPrinted ? (
                         <span className='inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-100/80 px-1.5 py-0.5 rounded'>
                           <CheckCircle2 className='w-2.5 h-2.5 text-emerald-600 shrink-0' />
@@ -208,9 +216,9 @@ export default function CetakEtiketTable({
 
                   {/* Aksi Cetak */}
                   <TableCell className='text-right pr-4'>
-                    {isNpo ? (
+                    {isUnavailable ? (
                       <span className='inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/30'>
-                        Puasa (NPO)
+                        {isRevised ? 'Lihat Tab Revisi' : isNpo ? 'Puasa (NPO)' : 'Pasien Pulang'}
                       </span>
                     ) : (
                       <Button

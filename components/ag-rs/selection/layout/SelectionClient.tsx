@@ -11,6 +11,8 @@ import StepRuanganSection from './StepRuanganSection';
 import StepKamarSection from './StepKamarSection';
 import StepConfirmationSection from './StepConfirmationSection';
 import { toast } from 'sonner';
+import { computeMealCycleStatuses } from '@/lib/snapshot-cycle';
+import { listenProductionUpdate } from '@/lib/realtime-sync';
 import {
   getGedungWithRuangan,
   GedungWithRuangan,
@@ -68,6 +70,18 @@ export default function SelectionClient({
   const [snapshotBatches, setSnapshotBatches] = useState<SnapshotBatch[]>(
     () => initialSnapshotBatches || [],
   );
+  useEffect(() => {
+    let mounted = true;
+    const refreshBatches = async () => {
+      const next = await getSnapshotBatches();
+      if (mounted) setSnapshotBatches(next);
+    };
+    const stop = listenProductionUpdate((message) => {
+      if (message.type === 'SNAPSHOT_TRIGGERED') void refreshBatches();
+    });
+    const interval = setInterval(() => void refreshBatches(), 30000);
+    return () => { mounted = false; stop(); clearInterval(interval); };
+  }, []);
   const [isLoading, setIsLoading] = useState<boolean>(
     () => !initialGedungList || initialGedungList.length === 0,
   );
@@ -121,128 +135,59 @@ export default function SelectionClient({
     const ruanganParam = searchParams.get('ruangan');
     const ruanganIdParam = searchParams.get('ruanganId');
 
-    if (resolvedMeal) {
-      setSelectedMealTime((prev) => prev || resolvedMeal);
-    }
+    const restore = setTimeout(() => {
+      if (resolvedMeal) {
+        setSelectedMealTime((prev) => prev || resolvedMeal);
+      }
 
-    if (gedungParam || gedungIdParam) {
-      const foundGedung = gedungList.find(
-        (g) =>
-          (gedungIdParam && String(g.idGedung) === String(gedungIdParam)) ||
-          (gedungParam &&
-            g.namaGedung.toLowerCase() === gedungParam.toLowerCase()),
-      );
-      if (foundGedung) {
-        setSelectedGedung((prev) => prev || foundGedung);
+      if (gedungParam || gedungIdParam) {
+        const foundGedung = gedungList.find(
+          (g) =>
+            (gedungIdParam && String(g.idGedung) === String(gedungIdParam)) ||
+            (gedungParam &&
+              g.namaGedung.toLowerCase() === gedungParam.toLowerCase()),
+        );
+        if (foundGedung) {
+          setSelectedGedung((prev) => prev || foundGedung);
 
-        if (ruanganParam || ruanganIdParam) {
-          const foundRuangan = foundGedung.ruanganList.find(
-            (r) =>
-              (ruanganIdParam &&
-                String(r.idRuangan) === String(ruanganIdParam)) ||
-              (ruanganParam &&
-                r.namaRuangan.toLowerCase() ===
-                  ruanganParam.toLowerCase()),
-          );
-          if (foundRuangan) {
-            setSelectedRuangan((prev) => prev || foundRuangan);
+          if (ruanganParam || ruanganIdParam) {
+            const foundRuangan = foundGedung.ruanganList.find(
+              (r) =>
+                (ruanganIdParam &&
+                  String(r.idRuangan) === String(ruanganIdParam)) ||
+                (ruanganParam &&
+                  r.namaRuangan.toLowerCase() ===
+                    ruanganParam.toLowerCase()),
+            );
+            if (foundRuangan) {
+              setSelectedRuangan((prev) => prev || foundRuangan);
+            }
           }
         }
       }
-    }
+    }, 0);
+    return () => clearTimeout(restore);
   }, [gedungList, searchParams]);
 
-  // Helper to determine lock status and whether a meal cycle is the IMMEDIATELY PREVIOUS batch (eligible for revision)
+  // The same batch-driven status is used by AG Katering's snapshot page.
   function getMealLockInfo(
     jenisMakan: 'PAGI' | 'SIANG' | 'MALAM',
     defaultCutoff: string,
   ): MealLockInfo {
-    const cfg = waktuConfigs.find((c) => c.jenis_makan === jenisMakan);
-    const cutoffTime = cfg ? cfg.waktu : defaultCutoff;
-
-    const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().slice(0, 10);
-
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
-    // Cut-off minutes for each meal cycle
-    const getMin = (timeStr: string) => {
-      const [h, m] = (timeStr || '12:00').split(':').map(Number);
-      return (h || 0) * 60 + (m || 0);
-    };
-
-    const pagiCutoffStr =
-      waktuConfigs.find((c) => c.jenis_makan === 'PAGI')?.waktu || '05:30';
-    const siangCutoffStr =
-      waktuConfigs.find((c) => c.jenis_makan === 'SIANG')?.waktu || '10:30';
-    const malamCutoffStr =
-      waktuConfigs.find((c) => c.jenis_makan === 'MALAM')?.waktu || '16:00';
-
-    const pagiMin = getMin(pagiCutoffStr);
-    const siangMin = getMin(siangCutoffStr);
-    const malamMin = getMin(malamCutoffStr);
-
-    const hasTodayMalamBatch = snapshotBatches.some(
-      (b) => b.tanggal_produksi === todayStr && b.waktu_makan === 'MALAM',
-    );
-    const isMalamLocked = currentMinutes >= malamMin || hasTodayMalamBatch;
-
-    // Determine current running cycle & immediately previous cycle
-    let runningCycle: 'PAGI' | 'SIANG' | 'MALAM' = 'PAGI';
-    let prevCycle: 'PAGI' | 'SIANG' | 'MALAM' = 'MALAM';
-
-    if (currentMinutes < pagiMin) {
-      runningCycle = 'PAGI';
-      prevCycle = 'MALAM'; // Yesterday's Malam
-    } else if (currentMinutes < siangMin) {
-      runningCycle = 'SIANG';
-      prevCycle = 'PAGI'; // Today's Pagi (cut-off has passed)
-    } else if (currentMinutes < malamMin && !hasTodayMalamBatch) {
-      runningCycle = 'MALAM';
-      prevCycle = 'SIANG'; // Today's Siang (cut-off has passed)
-    } else {
-      // Malam is locked -> running cycle rolls over to tomorrow's PAGI, prevCycle is today's MALAM
-      runningCycle = 'PAGI';
-      prevCycle = 'MALAM';
-    }
-
-    let isLocked = false;
-    let hasBatchForCycle = false;
-    let isCutoffPassed = false;
-
-    if (isMalamLocked && jenisMakan === 'PAGI') {
-      // Makan Pagi now targets TOMORROW: active until tomorrow morning
-      hasBatchForCycle = snapshotBatches.some(
-        (b) => b.tanggal_produksi === tomorrowStr && b.waktu_makan === 'PAGI',
-      );
-      isLocked = hasBatchForCycle; // Only locked if tomorrow's batch was already snapshotted
-      isCutoffPassed = false;
-    } else {
-      // Normal today evaluation
-      const [h, m] = cutoffTime.split(':').map(Number);
-      const cutoffMinutes = (h || 0) * 60 + (m || 0);
-
-      isCutoffPassed = currentMinutes >= cutoffMinutes;
-      hasBatchForCycle = snapshotBatches.some(
-        (b) => b.tanggal_produksi === todayStr && b.waktu_makan === jenisMakan,
-      );
-      isLocked = isCutoffPassed || hasBatchForCycle;
-    }
-
-    // Previous batch is ONLY eligible if it is locked AND equals prevCycle
+    const cycle = computeMealCycleStatuses(waktuConfigs, snapshotBatches, new Date());
+    const status = cycle.statuses.find((item) => item.jenis_makan === jenisMakan);
+    const runningCycle = cycle.activeCycle?.jenis_makan || 'PAGI';
+    const prevCycle = runningCycle === 'PAGI' ? 'MALAM' : runningCycle === 'SIANG' ? 'PAGI' : 'SIANG';
+    const isLocked = Boolean(status?.isLocked);
     const isPreviousBatch = isLocked && jenisMakan === prevCycle;
-    const isOlderLocked = isLocked && !isPreviousBatch;
-
     return {
       isLocked,
       isPreviousBatch,
-      isOlderLocked,
-      cutoffTime,
-      hasBatchToday: hasBatchForCycle,
-      isCutoffPassed,
+      isOlderLocked: isLocked && !isPreviousBatch,
+      isWaiting: Boolean(status && !status.isLocked && !status.isAvailable),
+      cutoffTime: status?.waktu || defaultCutoff,
+      hasBatchToday: Boolean(status?.batch),
+      isCutoffPassed: Boolean(status?.isAvailable && status.remainingSeconds === 0),
       runningCycle,
       prevCycle,
     };
@@ -266,8 +211,10 @@ export default function SelectionClient({
     const lock = getMealLockInfo(jenisMakan, '12:00');
     const isRevisi = lock.isPreviousBatch;
 
+    const selectedStatus = computeMealCycleStatuses(waktuConfigs, snapshotBatches, new Date())
+      .statuses.find((status) => status.jenis_makan === jenisMakan);
     const targetBatch = snapshotBatches.find(
-      (b) => b.waktu_makan === jenisMakan,
+      (b) => b.waktu_makan === jenisMakan && b.tanggal_produksi === selectedStatus?.targetDate && b.status_batch === 'LOCKED',
     );
 
     const params = new URLSearchParams({
@@ -299,6 +246,10 @@ export default function SelectionClient({
     meal: 'Makan Pagi' | 'Makan Siang' | 'Makan Malam',
     lockInfo: MealLockInfo,
   ) => {
+    if (lockInfo.isWaiting) {
+      toast.error('Tunggu snapshot sebelumnya terkunci sebelum memilih waktu makan ini.');
+      return;
+    }
     if (lockInfo.isOlderLocked) {
       const prevMealTitle =
         MEAL_NAME_MAP[lockInfo.prevCycle] || lockInfo.prevCycle;

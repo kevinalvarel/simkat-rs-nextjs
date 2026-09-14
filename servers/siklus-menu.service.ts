@@ -8,6 +8,7 @@ import {
   masterSiklusMenuTable,
 } from '@/db/schemas/master/siklus-menu';
 import { kategoriMenuTable } from '@/db/schemas/master/kategori-menu';
+import { getMenuTagOptions, normalizeMenuTags, type MenuTagOption } from '@/lib/siklus-menu-tags';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -720,9 +721,7 @@ export async function getAvailableSiklusList(): Promise<number[]> {
 /**
  * Fetch kategori menu options from master table for badge/tag options
  */
-export async function getKategoriMenuDietList(): Promise<
-  Array<{ kode: string; label: string; kategori: string }>
-> {
+export async function getKategoriMenuDietList(): Promise<MenuTagOption[]> {
   try {
     const list = await db
       .select()
@@ -744,6 +743,41 @@ export async function getKategoriMenuDietList(): Promise<
   }
 }
 
+async function getActiveTagOptions(jenisMakanan: string): Promise<MenuTagOption[]> {
+  const rows = await db
+    .select({
+      kode: kategoriMenuTable.kode_item,
+      label: kategoriMenuTable.label_item,
+      kategori: kategoriMenuTable.nama_kategori,
+    })
+    .from(kategoriMenuTable)
+    .where(and(
+      eq(kategoriMenuTable.nama_kategori, jenisMakanan.trim().toUpperCase()),
+      eq(kategoriMenuTable.is_active, true),
+    ));
+  return getMenuTagOptions(rows, jenisMakanan);
+}
+
+function validateMenuTagSelection(
+  value: string | null | undefined,
+  options: MenuTagOption[],
+  jenisMakanan: string,
+): { value: string | null; error?: string } {
+  const { codes, invalid } = normalizeMenuTags(value, options);
+  if (invalid.length > 0) {
+    return {
+      value: null,
+      error: `Tag ${invalid.join(', ')} tidak tersedia pada kategori ${jenisMakanan.trim().toUpperCase()}. Pilih tag dari Konfigurasi Master Menu.`,
+    };
+  }
+  return { value: codes.length > 0 ? codes.join(', ') : null };
+}
+
+function isInvalidFruitSlot(jenisMakanan: string, waktuMakan: string): boolean {
+  return jenisMakanan.trim().toUpperCase() === 'BUAH' &&
+    !['PAGI', 'SIANG'].includes(waktuMakan.trim().toUpperCase());
+}
+
 // ─── Mutations ─────────────────────────────────────────────────────────────
 
 /**
@@ -758,6 +792,15 @@ export async function createSiklusMenuItem(
 
   try {
     await ensureTableInitialized();
+    if (isInvalidFruitSlot(payload.jenis_makanan || 'HEWANI', payload.waktu_makan || 'PAGI')) {
+      return { success: false, message: 'Menu buah hanya tersedia untuk Pagi dan Siang.' };
+    }
+    const tagSelection = validateMenuTagSelection(
+      payload.kategori_menu,
+      await getActiveTagOptions(payload.jenis_makanan || 'HEWANI'),
+      payload.jenis_makanan || 'HEWANI',
+    );
+    if (tagSelection.error) return { success: false, message: tagSelection.error };
 
     // Ensure cycle exists in master_siklus
     const targetCycle = payload.siklus_ke || 1;
@@ -783,7 +826,7 @@ export async function createSiklusMenuItem(
         jenis_makanan: (payload.jenis_makanan || 'HEWANI').toUpperCase(),
         waktu_makan: (payload.waktu_makan || 'PAGI').toUpperCase(),
         nama_makanan: payload.nama_makanan.trim(),
-        kategori_menu: payload.kategori_menu?.trim() || null,
+        kategori_menu: tagSelection.value,
         catatan: payload.catatan?.trim() || null,
         urutan: payload.urutan ?? 0,
         is_active: payload.is_active ?? true,
@@ -814,6 +857,28 @@ export async function updateSiklusMenuItem(
 ): Promise<MutationResult> {
   try {
     await ensureTableInitialized();
+    const [existingItem] = await db
+      .select({
+        jenis_makanan: masterSiklusMenuTable.jenis_makanan,
+        waktu_makan: masterSiklusMenuTable.waktu_makan,
+        kategori_menu: masterSiklusMenuTable.kategori_menu,
+      })
+      .from(masterSiklusMenuTable)
+      .where(eq(masterSiklusMenuTable.id, id))
+      .limit(1);
+    if (!existingItem) return { success: false, message: 'Hidangan siklus menu tidak ditemukan.' };
+    if (isInvalidFruitSlot(
+      payload.jenis_makanan || existingItem.jenis_makanan,
+      payload.waktu_makan || existingItem.waktu_makan,
+    )) {
+      return { success: false, message: 'Menu buah hanya tersedia untuk Pagi dan Siang.' };
+    }
+    const tagSelection = validateMenuTagSelection(
+      payload.kategori_menu === undefined ? existingItem.kategori_menu : payload.kategori_menu,
+      await getActiveTagOptions(payload.jenis_makanan || existingItem.jenis_makanan),
+      payload.jenis_makanan || existingItem.jenis_makanan,
+    );
+    if (tagSelection.error) return { success: false, message: tagSelection.error };
 
     if (payload.siklus_ke !== undefined) {
       const existingCycle = await db
@@ -847,9 +912,7 @@ export async function updateSiklusMenuItem(
         ...(payload.nama_makanan !== undefined
           ? { nama_makanan: payload.nama_makanan.trim() }
           : {}),
-        ...(payload.kategori_menu !== undefined
-          ? { kategori_menu: payload.kategori_menu?.trim() || null }
-          : {}),
+        kategori_menu: tagSelection.value,
         ...(payload.catatan !== undefined
           ? { catatan: payload.catatan?.trim() || null }
           : {}),
@@ -907,6 +970,16 @@ export async function saveSlotMenuItems(
 ): Promise<MutationResult> {
   try {
     await ensureTableInitialized();
+    if (isInvalidFruitSlot(jenisMakanan, waktuMakan)) {
+      return { success: false, message: 'Menu buah hanya tersedia untuk Pagi dan Siang.' };
+    }
+    const validItems = items.filter((item) => item.nama_makanan?.trim());
+    const allowedTags = await getActiveTagOptions(jenisMakanan);
+    const normalizedTags = validItems.map((item) => validateMenuTagSelection(item.kategori_menu, allowedTags, jenisMakanan));
+    const invalidIndex = normalizedTags.findIndex((selection) => selection.error);
+    if (invalidIndex !== -1) {
+      return { success: false, message: `Hidangan #${invalidIndex + 1}: ${normalizedTags[invalidIndex].error}` };
+    }
 
     // Ensure cycle exists in master_siklus
     const existingCycle = await db
@@ -936,7 +1009,6 @@ export async function saveSlotMenuItems(
       );
 
     // 2. Insert new items if provided
-    const validItems = items.filter((i) => i.nama_makanan?.trim());
     if (validItems.length > 0) {
       await db.insert(masterSiklusMenuTable).values(
         validItems.map((item, idx) => ({
@@ -945,7 +1017,7 @@ export async function saveSlotMenuItems(
           jenis_makanan: jenisMakanan.toUpperCase(),
           waktu_makan: waktuMakan.toUpperCase(),
           nama_makanan: item.nama_makanan.trim(),
-          kategori_menu: item.kategori_menu?.trim() || null,
+          kategori_menu: normalizedTags[idx].value,
           catatan: item.catatan?.trim() || null,
           urutan: item.urutan ?? idx + 1,
           is_active: true,

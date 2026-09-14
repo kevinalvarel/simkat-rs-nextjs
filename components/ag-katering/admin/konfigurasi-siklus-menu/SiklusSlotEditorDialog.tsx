@@ -21,8 +21,14 @@ import {
   ArrowUp,
   ArrowDown,
   Layers,
-  Utensils,
+  X,
 } from 'lucide-react';
+import {
+  getMenuTagOptions,
+  normalizeMenuTags,
+  parseMenuTags,
+  type MenuTagOption,
+} from '@/lib/siklus-menu-tags';
 import type {
   SiklusMenuItem,
   SlotItemInput,
@@ -40,6 +46,7 @@ interface SiklusSlotEditorDialogProps {
     waktu_makan: string;
     existingItems: SiklusMenuItem[];
   } | null;
+  dietOptions: MenuTagOption[];
   onSuccess: () => void;
 }
 
@@ -50,28 +57,16 @@ const WAKTU_MAKAN_LABELS: Record<string, string> = {
   SARING: 'Saring',
 };
 
-const COMMON_QUICK_TAGS = [
-  'B',
-  'Diit',
-  'DM',
-  'RG',
-  'DJ',
-  'DH',
-  'RP',
-  'RS',
-  'RL',
-  'RKol',
-  'TKTP',
-];
-
 export default function SiklusSlotEditorDialog({
   open,
   onOpenChange,
   slotContext,
+  dietOptions,
   onSuccess,
 }: SiklusSlotEditorDialogProps) {
   const [items, setItems] = useState<SlotItemInput[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const availableTags = getMenuTagOptions(dietOptions, slotContext?.jenis_makanan);
 
   useEffect(() => {
     if (open && slotContext) {
@@ -90,7 +85,7 @@ export default function SiklusSlotEditorDialog({
           setItems([
             {
               nama_makanan: '',
-              kategori_menu: 'B',
+              kategori_menu: '',
               catatan: '',
               urutan: 1,
             },
@@ -106,7 +101,7 @@ export default function SiklusSlotEditorDialog({
       ...prev,
       {
         nama_makanan: '',
-        kategori_menu: 'B',
+        kategori_menu: '',
         catatan: '',
         urutan: prev.length + 1,
       },
@@ -152,14 +147,11 @@ export default function SiklusSlotEditorDialog({
   }
 
   function handleQuickTag(index: number, tag: string) {
-    const current = (items[index]?.kategori_menu || '')
-      .split(',')
-      .map((t) => t.trim())
-      .filter(Boolean);
+    const current = parseMenuTags(items[index]?.kategori_menu);
 
     let next: string[];
-    if (current.includes(tag)) {
-      next = current.filter((t) => t !== tag);
+    if (current.some((currentTag) => currentTag.toUpperCase() === tag.toUpperCase())) {
+      next = current.filter((currentTag) => currentTag.toUpperCase() !== tag.toUpperCase());
     } else {
       next = [...current, tag];
     }
@@ -171,6 +163,10 @@ export default function SiklusSlotEditorDialog({
 
     // Filter out items with completely empty dish name
     const validItems = items.filter((i) => i.nama_makanan.trim());
+    if (validItems.some((item) => normalizeMenuTags(item.kategori_menu, availableTags).invalid.length > 0)) {
+      toast.error('Hapus tag yang tidak tersedia untuk kategori slot ini sebelum menyimpan.');
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -234,10 +230,8 @@ export default function SiklusSlotEditorDialog({
         {/* Dish List Container */}
         <div className='flex-1 overflow-y-auto py-3 space-y-3 pr-1'>
           {items.map((item, idx) => {
-            const currentItemTags = (item.kategori_menu || '')
-              .split(',')
-              .map((t) => t.trim())
-              .filter(Boolean);
+            const currentItemTags = parseMenuTags(item.kategori_menu);
+            const { invalid: invalidTags } = normalizeMenuTags(item.kategori_menu, availableTags);
 
             return (
               <div
@@ -292,7 +286,7 @@ export default function SiklusSlotEditorDialog({
 
                 {/* Input Fields */}
                 <div className='grid grid-cols-1 sm:grid-cols-12 gap-2'>
-                  <div className='sm:col-span-6 space-y-1'>
+                  <div className='sm:col-span-8 space-y-1'>
                     <Label className='text-[11px] font-semibold'>
                       Nama Hidangan
                     </Label>
@@ -306,21 +300,7 @@ export default function SiklusSlotEditorDialog({
                     />
                   </div>
 
-                  <div className='sm:col-span-3 space-y-1'>
-                    <Label className='text-[11px] font-semibold'>
-                      Kategori / Tag Diet
-                    </Label>
-                    <Input
-                      value={item.kategori_menu || ''}
-                      onChange={(e) =>
-                        handleFieldChange(idx, 'kategori_menu', e.target.value)
-                      }
-                      placeholder='mis. B, Diit, DM'
-                      className='h-8 text-xs font-mono font-bold bg-background'
-                    />
-                  </div>
-
-                  <div className='sm:col-span-3 space-y-1'>
+                  <div className='sm:col-span-4 space-y-1'>
                     <Label className='text-[11px] font-semibold'>
                       Catatan / Potongan
                     </Label>
@@ -335,29 +315,49 @@ export default function SiklusSlotEditorDialog({
                   </div>
                 </div>
 
-                {/* Quick Diet Tag Chips */}
+                {/* Tags from the selected slot's master category */}
                 <div className='flex items-center gap-1 flex-wrap pt-0.5'>
                   <span className='text-[10px] text-muted-foreground mr-1'>
-                    Pilih Tag Cepat:
+                    Tag {slotContext.jenis_makanan}:
                   </span>
-                  {COMMON_QUICK_TAGS.map((tag) => {
-                    const isSelected = currentItemTags.includes(tag);
+                  {availableTags.map((option) => {
+                    const isSelected = currentItemTags.some((tag) => tag.toUpperCase() === option.kode.toUpperCase());
                     return (
                       <button
-                        key={tag}
+                        key={option.kode}
                         type='button'
-                        onClick={() => handleQuickTag(idx, tag)}
+                        onClick={() => handleQuickTag(idx, option.kode)}
                         className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold transition-all cursor-pointer border ${
                           isSelected
                             ? 'bg-primary text-primary-foreground border-primary'
                             : 'bg-background text-muted-foreground border-border hover:border-primary/40'
                         }`}
                       >
-                        {tag}
+                        {option.kode} - {option.label}
                       </button>
                     );
                   })}
                 </div>
+                {availableTags.length === 0 && (
+                  <p className='text-[11px] text-muted-foreground'>
+                    Belum ada tag aktif untuk kategori {slotContext.jenis_makanan}. Tambahkan di Konfigurasi Master Menu.
+                  </p>
+                )}
+                {invalidTags.length > 0 && (
+                  <div className='space-y-1'>
+                    <p className='text-[11px] text-destructive'>Tag lama tidak tersedia untuk kategori ini. Hapus sebelum menyimpan.</p>
+                    <div className='flex flex-wrap gap-1'>
+                      {invalidTags.map((tag) => (
+                        <Badge key={tag} variant='destructive' className='gap-1'>
+                          {tag}
+                          <button type='button' onClick={() => handleQuickTag(idx, tag)} aria-label={`Hapus tag ${tag}`}>
+                            <X className='w-3 h-3' />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}

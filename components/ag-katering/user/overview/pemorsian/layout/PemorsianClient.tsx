@@ -10,12 +10,14 @@ import type {
 import {
   getLivePemorsianData,
   updateEtiketPrintStatus,
+  updateRevisionEtiketPrintStatus,
 } from '@/servers/pemorsian.service';
 import {
   listenProductionUpdate,
   broadcastProductionUpdate,
 } from '@/lib/realtime-sync';
 import { isNpoPatient } from '@/lib/npo-utils';
+import { canPrintRevision, revisionTypeLabel } from '@/lib/revisi-etiket';
 import { toast } from 'sonner';
 import PemorsianStatsCards from '../ui/PemorsianStatsCards';
 import PemorsianRevisiTableSection from './PemorsianRevisiTableSection';
@@ -51,6 +53,7 @@ export default function PemorsianClient({ initialData }: PemorsianClientProps) {
   const [modalTitle, setModalTitle] = useState<string>('');
   const [previewEtiketList, setPreviewEtiketList] = useState<EtiketData[]>([]);
   const pendingPrintIdsRef = useRef<number[]>([]);
+  const pendingRevisionPrintRef = useRef<{ id: number; signature: string }[]>([]);
 
   // Prevent concurrent fetch calls
   const isFetchingRef = useRef(false);
@@ -343,9 +346,9 @@ export default function PemorsianClient({ initialData }: PemorsianClientProps) {
       gedung: r.data_baru?.gedung || r.gedung,
       is_revisi: true,
       keterangan_revisi:
-        r.alasan || r.jenis_perubahan || r.dampak_dapur || 'Revisi Diet',
+        r.alasan || revisionTypeLabel(r.jenis_perubahan),
       keterangan:
-        r.alasan || r.jenis_perubahan || r.dampak_dapur || 'Revisi Diet',
+        r.alasan || revisionTypeLabel(r.jenis_perubahan),
       exp_date: data.tanggalProduksi || undefined,
     };
   }
@@ -355,6 +358,7 @@ export default function PemorsianClient({ initialData }: PemorsianClientProps) {
     if (isNpoPatient(patient) || patient.status === 'NPO') return;
     const etiket = mapPatientToEtiket(patient);
     pendingPrintIdsRef.current = [patient.id];
+    pendingRevisionPrintRef.current = [];
     setPreviewEtiketList([etiket]);
     setModalTitle(`Cetak Etiket - ${patient.nama_pasien}`);
     setModalOpen(true);
@@ -371,6 +375,7 @@ export default function PemorsianClient({ initialData }: PemorsianClientProps) {
 
     const etikets = targetPatients.map(mapPatientToEtiket);
     pendingPrintIdsRef.current = targetPatients.map((p) => p.id);
+    pendingRevisionPrintRef.current = [];
 
     setPreviewEtiketList(etikets);
     setModalTitle(`Cetak ${targetPatients.length} Etiket Makan Pasien`);
@@ -378,21 +383,24 @@ export default function PemorsianClient({ initialData }: PemorsianClientProps) {
   }
 
   function handlePrintSingleRevisi(revisi: PemorsianRevisiItem) {
+    if (!canPrintRevision(revisi.jenis_perubahan) || !revisi.revision_signature) return;
     const etiket = mapRevisiToEtiket(revisi);
-    pendingPrintIdsRef.current = [revisi.id];
+    pendingPrintIdsRef.current = [];
+    pendingRevisionPrintRef.current = [{ id: revisi.id, signature: revisi.revision_signature }];
     setPreviewEtiketList([etiket]);
     setModalTitle(`Cetak Etiket Revisi - ${revisi.nama_pasien}`);
     setModalOpen(true);
   }
 
   function handlePrintBatchRevisi(items?: PemorsianRevisiItem[]) {
-    const targetItems =
-      items || data.revisiItems.filter((r) => selectedRevisiIds.has(r.id));
+    const targetItems = (items || data.revisiItems.filter((r) => selectedRevisiIds.has(r.id)))
+      .filter((r) => canPrintRevision(r.jenis_perubahan) && r.revision_signature);
 
     if (targetItems.length === 0) return;
 
     const etikets = targetItems.map(mapRevisiToEtiket);
-    pendingPrintIdsRef.current = targetItems.map((r) => r.id);
+    pendingPrintIdsRef.current = [];
+    pendingRevisionPrintRef.current = targetItems.map((r) => ({ id: r.id, signature: r.revision_signature! }));
 
     setPreviewEtiketList(etikets);
     setModalTitle(`Cetak ${targetItems.length} Etiket Revisi Pasien`);
@@ -401,8 +409,30 @@ export default function PemorsianClient({ initialData }: PemorsianClientProps) {
 
   // When print succeeds, persist printed status to DB
   async function handlePrintSuccess() {
+    const revisionTargets = pendingRevisionPrintRef.current;
+    if (revisionTargets.length > 0) {
+      pendingRevisionPrintRef.current = [];
+      try {
+        const res = await updateRevisionEtiketPrintStatus(data.batch?.id || 0, revisionTargets);
+        if (!res.success) {
+          toast.error(res.message);
+          fetchLiveData(undefined, false);
+          return;
+        }
+        const targetIds = new Set(revisionTargets.map((r) => r.id));
+        setData((prev) => ({ ...prev, revisiItems: prev.revisiItems.map((r) => targetIds.has(r.id) ? { ...r, revision_print_status: 'SUDAH_DICETAK', revision_printed_at: new Date().toISOString() } : r) }));
+        setSelectedRevisiIds(new Set());
+        broadcastProductionUpdate('ETIKET_PRINTED', 'pemorsian');
+        toast.success(`${res.count} etiket revisi berhasil dicetak.`);
+      } catch (err) {
+        console.error('Error updating revision print status:', err);
+        toast.error('Gagal menyimpan status cetak revisi.');
+      }
+      return;
+    }
     const ids = pendingPrintIdsRef.current;
     if (ids && ids.length > 0) {
+      pendingPrintIdsRef.current = [];
       const targetSet = new Set(ids);
 
       // Optimistic UI update

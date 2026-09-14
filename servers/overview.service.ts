@@ -264,6 +264,49 @@ function buildMissingCycleMenuSlotDish(
   };
 }
 
+function resolveSupplementDishes(
+  activeSlotMenuItems: Array<typeof masterSiklusMenuTable.$inferSelect>,
+  category: 'BUAH' | 'SNACK',
+  codes: string[],
+  patientKelas: string,
+  mealSlot: string,
+  dietCodes: string[],
+): DishCounter[] {
+  if (!['PAGI', 'SIANG'].includes(mealSlot)) return [];
+
+  const candidates = activeSlotMenuItems.filter((item) =>
+    item.jenis_makanan.toUpperCase() === category && matchesKelas(item.kelas, patientKelas),
+  );
+
+  return [...new Set(codes.map((code) => code.trim().toUpperCase()))]
+    .filter((code) => {
+      if (category !== 'SNACK') return true;
+      if (code === 'SNACK_PAGI') return mealSlot === 'PAGI';
+      if (code === 'SNACK_SIANG' || code === 'SNACK_SORE') return mealSlot === 'SIANG';
+      return true;
+    })
+    .map((code) => {
+      const matched = candidates.find((item) =>
+        extractCodes(item.kategori_menu).some((tag) => tag.toUpperCase() === code),
+      ) || candidates.find((item) =>
+        extractCodes(item.kategori_menu).some((tag) =>
+          dietCodes.some((dietCode) => dietCode.toUpperCase() === tag.toUpperCase()),
+        ),
+      ) || candidates.find((item) => !item.kategori_menu?.trim());
+
+      if (!matched) return buildMissingCycleMenuDish(code, category, patientKelas);
+
+      return {
+        code: `MENU-${matched.id}`,
+        name: matched.nama_makanan,
+        category,
+        kelas: matched.kelas,
+        dietTag: matched.kategori_menu || code,
+        catatan: matched.catatan || undefined,
+      };
+    });
+}
+
 /**
  * Resolve candidate main dishes (Hewani, Nabati, Sayur) for a patient with combined dish consolidation
  */
@@ -806,82 +849,11 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
         }
       }
 
-      // D. Buah
-      if (buahCodes.length > 0) {
-        for (const code of buahCodes) {
-          const upperCode = code.toUpperCase();
-          const buahName = labelMap.get(upperCode) || defaultLabels[upperCode];
-          if (buahName) {
-            addLiveDish({
-              code: upperCode,
-              name: buahName,
-              category: 'BUAH',
-              kelas: pKelas,
-            });
-          } else {
-            addLiveDish(
-              buildMissingCycleMenuDish(
-                code,
-                'BUAH',
-                pKelas,
-                labelMap,
-                defaultLabels,
-              ),
-            );
-          }
-        }
-      } else {
-        // Check if cycle defines a default fruit for all
-        const defaultFruit = activeSlotMenuItems.find(
-          (m) => m.jenis_makanan.toUpperCase() === 'BUAH' && matchesKelas(m.kelas, pKelas),
-        );
-        if (defaultFruit) {
-          addLiveDish({
-            code: `BUAH-${defaultFruit.id}`,
-            name: defaultFruit.nama_makanan,
-            category: 'BUAH',
-            kelas: defaultFruit.kelas,
-          });
-        }
+      for (const dish of resolveSupplementDishes(activeSlotMenuItems, 'BUAH', buahCodes, pKelas, targetWaktuMakan, hewaniCodes)) {
+        addLiveDish(dish);
       }
-
-      // E. Snack
-      if (snackCodes.length > 0) {
-        for (const code of snackCodes) {
-          const upperCode = code.toUpperCase();
-          const snackName =
-            labelMap.get(upperCode) || defaultLabels[upperCode];
-          if (snackName) {
-            addLiveDish({
-              code: upperCode,
-              name: snackName,
-              category: 'SNACK',
-              kelas: pKelas,
-            });
-          } else {
-            addLiveDish(
-              buildMissingCycleMenuDish(
-                code,
-                'SNACK',
-                pKelas,
-                labelMap,
-                defaultLabels,
-              ),
-            );
-          }
-        }
-      } else {
-        const defaultSnack = activeSlotMenuItems.find(
-          (m) => m.jenis_makanan.toUpperCase() === 'SNACK' && matchesKelas(m.kelas, pKelas),
-        );
-        if (defaultSnack) {
-          addLiveDish({
-            code: `SNACK-${defaultSnack.id}`,
-            name: defaultSnack.nama_makanan,
-            category: 'SNACK',
-            kelas: defaultSnack.kelas,
-          });
-        }
+      for (const dish of resolveSupplementDishes(activeSlotMenuItems, 'SNACK', snackCodes, pKelas, targetWaktuMakan, hewaniCodes)) {
+        addLiveDish(dish);
       }
     }
 
@@ -1071,82 +1043,11 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
           }
         }
 
-        // Buah
-        if (buahCodes.length > 0) {
-          for (const code of buahCodes) {
-            const upperCode = code.toUpperCase();
-            const buahName =
-              labelMap.get(upperCode) || defaultLabels[upperCode];
-            if (buahName) {
-              addSnapshotDish({
-                code: upperCode,
-                name: buahName,
-                category: 'BUAH',
-                kelas: pKelas,
-              });
-            } else {
-              addSnapshotDish(
-                buildMissingCycleMenuDish(
-                  code,
-                  'BUAH',
-                  pKelas,
-                  labelMap,
-                  defaultLabels,
-                ),
-              );
-            }
-          }
-        } else {
-          const defaultFruit = activeSlotMenuItems.find(
-            (m) => m.jenis_makanan.toUpperCase() === 'BUAH' && matchesKelas(m.kelas, pKelas),
-          );
-          if (defaultFruit) {
-            addSnapshotDish({
-              code: `BUAH-${defaultFruit.id}`,
-              name: defaultFruit.nama_makanan,
-              category: 'BUAH',
-              kelas: defaultFruit.kelas,
-            });
-          }
+        for (const dish of resolveSupplementDishes(activeSlotMenuItems, 'BUAH', buahCodes, pKelas, targetWaktuMakan, hewaniCodes)) {
+          addSnapshotDish(dish);
         }
-
-        // Snack
-        if (snackCodes.length > 0) {
-          for (const code of snackCodes) {
-            const upperCode = code.toUpperCase();
-            const snackName =
-              labelMap.get(upperCode) || defaultLabels[upperCode];
-            if (snackName) {
-              addSnapshotDish({
-                code: upperCode,
-                name: snackName,
-                category: 'SNACK',
-                kelas: pKelas,
-              });
-            } else {
-              addSnapshotDish(
-                buildMissingCycleMenuDish(
-                  code,
-                  'SNACK',
-                  pKelas,
-                  labelMap,
-                  defaultLabels,
-                ),
-              );
-            }
-          }
-        } else {
-          const defaultSnack = activeSlotMenuItems.find(
-            (m) => m.jenis_makanan.toUpperCase() === 'SNACK' && matchesKelas(m.kelas, pKelas),
-          );
-          if (defaultSnack) {
-            addSnapshotDish({
-              code: `SNACK-${defaultSnack.id}`,
-              name: defaultSnack.nama_makanan,
-              category: 'SNACK',
-              kelas: defaultSnack.kelas,
-            });
-          }
+        for (const dish of resolveSupplementDishes(activeSlotMenuItems, 'SNACK', snackCodes, pKelas, targetWaktuMakan, hewaniCodes)) {
+          addSnapshotDish(dish);
         }
       }
     }

@@ -30,6 +30,7 @@ export interface MealLockInfo {
   isLocked: boolean;
   isPreviousBatch: boolean;
   isOlderLocked: boolean;
+  isWaiting: boolean;
   cutoffTime: string;
   hasBatchToday: boolean;
   isCutoffPassed: boolean;
@@ -47,4 +48,3 @@ export interface SelectionState {
   snapshotBatches: SnapshotBatch[];
   isLoading: boolean;
 }
-

@@ -1,227 +1,114 @@
 import type { snapshotBatchTable } from '@/db/schemas/snapshot/snapshot-batch';
 
 export type SnapshotBatch = typeof snapshotBatchTable.$inferSelect;
-
-export type WaktuMakanConfig = {
-  id: number;
-  jenis_makan: string; // PAGI | SIANG | MALAM
-  waktu: string; // HH:mm format
-};
-
+export type MealName = 'PAGI' | 'SIANG' | 'MALAM';
+export type WaktuMakanConfig = { id: number; jenis_makan: string; waktu: string };
 export type MealCycleStatus = {
   id: number;
-  jenis_makan: string; // 'PAGI' | 'SIANG' | 'MALAM'
-  waktu: string; // HH:mm
+  jenis_makan: MealName;
+  waktu: string;
   isLocked: boolean;
+  isAvailable: boolean;
   isTomorrow: boolean;
-  targetDate: string; // YYYY-MM-DD
-  targetDateDisplay: string; // e.g. "19 Agu 2026"
+  targetDate: string;
+  targetDateDisplay: string;
   remainingSeconds: number;
   batch: SnapshotBatch | null;
 };
 
-// Format seconds into readable countdown string (e.g. "08j 24m 12s" or "24m 12s")
+const MEALS: MealName[] = ['PAGI', 'SIANG', 'MALAM'];
+const DEFAULT_TIMES: Record<MealName, string> = { PAGI: '05:30', SIANG: '10:30', MALAM: '16:00' };
+
+export function getWibDate(now: Date): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(now);
+  const part = (type: string) => parts.find((item) => item.type === type)?.value || '';
+  return `${part('year')}-${part('month')}-${part('day')}`;
+}
+
+export function getWibMinutes(now: Date): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(now);
+  const part = (type: string) => Number(parts.find((item) => item.type === type)?.value || 0);
+  return part('hour') * 60 + part('minute');
+}
+
+export function addCalendarDays(date: string, days: number): string {
+  const result = new Date(`${date}T00:00:00Z`);
+  result.setUTCDate(result.getUTCDate() + days);
+  return result.toISOString().slice(0, 10);
+}
+
+export function getNextMealSlot(date: string, meal: MealName): { date: string; meal: MealName } {
+  const index = MEALS.indexOf(meal);
+  return index === 2 ? { date: addCalendarDays(date, 1), meal: 'PAGI' }
+    : { date, meal: MEALS[index + 1] };
+}
+
 export function formatCountdown(totalSeconds: number): string {
   if (totalSeconds <= 0) return '00m 00s';
   const hrs = Math.floor(totalSeconds / 3600);
   const mins = Math.floor((totalSeconds % 3600) / 60);
   const secs = totalSeconds % 60;
-
-  if (hrs > 0) {
-    return `${hrs}j ${String(mins).padStart(2, '0')}m ${String(secs).padStart(2, '0')}s`;
-  }
-  return `${String(mins).padStart(2, '0')}m ${String(secs).padStart(2, '0')}s`;
+  return hrs > 0 ? `${hrs}j ${String(mins).padStart(2, '0')}m ${String(secs).padStart(2, '0')}s`
+    : `${String(mins).padStart(2, '0')}m ${String(secs).padStart(2, '0')}s`;
 }
 
-/**
- * Pure calculation helper for 3 meal cycles (PAGI, SIANG, MALAM).
- * Safe to execute on both client and server (no 'use server' boundary).
- * When today's MALAM cycle is locked (cutoff passed or batch created),
- * the PAGI cycle automatically rolls over to TOMORROW and becomes OPEN/ACTIVE (unlocked).
- */
 export function computeMealCycleStatuses(
-  configs: WaktuMakanConfig[],
-  batches: SnapshotBatch[] = [],
-  now: Date = new Date(),
-): {
-  statuses: MealCycleStatus[];
-  activeCycle: MealCycleStatus | null;
-  isMalamLocked: boolean;
-  summaryText: string;
-} {
-  const defaultTimes: Record<string, string> = {
-    PAGI: '05:30',
-    SIANG: '10:30',
-    MALAM: '16:00',
+  configs: WaktuMakanConfig[], batches: SnapshotBatch[] = [], now: Date = new Date(),
+): { statuses: MealCycleStatus[]; activeCycle: MealCycleStatus | null; isMalamLocked: boolean; summaryText: string } {
+  const today = getWibDate(now);
+  const yesterday = addCalendarDays(today, -1);
+  const tomorrow = addCalendarDays(today, 1);
+  const minutes = getWibMinutes(now);
+  const timeFor = (meal: MealName) => configs.find((config) => config.jenis_makan === meal)?.waktu || DEFAULT_TIMES[meal];
+  const cutoffMinutes = (meal: MealName) => {
+    const [h, m] = timeFor(meal).split(':').map(Number);
+    return h * 60 + m;
   };
+  const lockedBatch = (date: string, meal: MealName) => batches.find((batch) =>
+    batch.tanggal_produksi === date && batch.waktu_makan === meal && batch.status_batch === 'LOCKED',
+  ) || null;
 
-  const todayStr = now.toISOString().slice(0, 10);
-  const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+  const isMalamLocked = Boolean(lockedBatch(today, 'MALAM'));
+  const tomorrowPagiLocked = Boolean(lockedBatch(tomorrow, 'PAGI'));
+  const tomorrowSiangLocked = Boolean(lockedBatch(tomorrow, 'SIANG'));
+  const tomorrowMalamLocked = Boolean(lockedBatch(tomorrow, 'MALAM'));
+  let active: { date: string; meal: MealName };
+  if (tomorrowMalamLocked) active = { date: addCalendarDays(tomorrow, 1), meal: 'PAGI' };
+  else if (tomorrowSiangLocked) active = { date: tomorrow, meal: 'MALAM' };
+  else if (tomorrowPagiLocked) active = { date: tomorrow, meal: 'SIANG' };
+  else if (isMalamLocked) active = { date: tomorrow, meal: 'PAGI' };
+  else if (lockedBatch(today, 'SIANG')) active = { date: today, meal: 'MALAM' };
+  else if (lockedBatch(today, 'PAGI')) active = { date: today, meal: 'SIANG' };
+  else if (lockedBatch(yesterday, 'MALAM')) active = { date: today, meal: 'PAGI' };
+  else {
+    // Bootstrap when there is no recent locked batch.
+    active = { date: today, meal: minutes < cutoffMinutes('PAGI') ? 'PAGI'
+      : minutes < cutoffMinutes('SIANG') ? 'SIANG' : 'MALAM' };
+  }
 
-  const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
-  const getCutoffMinutes = (timeStr: string) => {
-    const [h, m] = (timeStr || '12:00').split(':').map(Number);
-    return (h || 0) * 60 + (m || 0);
-  };
-
-  const malamTime =
-    configs.find((c) => c.jenis_makan === 'MALAM')?.waktu || defaultTimes.MALAM;
-  const malamCutoffMin = getCutoffMinutes(malamTime);
-
-  // Check if today's MALAM is locked (either passed cutoff or batch exists for today's MALAM)
-  const hasTodayMalamBatch = batches.some(
-    (b) => b.tanggal_produksi === todayStr && b.waktu_makan === 'MALAM',
-  );
-  const isMalamLocked = currentMinutes >= malamCutoffMin || hasTodayMalamBatch;
-
-  const formatDateDisplay = (dateObj: Date) => {
-    return dateObj.toLocaleDateString('id-ID', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    });
-  };
-
-  const statuses: MealCycleStatus[] = configs.map((config) => {
-    const [h, m] = (config.waktu || '12:00').split(':').map(Number);
-    const cutoffMinutes = (h || 0) * 60 + (m || 0);
-
-    if (config.jenis_makan === 'PAGI') {
-      if (isMalamLocked) {
-        // PAGI advances to TOMORROW
-        const targetDateObj = new Date(tomorrow);
-        targetDateObj.setHours(h || 5, m || 0, 0, 0);
-
-        const tomorrowBatch =
-          batches.find(
-            (b) =>
-              b.tanggal_produksi === tomorrowStr && b.waktu_makan === 'PAGI',
-          ) || null;
-
-        const remainingSeconds = Math.max(
-          0,
-          Math.floor((targetDateObj.getTime() - now.getTime()) / 1000),
-        );
-
-        return {
-          id: config.id,
-          jenis_makan: 'PAGI',
-          waktu: config.waktu,
-          isLocked: Boolean(tomorrowBatch),
-          isTomorrow: true,
-          targetDate: tomorrowStr,
-          targetDateDisplay: formatDateDisplay(tomorrow),
-          remainingSeconds,
-          batch: tomorrowBatch,
-        };
-      } else {
-        // PAGI is for TODAY
-        const targetDateObj = new Date(now);
-        targetDateObj.setHours(h || 5, m || 0, 0, 0);
-
-        const todayBatch =
-          batches.find(
-            (b) => b.tanggal_produksi === todayStr && b.waktu_makan === 'PAGI',
-          ) || null;
-
-        const isCutoffPassed = currentMinutes >= cutoffMinutes;
-        const isLocked = isCutoffPassed || Boolean(todayBatch);
-        const remainingSeconds = isLocked
-          ? 0
-          : Math.max(
-              0,
-              Math.floor((targetDateObj.getTime() - now.getTime()) / 1000),
-            );
-
-        return {
-          id: config.id,
-          jenis_makan: 'PAGI',
-          waktu: config.waktu,
-          isLocked,
-          isTomorrow: false,
-          targetDate: todayStr,
-          targetDateDisplay: formatDateDisplay(now),
-          remainingSeconds,
-          batch: todayBatch,
-        };
-      }
-    }
-
-    if (config.jenis_makan === 'SIANG') {
-      const targetDateObj = new Date(now);
-      targetDateObj.setHours(h || 10, m || 0, 0, 0);
-
-      const todayBatch =
-        batches.find(
-          (b) => b.tanggal_produksi === todayStr && b.waktu_makan === 'SIANG',
-        ) || null;
-
-      const isCutoffPassed = currentMinutes >= cutoffMinutes;
-      const isLocked = isCutoffPassed || Boolean(todayBatch);
-      const remainingSeconds = isLocked
-        ? 0
-        : Math.max(
-            0,
-            Math.floor((targetDateObj.getTime() - now.getTime()) / 1000),
-          );
-
-      return {
-        id: config.id,
-        jenis_makan: 'SIANG',
-        waktu: config.waktu,
-        isLocked,
-        isTomorrow: false,
-        targetDate: todayStr,
-        targetDateDisplay: formatDateDisplay(now),
-        remainingSeconds,
-        batch: todayBatch,
-      };
-    }
-
-    // MALAM
-    const targetDateObj = new Date(now);
-    targetDateObj.setHours(h || 16, m || 0, 0, 0);
-
-    const todayBatch =
-      batches.find(
-        (b) => b.tanggal_produksi === todayStr && b.waktu_makan === 'MALAM',
-      ) || null;
-
-    const isCutoffPassed = currentMinutes >= cutoffMinutes;
-    const isLocked = isCutoffPassed || Boolean(todayBatch);
-    const remainingSeconds = isLocked
-      ? 0
-      : Math.max(
-          0,
-          Math.floor((targetDateObj.getTime() - now.getTime()) / 1000),
-        );
-
+  const statuses = MEALS.map((meal): MealCycleStatus => {
+    const date = tomorrowPagiLocked || tomorrowSiangLocked || tomorrowMalamLocked
+      ? active.date === addCalendarDays(tomorrow, 1) && meal === 'PAGI' ? active.date : tomorrow
+      : meal === 'PAGI' && isMalamLocked ? tomorrow : today;
+    const batch = lockedBatch(date, meal);
+    const isAvailable = !batch && active.date === date && active.meal === meal;
+    const cutoff = new Date(`${date}T${timeFor(meal).slice(0, 5)}:00+07:00`);
+    const remainingSeconds = isAvailable ? Math.max(0, Math.floor((cutoff.getTime() - now.getTime()) / 1000)) : 0;
     return {
-      id: config.id,
-      jenis_makan: 'MALAM',
-      waktu: config.waktu,
-      isLocked,
-      isTomorrow: false,
-      targetDate: todayStr,
-      targetDateDisplay: formatDateDisplay(now),
-      remainingSeconds,
-      batch: todayBatch,
+      id: configs.find((config) => config.jenis_makan === meal)?.id || 0,
+      jenis_makan: meal, waktu: timeFor(meal), isLocked: Boolean(batch), isAvailable,
+      isTomorrow: date > today, targetDate: date,
+      targetDateDisplay: new Date(`${date}T00:00:00+07:00`).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Jakarta' }),
+      remainingSeconds, batch,
     };
   });
-
-  const activeCycle = statuses.find((s) => !s.isLocked) || null;
-
-  return {
-    statuses,
-    activeCycle,
-    isMalamLocked,
-    summaryText: isMalamLocked
-      ? 'Siklus Malam Terkunci — Siklus Makan Pagi (Besok) Terbuka'
-      : activeCycle
-        ? `Siklus Aktif Saat Ini: Makan ${activeCycle.jenis_makan}`
-        : 'Seluruh Siklus Terkunci',
+  const activeCycle = statuses.find((status) => status.isAvailable) || null;
+  return { statuses, activeCycle, isMalamLocked,
+    summaryText: activeCycle ? `Siklus Aktif Saat Ini: Makan ${activeCycle.jenis_makan}${activeCycle.isTomorrow ? ' (Besok)' : ''}`
+      : 'Menunggu batch snapshot sebelumnya terkunci',
   };
 }

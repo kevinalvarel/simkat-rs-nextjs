@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type {
   PemorsianSummaryData,
   PemorsianPatientItem,
@@ -13,12 +13,14 @@ import type {
 import {
   getLivePemorsianData,
   updateEtiketPrintStatus,
+  updateRevisionEtiketPrintStatus,
 } from '@/servers/pemorsian.service';
 import {
   broadcastProductionUpdate,
   listenProductionUpdate,
 } from '@/lib/realtime-sync';
 import { isNpoPatient } from '@/lib/npo-utils';
+import { canPrintRevision, effectivePrintedPatientIds, revisionTypeLabel } from '@/lib/revisi-etiket';
 import EtiketPrintPreviewModal from '@/components/ag-katering/user/cetak-etiket/layout/EtiketPrintPreviewModal';
 import CetakEtiketHeader, { type WaktuMakanType } from './CetakEtiketHeader';
 import CetakEtiketStats from './CetakEtiketStats';
@@ -65,17 +67,16 @@ export default function CetakEtiketClient({
   const [currentPrintTargetIds, setCurrentPrintTargetIds] = useState<number[]>(
     [],
   );
+  const [currentRevisionTargets, setCurrentRevisionTargets] = useState<{ id: number; signature: string }[]>([]);
+  const printHandledRef = useRef(false);
+
+  const revisionByRm = useMemo(() => new Map(data.revisiItems.map((r) => [r.no_rm.trim(), r])), [data.revisiItems]);
+  const revisedPatientIds = useMemo(() => new Set(data.patients.filter((p) => revisionByRm.has(p.no_rm.trim())).map((p) => p.id)), [data.patients, revisionByRm]);
 
   // 2. Synchronized Printed Status from Database (per snapshot)
   const printedPatientIds = useMemo(() => {
-    const set = new Set<number>();
-    data.patients.forEach((p) => {
-      if (p.print_status === 'SUDAH_DICETAK') {
-        set.add(p.id);
-      }
-    });
-    return set;
-  }, [data.patients]);
+    return effectivePrintedPatientIds(data.patients, data.revisiItems);
+  }, [data.patients, data.revisiItems]);
 
   // Fetch / Refresh Data helper with date & mealtime filter
   const fetchData = useCallback(
@@ -270,7 +271,7 @@ export default function CetakEtiketClient({
   // Toggle selection for single patient
   function handleToggleSelect(id: number) {
     const patient = data.patients.find((p) => p.id === id);
-    if (patient && (isNpoPatient(patient) || patient.status === 'NPO')) return;
+    if (patient && (isNpoPatient(patient) || patient.status === 'NPO' || patient.status === 'PULANG' || revisedPatientIds.has(id))) return;
 
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -286,7 +287,7 @@ export default function CetakEtiketClient({
   // Toggle select all visible filtered patients (feeding patients only)
   function handleToggleSelectAll() {
     const allFeedingIds = filteredPatients
-      .filter((p) => !isNpoPatient(p) && p.status !== 'NPO')
+      .filter((p) => !isNpoPatient(p) && p.status !== 'NPO' && p.status !== 'PULANG' && !revisedPatientIds.has(p.id))
       .map((p) => p.id);
     const isAllSelected =
       allFeedingIds.length > 0 &&
@@ -328,14 +329,18 @@ export default function CetakEtiketClient({
       diet: r.data_baru?.diet || r.dampak_dapur || 'Diet Khusus',
       waktu: r.waktu_makan || data.waktuMakan || 'SIANG',
       is_revisi: true,
-      keterangan_revisi: r.alasan || r.jenis_perubahan || 'Revisi Diet',
-      keterangan: r.alasan || r.jenis_perubahan || 'Revisi Diet',
+      keterangan_revisi: r.alasan || revisionTypeLabel(r.jenis_perubahan),
+      keterangan: r.alasan || revisionTypeLabel(r.jenis_perubahan),
       exp_date: data.tanggalProduksi || undefined,
     };
   }
 
   // Handle single patient print
   function handlePrintSingle(patient: PemorsianPatientItem) {
+    if (revisedPatientIds.has(patient.id)) {
+      toast.error('Cetak perubahan pasien dari tab revisi.');
+      return;
+    }
     if (isNpoPatient(patient) || patient.status === 'NPO') {
       toast.error('Pasien Puasa (NPO) tidak mendapatkan etiket baki makanan.');
       return;
@@ -343,6 +348,8 @@ export default function CetakEtiketClient({
     const etiket = toEtiket(patient);
     setEtiketList([etiket]);
     setCurrentPrintTargetIds([patient.id]);
+    setCurrentRevisionTargets([]);
+    printHandledRef.current = false;
     setModalTitle(`Cetak Etiket Pasien - ${patient.nama_pasien}`);
     setModalOpen(true);
   }
@@ -350,7 +357,7 @@ export default function CetakEtiketClient({
   // Handle batch print selected patients
   function handlePrintSelected() {
     const targets = data.patients.filter(
-      (p) => selectedIds.has(p.id) && !isNpoPatient(p) && p.status !== 'NPO',
+      (p) => selectedIds.has(p.id) && !isNpoPatient(p) && p.status !== 'NPO' && p.status !== 'PULANG' && !revisedPatientIds.has(p.id),
     );
     if (targets.length === 0) {
       toast.error('Pilih minimal satu pasien makan untuk dicetak.');
@@ -360,21 +367,59 @@ export default function CetakEtiketClient({
     const list = targets.map(toEtiket);
     setEtiketList(list);
     setCurrentPrintTargetIds(targets.map((p) => p.id));
+    setCurrentRevisionTargets([]);
+    printHandledRef.current = false;
     setModalTitle(`Cetak Massal ${list.length} Etiket Makan`);
     setModalOpen(true);
   }
 
   // Handle print revision item
   function handlePrintRevisi(revisi: PemorsianRevisiItem) {
+    if (!canPrintRevision(revisi.jenis_perubahan) || !revisi.revision_signature) return;
     const etiket = revisiToEtiket(revisi);
     setEtiketList([etiket]);
-    setCurrentPrintTargetIds([revisi.id]);
+    setCurrentPrintTargetIds([]);
+    setCurrentRevisionTargets([{ id: revisi.id, signature: revisi.revision_signature }]);
+    printHandledRef.current = false;
     setModalTitle(`Cetak Etiket Revisi - ${revisi.nama_pasien}`);
+    setModalOpen(true);
+  }
+
+  function handlePrintAllRevisi(revisions: PemorsianRevisiItem[]) {
+    const printable = revisions.filter((r) => canPrintRevision(r.jenis_perubahan) && r.revision_signature);
+    if (printable.length === 0) return;
+    setEtiketList(printable.map(revisiToEtiket));
+    setCurrentPrintTargetIds([]);
+    setCurrentRevisionTargets(printable.map((r) => ({ id: r.id, signature: r.revision_signature! })));
+    printHandledRef.current = false;
+    setModalTitle(`Cetak ${printable.length} Etiket Revisi`);
     setModalOpen(true);
   }
 
   // Callback on successful print to persist status in DB per snapshot
   async function handlePrintSuccess() {
+    if (printHandledRef.current) return;
+    printHandledRef.current = true;
+    if (currentRevisionTargets.length > 0) {
+      const targets = [...currentRevisionTargets];
+      try {
+        const res = await updateRevisionEtiketPrintStatus(data.batch?.id || 0, targets);
+        if (res.success) {
+          const targetIds = new Set(targets.map((target) => target.id));
+          setData((prev) => ({ ...prev, revisiItems: prev.revisiItems.map((r) => targetIds.has(r.id) && targets.some((t) => t.id === r.id && t.signature === r.revision_signature) ? { ...r, revision_print_status: 'SUDAH_DICETAK', revision_printed_at: new Date().toISOString() } : r) }));
+          broadcastProductionUpdate('ETIKET_PRINTED', 'cetak-etiket');
+          toast.success(`${res.count} etiket revisi berhasil dicetak.`);
+        } else {
+          toast.error(res.message);
+          handleRefresh();
+        }
+      } catch (error) {
+        console.error('Error updating revision print status:', error);
+        toast.error('Gagal menyimpan status cetak revisi.');
+        handleRefresh();
+      }
+      return;
+    }
     if (currentPrintTargetIds.length === 0) return;
 
     const targetIds = [...currentPrintTargetIds];
@@ -413,10 +458,12 @@ export default function CetakEtiketClient({
         }
       } else {
         toast.error(res.message || 'Gagal menyimpan status cetak ke database.');
+        handleRefresh();
       }
     } catch (err) {
       console.error('Error updating print status in DB:', err);
       toast.error('Terjadi kesalahan saat menyimpan status cetak.');
+      handleRefresh();
     }
   }
 
@@ -431,7 +478,7 @@ export default function CetakEtiketClient({
       const isNpo = isNpoPatient(p) || p.status === 'NPO';
       if (isNpo) {
         puasaCount++;
-      } else {
+      } else if (p.status !== 'PULANG') {
         aktifCount++;
         if (printedPatientIds.has(p.id)) {
           sudah++;
@@ -502,6 +549,7 @@ export default function CetakEtiketClient({
           patients={filteredPatients}
           selectedIds={selectedIds}
           printedPatientIds={printedPatientIds}
+          revisedPatientIds={revisedPatientIds}
           waktuMakan={data.waktuMakan}
           onToggleSelect={handleToggleSelect}
           onToggleSelectAll={handleToggleSelectAll}
@@ -513,6 +561,7 @@ export default function CetakEtiketClient({
           revisions={filteredRevisions}
           waktuMakan={data.waktuMakan}
           onPrintRevisi={handlePrintRevisi}
+          onPrintAll={handlePrintAllRevisi}
         />
       )}
 

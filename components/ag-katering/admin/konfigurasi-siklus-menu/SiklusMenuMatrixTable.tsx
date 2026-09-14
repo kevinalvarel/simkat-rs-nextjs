@@ -16,7 +16,6 @@ import {
   Trash2,
   Plus,
   Layers,
-  Utensils,
   Sun,
   Sunrise,
   Sunset,
@@ -76,7 +75,7 @@ interface MatrixRowDefinition {
   kelas: string;
   jenis_makanan: string;
   isSaringSlot?: boolean;
-  /** Jika true, slot SORE dinonaktifkan (mis. SNACK hanya Pagi & Siang) */
+  /** Jika true, slot SORE dinonaktifkan (Buah dan Snack hanya Pagi & Siang) */
   hanyaPagiSiang?: boolean;
 }
 
@@ -87,6 +86,12 @@ const STANDARD_ROWS: MatrixRowDefinition[] = [
   { id: 'II-III-HEWANI', kelas: 'II-III', jenis_makanan: 'HEWANI' },
   { id: 'SEMUA-NABATI', kelas: 'Semua Kelas', jenis_makanan: 'NABATI' },
   { id: 'SEMUA-SAYUR', kelas: 'Semua Kelas', jenis_makanan: 'SAYUR' },
+  {
+    id: 'SEMUA-BUAH',
+    kelas: 'Semua Kelas',
+    jenis_makanan: 'BUAH',
+    hanyaPagiSiang: true,
+  },
   // Baris snack — hanya ada 2 waktu: Pagi dan Siang (Sore dinonaktifkan)
   {
     id: 'SEMUA-SNACK',
@@ -138,6 +143,7 @@ export default function SiklusMenuMatrixTable({
         id: key,
         kelas: item.kelas,
         jenis_makanan: item.jenis_makanan,
+        hanyaPagiSiang: item.jenis_makanan === 'BUAH',
       });
     }
   }
@@ -177,6 +183,15 @@ export default function SiklusMenuMatrixTable({
       if (i.waktu_makan !== waktu_makan) return false;
       if (i.jenis_makanan !== jenis_makanan) return false;
 
+      // Keep class-specific fruit in its own row, so slot edits do not copy it
+      // into the shared "Semua Kelas" slot.
+      if (jenis_makanan === 'BUAH') {
+        if (kelas === 'Semua Kelas') {
+          return i.kelas === 'Semua Kelas' || i.kelas === 'ALL' || i.kelas === 'Umum';
+        }
+        return i.kelas === kelas;
+      }
+
       // For shared rows like 'Semua Kelas', match either exact or general
       if (kelas === 'Semua Kelas') {
         return (
@@ -198,7 +213,6 @@ export default function SiklusMenuMatrixTable({
     jenis_makanan: string,
     waktu_makan: string,
     customItems?: SiklusMenuItem[],
-    isSaringColumn?: boolean,
   ) {
     const dishes =
       customItems || getCellDishes(kelas, jenis_makanan, waktu_makan);
@@ -277,7 +291,8 @@ export default function SiklusMenuMatrixTable({
             <Plus className='w-3 h-3 mr-0.5' /> Tambah
           </Button>
 
-          <Button
+          {(jenis_makanan !== 'BUAH' || dishes.every((dish) => dish.kelas === kelas)) && (
+            <Button
             type='button'
             variant='outline'
             size='xs'
@@ -294,7 +309,8 @@ export default function SiklusMenuMatrixTable({
             title='Kelola / edit seluruh hidangan dalam slot ini'
           >
             <Layers className='w-3 h-3 mr-0.5' /> Edit Slot
-          </Button>
+            </Button>
+          )}
         </div>
       </div>
     );
@@ -314,7 +330,7 @@ export default function SiklusMenuMatrixTable({
                   Kelas
                 </TableHead>
                 <TableHead className='w-32 text-center text-xs font-bold uppercase tracking-wider text-foreground border-r'>
-                  Jenis Lauk
+                  Jenis Makanan
                 </TableHead>
                 <TableHead className='min-w-[200px] text-xs font-bold uppercase tracking-wider text-foreground border-r'>
                   <div className='flex items-center gap-1.5 justify-center'>
@@ -348,6 +364,9 @@ export default function SiklusMenuMatrixTable({
                 const badgeStyle =
                   JENIS_BADGE_STYLE[row.jenis_makanan] ||
                   'bg-gray-100 text-gray-800 border-gray-300';
+                const legacyFruitSore = row.jenis_makanan === 'BUAH'
+                  ? getCellDishes(row.kelas, 'BUAH', 'SORE')
+                  : [];
 
                 return (
                   <TableRow
@@ -405,18 +424,28 @@ export default function SiklusMenuMatrixTable({
                       {renderSlotCell(row.kelas, row.jenis_makanan, 'SIANG')}
                     </TableCell>
 
-                    {/* MAKAN SORE — dinonaktifkan untuk baris SNACK (hanya Pagi & Siang) */}
-                    {row.hanyaPagiSiang || row.jenis_makanan === 'SNACK' ? (
+                    {/* MAKAN SORE — Buah dan Snack hanya tersedia Pagi & Siang */}
+                    {row.hanyaPagiSiang ? (
                       <TableCell className='border-r align-top p-1 bg-muted/40'>
                         <div className='min-h-[90px] p-2 flex flex-col items-center justify-center gap-1 rounded-lg text-center select-none'>
                           <span className='text-[11px] font-semibold text-muted-foreground'>
                             —
                           </span>
                           <span className='text-[10px] leading-tight text-muted-foreground/70 italic'>
-                            Snack hanya
+                            {row.jenis_makanan === 'BUAH' ? 'Buah' : 'Snack'} hanya
                             <br />
                             Pagi & Siang
                           </span>
+                          {legacyFruitSore.map((dish) => (
+                            <button
+                              key={dish.id}
+                              type='button'
+                              onClick={() => onEditItem(dish)}
+                              className='text-[10px] text-amber-700 dark:text-amber-300 underline cursor-pointer'
+                            >
+                              Pindahkan menu lama: {dish.nama_makanan}
+                            </button>
+                          ))}
                         </div>
                       </TableCell>
                     ) : (
@@ -436,7 +465,6 @@ export default function SiklusMenuMatrixTable({
                           'SARING',
                           'SARING',
                           saringSiangItems,
-                          true,
                         )}
                       </TableCell>
                     )}

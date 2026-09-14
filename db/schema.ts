@@ -10,5 +10,5 @@ export * from './schemas/patient/waktu-makan';
 export * from './schemas/snapshot/snapshot-batch';
 export * from './schemas/snapshot/snapshot-detail';
 export * from './schemas/snapshot/perizinan-revisi';
+export * from './schemas/snapshot/revisi-etiket-print';
 export * from './schemas/master/siklus-menu';
-

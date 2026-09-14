@@ -538,7 +538,6 @@ export default function EtiketPrintPreviewModal({
               size='sm'
               onClick={() => {
                 triggerReactPrint();
-                onPrintSuccess?.();
               }}
               className='gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-xs font-semibold cursor-pointer'
             >

@@ -11,25 +11,27 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Printer, FileText, CheckCircle2 } from 'lucide-react';
+import { Printer, CheckCircle2 } from 'lucide-react';
 import type { TabulasiHospitalData } from '@/types/tabulasitypes';
 
 interface TabulasiPrintModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   hospitalData: TabulasiHospitalData;
+  mode?: 'makan' | 'snack';
 }
 
 export default function TabulasiPrintModal({
   open,
   onOpenChange,
   hospitalData,
+  mode = 'makan',
 }: TabulasiPrintModalProps) {
   const printRef = useRef<HTMLDivElement>(null);
 
   const handlePrint = useReactToPrint({
     contentRef: printRef,
-    documentTitle: `Tabulasi_Kebutuhan_Makanan_RS_${hospitalData.waktuMakan}_${hospitalData.tanggal}`,
+    documentTitle: `Tabulasi_Kebutuhan_${mode === 'snack' ? 'Snack' : 'Makanan'}_RS_${hospitalData.waktuMakan}_${hospitalData.tanggal}`,
     pageStyle: `
       @page {
         size: A4 landscape;
@@ -67,7 +69,7 @@ export default function TabulasiPrintModal({
             <div className='space-y-1 text-left'>
               <DialogTitle className='text-base sm:text-lg font-bold text-foreground flex items-center gap-2'>
                 <Printer className='w-5 h-5 text-primary' />
-                Cetak Lembar Tabulasi Porsi Makanan Pasien (Gedung Lama & Gedung
+                Cetak Lembar Tabulasi Porsi {mode === 'snack' ? 'Snack' : 'Makanan'} Pasien (Gedung Lama & Gedung
                 Baru)
               </DialogTitle>
               <DialogDescription className='text-xs text-muted-foreground'>
@@ -122,14 +124,14 @@ export default function TabulasiPrintModal({
             {/* Document Title & Meta */}
             <div className='text-center space-y-1'>
               <h1 className='text-sm font-extrabold underline uppercase tracking-wide'>
-                TABULASI KEBUTUHAN MAKANAN PASIEN
+                TABULASI KEBUTUHAN {mode === 'snack' ? 'SNACK' : 'MAKANAN'} PASIEN
               </h1>
               <div className='flex justify-between items-center text-[11px] font-bold px-2 pt-1'>
                 <span>
                   HARI / TANGGAL: {hospitalData.tanggalFormatted.toUpperCase()}
                 </span>
                 <span>
-                  WAKTU MAKAN: {hospitalData.waktuMakan.toUpperCase()}
+                  WAKTU {mode === 'snack' ? 'SNACK' : 'MAKAN'}: {hospitalData.waktuMakan.toUpperCase()}
                 </span>
                 <span>
                   SIKLUS MENU: {hospitalData.siklusNama.toUpperCase()}
@@ -269,7 +271,7 @@ export default function TabulasiPrintModal({
             {/* Grand Total Highlight */}
             <div className='flex justify-between items-center bg-gray-100 border border-black p-2 text-xs font-bold'>
               <span>
-                REKAPITULASI: {hospitalData.totalPasienMakan} Pasien Makan •{' '}
+                REKAPITULASI: {hospitalData.totalPasienMakan} Pasien {mode === 'snack' ? 'Terlayani' : 'Makan'} •{' '}
                 {hospitalData.totalDietKhusus} Diet Khusus / TKTP
               </span>
               <span className='font-extrabold text-sm'>

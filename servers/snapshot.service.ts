@@ -11,7 +11,8 @@ import { waktuMakanTable } from '@/db/schemas/patient/waktu-makan';
 import { dietMappingTable } from '@/db/schemas/master/mapping-diet';
 import { isNpoPatient } from '@/lib/npo-utils';
 
-import type { WaktuMakanConfig, MealCycleStatus } from '@/lib/snapshot-cycle';
+import { computeMealCycleStatuses, getWibDate, getWibMinutes, addCalendarDays } from '@/lib/snapshot-cycle';
+import type { WaktuMakanConfig, MealCycleStatus, MealName } from '@/lib/snapshot-cycle';
 
 export type { WaktuMakanConfig, MealCycleStatus };
 
@@ -131,38 +132,18 @@ export async function checkAndAutoLockSnapshots(): Promise<{
   try {
     const configs = await getWaktuMakanConfig();
     const now = new Date();
-    const todayStr = now.toISOString().slice(0, 10);
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-
-    // Fetch existing snapshot batches for today
-    const todayBatches = await db
-      .select()
-      .from(snapshotBatchTable)
-      .where(eq(snapshotBatchTable.tanggal_produksi, todayStr));
-
-    const existingWaktuSet = new Set(todayBatches.map((b) => b.waktu_makan));
+    const todayStr = getWibDate(now);
+    const currentMinutes = getWibMinutes(now);
     let autoLockedCount = 0;
-
-    for (const config of configs) {
-      const [h, m] = config.waktu.split(':').map(Number);
-      const cutoffMinutes = h * 60 + m;
-
-      // If current time has reached or passed cutoff AND today's snapshot doesn't exist yet
-      if (
-        currentMinutes >= cutoffMinutes &&
-        !existingWaktuSet.has(config.jenis_makan)
-      ) {
-        // Skip revalidatePath during RSC render and lock explicitly for today's batch
-        const res = await triggerManualSnapshot(
-          config.jenis_makan,
-          config.waktu,
-          true, // skipRevalidate = true
-          todayStr, // targetDateStr = todayStr
-        );
-        if (res.success) {
-          autoLockedCount++;
-        }
-      }
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const batches = await db.select().from(snapshotBatchTable);
+      const active = computeMealCycleStatuses(configs, batches, now).activeCycle;
+      if (!active || active.targetDate !== todayStr) break;
+      const [h, m] = active.waktu.split(':').map(Number);
+      if (currentMinutes < h * 60 + m) break;
+      const res = await triggerManualSnapshot(active.jenis_makan, active.waktu, true, active.targetDate);
+      if (!res.success) break;
+      autoLockedCount++;
     }
 
     return {
@@ -189,6 +170,9 @@ export async function updateWaktuMakanConfig(
   newWaktu: string,
 ): Promise<MutationResult> {
   try {
+    if (!['PAGI', 'SIANG', 'MALAM'].includes(jenisMakan) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(newWaktu)) {
+      return { success: false, message: 'Waktu makan atau format jam cut-off tidak valid.' };
+    }
     const existing = await db
       .select()
       .from(waktuMakanTable)
@@ -216,8 +200,11 @@ export async function updateWaktuMakanConfig(
       });
     }
 
+    await checkAndAutoLockSnapshots();
+
     try {
-      revalidatePath('/dashboard/ag-katering/status-snapshot');
+      revalidatePath('/dashboard/ag-katering/admin/status-snapshot');
+      revalidatePath('/dashboard/ag-rs');
       revalidatePath('/dashboard/ag-katering/overview');
       revalidatePath('/dashboard/ag-katering/overview/produksi');
       revalidatePath('/dashboard/ag-katering/overview/pemorsian');
@@ -251,8 +238,8 @@ export async function triggerManualSnapshot(
     let prodDate = targetDateStr;
 
     if (!prodDate) {
-      const todayStr = now.toISOString().slice(0, 10);
-      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+      const todayStr = getWibDate(now);
+      const currentMinutes = getWibMinutes(now);
       const configs = await getWaktuMakanConfig();
       const malamCutoff =
         configs.find((c) => c.jenis_makan === 'MALAM')?.waktu || '16:00';
@@ -274,12 +261,27 @@ export async function triggerManualSnapshot(
         waktuMakan === 'PAGI' &&
         (currentMinutes >= malamMinutes || todayMalamBatch.length > 0)
       ) {
-        const tomorrow = new Date(now);
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        prodDate = tomorrow.toISOString().slice(0, 10);
+        prodDate = addCalendarDays(todayStr, 1);
       } else {
         prodDate = todayStr;
       }
+    }
+
+    if (!['PAGI', 'SIANG', 'MALAM'].includes(waktuMakan) || !/^\d{4}-\d{2}-\d{2}$/.test(prodDate)) {
+      return { success: false, message: 'Waktu makan atau tanggal produksi tidak valid.' };
+    }
+    const existingBatch = await db.select({ id: snapshotBatchTable.id })
+      .from(snapshotBatchTable)
+      .where(and(eq(snapshotBatchTable.tanggal_produksi, prodDate), eq(snapshotBatchTable.waktu_makan, waktuMakan)))
+      .limit(1);
+    if (existingBatch.length > 0) {
+      return { success: false, message: 'Snapshot untuk tanggal dan waktu makan ini sudah terkunci.' };
+    }
+    const configs = await getWaktuMakanConfig();
+    const batches = await db.select().from(snapshotBatchTable);
+    const active = computeMealCycleStatuses(configs, batches, now).activeCycle;
+    if (!active || active.targetDate !== prodDate || active.jenis_makan !== (waktuMakan as MealName)) {
+      return { success: false, message: 'Snapshot sebelumnya harus terkunci sebelum slot ini dapat diproses.' };
     }
 
     const dateStr = prodDate.replace(/-/g, '');
@@ -377,7 +379,8 @@ export async function triggerManualSnapshot(
 
     if (!skipRevalidate) {
       try {
-        revalidatePath('/dashboard/ag-katering/status-snapshot');
+        revalidatePath('/dashboard/ag-katering/admin/status-snapshot');
+        revalidatePath('/dashboard/ag-rs');
         revalidatePath('/dashboard/ag-katering/overview');
         revalidatePath('/dashboard/ag-katering/overview/produksi');
         revalidatePath('/dashboard/ag-katering/overview/pemorsian');

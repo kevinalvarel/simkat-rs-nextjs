@@ -54,9 +54,13 @@ export const routeDataProduksi = {
     {
       title: 'Master Data',
       items: [
+       {
+          title: 'Tabulasi Makan',
+          url: '/dashboard/ag-katering/tabulasi-makan',
+        },
         {
-          title: 'Tabulasi Rekapitulasi',
-          url: '/dashboard/ag-katering/tabulasi',
+          title: 'Tabulasi Snack',
+          url: '/dashboard/ag-katering/tabulasi-snack',
         },
       ],
     },
@@ -115,9 +119,13 @@ export const routeDataSupervisor = {
     {
       title: 'Master Data',
       items: [
+         {
+          title: 'Tabulasi Makan',
+          url: '/dashboard/ag-katering/tabulasi-makan',
+        },
         {
-          title: 'Tabulasi Rekapitulasi',
-          url: '/dashboard/ag-katering/tabulasi',
+          title: 'Tabulasi Snack',
+          url: '/dashboard/ag-katering/tabulasi-snack',
         },
       ],
     },

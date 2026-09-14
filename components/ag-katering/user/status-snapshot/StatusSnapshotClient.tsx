@@ -88,8 +88,8 @@ export default function StatusSnapshotClient({
             Penjelasan Bisnis Waktu Cut-Off & Snapshot Lock:
           </strong>
           <span className='ml-1'>
-            Ketika waktu cut-off tercapai (misal Makan Pagi 05:30, Siang 10:30,
-            Malam 16:00), sistem secara otomatis mengunci (
+            Setelah snapshot sebelumnya terkunci dan waktu cut-off tercapai
+            (misal Makan Pagi 05:30, Siang 10:30, Malam 16:00), sistem mengunci (
             <strong>LOCKED</strong>) seluruh data diet pasien aktif di tiap
             ruangan. Seluruh perubahan diet setelah jam cut-off akan masuk ke
             menu <strong>Log Revisi Post-Snapshot</strong> /{' '}

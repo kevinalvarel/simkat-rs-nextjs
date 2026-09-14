@@ -12,19 +12,19 @@ import {
   Sun,
   Sunrise,
   Moon,
-  Cookie,
   RefreshCw,
   RotateCw,
 } from 'lucide-react';
 import type { TabulasiHospitalData } from '@/types/tabulasitypes';
 
 interface TabulasiHeaderProps {
+  mode?: 'makan' | 'snack';
   hospitalData: TabulasiHospitalData;
   selectedDate: string;
   onDateChange: (date: string) => void;
   selectedMeal: string;
   onMealChange: (meal: string) => void;
-  onOpenGenerate: () => void;
+  onOpenGenerate?: () => void;
   onOpenExport: () => void;
   onOpenPrintModal: () => void;
   isRefreshing?: boolean;
@@ -32,6 +32,7 @@ interface TabulasiHeaderProps {
 }
 
 export default function TabulasiHeader({
+  mode = 'makan',
   hospitalData,
   selectedDate,
   onDateChange,
@@ -47,8 +48,8 @@ export default function TabulasiHeader({
     { key: 'Pagi', label: 'Pagi', icon: Sunrise },
     { key: 'Siang', label: 'Siang', icon: Sun },
     { key: 'Malam', label: 'Malam', icon: Moon },
-    { key: 'Snack', label: 'Snack', icon: Cookie },
   ];
+  const visibleMeals = mode === 'snack' ? mealOptions.slice(0, 2) : mealOptions;
 
   return (
     <div className='flex flex-col gap-4 bg-card border border-border/80 rounded-2xl p-4 sm:p-6 shadow-xs transition-all no-print'>
@@ -61,7 +62,7 @@ export default function TabulasiHeader({
               <Layers className='w-5 h-5' />
             </div>
             <h1 className='text-xl sm:text-2xl font-extrabold tracking-tight text-foreground font-sans'>
-              Tabulasi Rekapitulasi Porsi Makan
+              Tabulasi Rekapitulasi Porsi {mode === 'snack' ? 'Snack' : 'Makan'}
             </h1>
 
             <Badge
@@ -82,8 +83,8 @@ export default function TabulasiHeader({
             </span>
           </div>
           <p className='text-xs text-muted-foreground max-w-2xl leading-relaxed'>
-            Rekapitulasi porsi makanan pasien per gedung (Gedung Lama & Gedung
-            Baru) berdasarkan siklus menu aktif dan jadwal makan untuk{' '}
+            Rekapitulasi porsi {mode === 'snack' ? 'snack dari mapping diet' : 'makanan pasien'} per gedung
+            berdasarkan siklus menu aktif dan jadwal {mode === 'snack' ? 'snack' : 'makan'} untuk{' '}
             <strong className='text-foreground'>
               {hospitalData.tanggalFormatted}
             </strong>
@@ -113,6 +114,7 @@ export default function TabulasiHeader({
             variant='outline'
             size='sm'
             onClick={onOpenPrintModal}
+            disabled={isRefreshing}
             className='gap-1.5 h-9 rounded-xl text-xs font-semibold shadow-2xs hover:bg-muted cursor-pointer'
           >
             <Printer className='w-3.5 h-3.5 text-muted-foreground' />
@@ -123,20 +125,21 @@ export default function TabulasiHeader({
             variant='outline'
             size='sm'
             onClick={onOpenExport}
+            disabled={isRefreshing}
             className='gap-1.5 h-9 rounded-xl text-xs font-semibold shadow-2xs hover:bg-muted cursor-pointer'
           >
             <Download className='w-3.5 h-3.5 text-muted-foreground' />
             <span>Export Excel</span>
           </Button>
 
-          <Button
+          {onOpenGenerate && <Button
             size='sm'
             onClick={onOpenGenerate}
             className='gap-1.5 h-9 rounded-xl text-xs font-bold bg-primary text-primary-foreground shadow-xs hover:bg-primary/90 transition-all cursor-pointer'
           >
             <Sparkles className='w-3.5 h-3.5 text-yellow-300' />
             <span>Generate Tabulasi</span>
-          </Button>
+          </Button>}
         </div>
       </div>
 
@@ -176,9 +179,9 @@ export default function TabulasiHeader({
         {/* Right: Meal Selector Chips */}
         <div className='flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 no-scrollbar'>
           <span className='text-xs font-medium text-muted-foreground mr-1 hidden lg:inline'>
-            Waktu Makan:
+            {mode === 'snack' ? 'Waktu Snack:' : 'Waktu Makan:'}
           </span>
-          {mealOptions.map((opt) => {
+          {visibleMeals.map((opt) => {
             const Icon = opt.icon;
             const isSelected =
               selectedMeal.toLowerCase() === opt.key.toLowerCase();

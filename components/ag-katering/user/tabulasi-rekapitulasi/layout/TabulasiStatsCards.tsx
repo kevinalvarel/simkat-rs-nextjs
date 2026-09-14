@@ -12,14 +12,16 @@ import TabulasiStatCard from '../ui/TabulasiStatCard';
 
 interface TabulasiStatsCardsProps {
   hospitalData: TabulasiHospitalData;
+  mode?: 'makan' | 'snack';
 }
 
 export default function TabulasiStatsCards({
   hospitalData,
+  mode = 'makan',
 }: TabulasiStatsCardsProps) {
   const cards = [
     {
-      title: 'Total Porsi Makan',
+      title: mode === 'snack' ? 'Total Porsi Snack' : 'Total Porsi Makan',
       value: hospitalData.grandTotalPorsi,
       unit: 'porsi',
       subtext: `Siklus ${hospitalData.waktuMakan} (${hospitalData.siklusNama})`,

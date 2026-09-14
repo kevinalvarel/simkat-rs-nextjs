@@ -14,7 +14,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import {
   Building2,
   Utensils,
@@ -27,10 +26,12 @@ import TabulasiViewModeToggle, { type ViewMode } from '../ui/TabulasiViewModeTog
 
 interface TabulasiHospitalTableProps {
   hospitalData: TabulasiHospitalData;
+  mode?: 'makan' | 'snack';
 }
 
 export default function TabulasiHospitalTable({
   hospitalData,
+  mode = 'makan',
 }: TabulasiHospitalTableProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('SIDE_BY_SIDE');
   const [searchQuery, setSearchQuery] = useState('');
@@ -102,7 +103,7 @@ export default function TabulasiHospitalTable({
           <div className='flex items-center gap-2 flex-wrap'>
             <h3 className='text-sm sm:text-base font-bold tracking-tight text-foreground flex items-center gap-2'>
               <Utensils className='w-4 h-4 text-primary' />
-              Tabulasi Porsi Hidangan Per Gedung & Siklus
+              Tabulasi Porsi {mode === 'snack' ? 'Snack' : 'Hidangan'} Per Gedung & Siklus
             </h3>
             <Badge
               variant='outline'
@@ -112,7 +113,7 @@ export default function TabulasiHospitalTable({
             </Badge>
           </div>
           <p className='text-xs text-muted-foreground'>
-            Perhitungan kebutuhan porsi masakan dapur katering berdasarkan
+            Perhitungan kebutuhan porsi {mode === 'snack' ? 'snack' : 'masakan'} dapur katering berdasarkan
             distribusi pasien{' '}
             <strong className='text-foreground'>Gedung Lama</strong> dan{' '}
             <strong className='text-foreground'>Gedung Baru</strong>.
@@ -613,11 +614,11 @@ export default function TabulasiHospitalTable({
         <div className='flex items-center gap-2 text-xs text-muted-foreground'>
           <Info className='w-4 h-4 text-primary shrink-0' />
           <span>
-            Porsi dihitung berdasarkan siklus menu{' '}
+            Porsi dihitung berdasarkan {mode === 'snack' ? 'mapping snack pasien dan' : ''} siklus menu{' '}
             <strong className='text-foreground'>
               {hospitalData.siklusNama}
             </strong>{' '}
-            dan mapping diet pasien snapshot terkunci.
+            {mode === 'snack' ? '(snapshot atau data pasien aktif).' : 'dan mapping diet pasien snapshot terkunci.'}
           </span>
         </div>
 

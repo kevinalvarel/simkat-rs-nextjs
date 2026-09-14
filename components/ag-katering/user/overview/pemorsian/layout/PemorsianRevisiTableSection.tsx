@@ -21,6 +21,7 @@ import {
   Bed,
 } from 'lucide-react';
 import type { PemorsianRevisiItem } from '@/types/pemorsiantypes';
+import { canPrintRevision } from '@/lib/revisi-etiket';
 
 interface PemorsianRevisiTableSectionProps {
   revisiItems: PemorsianRevisiItem[];
@@ -42,6 +43,8 @@ export default function PemorsianRevisiTableSection({
   isAllSelected,
 }: PemorsianRevisiTableSectionProps) {
   const selectedCount = selectedIds.size;
+  const printableItems = revisiItems.filter((item) => canPrintRevision(item.jenis_perubahan));
+  const selectedPrintableCount = printableItems.filter((item) => selectedIds.has(item.id)).length;
   const isAllFilteredSelected =
     revisiItems.length > 0 && selectedCount === revisiItems.length;
 
@@ -105,15 +108,15 @@ export default function PemorsianRevisiTableSection({
         </div>
 
         {/* Action: Cetak Semua Revisi */}
-        {revisiItems.length > 0 && (
+        {printableItems.length > 0 && (
           <div className='flex items-center gap-2 pl-10.5 sm:pl-0'>
             <Button
               size='sm'
-              onClick={() => onPrintBatch(revisiItems)}
+              onClick={() => onPrintBatch(printableItems)}
               className='gap-1.5 h-9 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white rounded-xl shadow-xs shrink-0 cursor-pointer'
             >
               <Printer className='w-3.5 h-3.5' />
-              <span>Cetak Semua Revisi ({revisiItems.length})</span>
+              <span>Cetak Semua Revisi ({printableItems.length})</span>
             </Button>
           </div>
         )}
@@ -132,6 +135,7 @@ export default function PemorsianRevisiTableSection({
           <div className='flex items-center gap-2'>
             <Button
               size='sm'
+              disabled={selectedPrintableCount === 0}
               onClick={() => {
                 const selected = revisiItems.filter((r) => selectedIds.has(r.id));
                 onPrintBatch(selected);
@@ -142,7 +146,7 @@ export default function PemorsianRevisiTableSection({
               <span>
                 {isAllFilteredSelected
                   ? 'Cetak Semua Etiket Revisi'
-                  : `Cetak ${selectedCount} Etiket Revisi Terpilih`}
+                  : `Cetak ${selectedPrintableCount} Etiket Revisi Terpilih`}
               </span>
             </Button>
           </div>
@@ -282,7 +286,14 @@ export default function PemorsianRevisiTableSection({
 
                     {/* Jenis Perubahan Badge */}
                     <TableCell className='text-xs'>
-                      {renderJenisBadge(item.jenis_perubahan)}
+                      <div className='flex flex-col items-start gap-1'>
+                        {renderJenisBadge(item.jenis_perubahan)}
+                        {canPrintRevision(item.jenis_perubahan) && (
+                          <span className={item.revision_print_status === 'SUDAH_DICETAK' ? 'text-[10px] font-semibold text-emerald-700' : 'text-[10px] font-semibold text-amber-700'}>
+                            {item.revision_print_status === 'SUDAH_DICETAK' ? 'Revisi Sudah Tercetak' : 'Revisi Belum Tercetak'}
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
 
                     {/* Perbandingan Data: Data Lama vs Data Baru */}

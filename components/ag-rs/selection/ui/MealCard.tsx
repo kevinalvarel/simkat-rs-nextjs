@@ -18,11 +18,11 @@ export default function MealCard({
   isSelected = false,
   onSelect,
 }: MealCardProps) {
-  const { isPreviousBatch, isOlderLocked, cutoffTime } = lockInfo;
+  const { isPreviousBatch, isOlderLocked, isWaiting, cutoffTime } = lockInfo;
 
   const renderIcon = () => {
     if (isPreviousBatch) return <Edit3 className='w-8 h-8' />;
-    if (isOlderLocked) return <Lock className='w-8 h-8' />;
+    if (isOlderLocked || isWaiting) return <Lock className='w-8 h-8' />;
     if (meal.jenisMakan === 'PAGI') return <Sun className='w-8 h-8' />;
     if (meal.jenisMakan === 'SIANG') return <SunMedium className='w-8 h-8' />;
     return <Moon className='w-8 h-8' />;
@@ -35,18 +35,22 @@ export default function MealCard({
           ? 'border-primary ring-2 ring-primary/40 shadow-md scale-[1.02]'
           : isPreviousBatch
             ? 'border-amber-500/60 bg-amber-500/[0.04] dark:bg-amber-950/20 cursor-pointer hover:border-amber-500 hover:shadow-md group'
-            : isOlderLocked
+            : isOlderLocked || isWaiting
               ? 'bg-muted/40 border-muted opacity-60 cursor-not-allowed'
               : 'cursor-pointer hover:border-primary hover:shadow-md group'
       }`}
       onClick={() => {
-        if (!isOlderLocked) onSelect();
+        if (!isOlderLocked && !isWaiting) onSelect();
       }}
     >
       <CardContent className='p-5 flex flex-col items-center text-center space-y-3 flex-1 justify-between'>
         {/* Top Lock / Revision Badge */}
         <div className='w-full flex justify-end'>
-          {isPreviousBatch ? (
+          {isWaiting ? (
+            <Badge variant='secondary' className='text-[10px] gap-1 font-semibold text-muted-foreground'>
+              <Lock className='w-3 h-3' /> MENUNGGU SNAPSHOT SEBELUMNYA
+            </Badge>
+          ) : isPreviousBatch ? (
             <Badge
               variant='outline'
               className='text-[10px] gap-1 font-semibold bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-500/40 animate-pulse'
@@ -76,7 +80,7 @@ export default function MealCard({
             className={`p-3 rounded-full ${
               isPreviousBatch
                 ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 group-hover:scale-110 transition-transform'
-                : isOlderLocked
+                : isOlderLocked || isWaiting
                   ? 'bg-muted text-muted-foreground'
                   : `${meal.bgLight} group-hover:scale-110 transition-transform`
             }`}
@@ -92,7 +96,7 @@ export default function MealCard({
               className={`text-[11px] font-mono font-medium mt-1 ${
                 isPreviousBatch
                   ? 'text-amber-800 dark:text-amber-300 font-bold'
-                  : isOlderLocked
+                  : isOlderLocked || isWaiting
                     ? 'text-muted-foreground'
                     : 'text-amber-700 dark:text-amber-400'
               }`}
@@ -110,27 +114,29 @@ export default function MealCard({
           variant={
             isPreviousBatch
               ? 'outline'
-              : isOlderLocked
+              : isOlderLocked || isWaiting
                 ? 'secondary'
                 : 'default'
           }
-          disabled={isOlderLocked}
+          disabled={isOlderLocked || isWaiting}
           className={`w-full mt-2 text-xs font-semibold ${
             isPreviousBatch
               ? 'border-amber-500/60 text-amber-900 dark:text-amber-200 bg-amber-500/10 hover:bg-amber-500/20'
-              : isOlderLocked
+              : isOlderLocked || isWaiting
                 ? 'bg-muted text-muted-foreground cursor-not-allowed border'
                 : ''
           }`}
           onClick={(e) => {
             e.stopPropagation();
-            if (!isOlderLocked) onSelect();
+            if (!isOlderLocked && !isWaiting) onSelect();
           }}
         >
           {isPreviousBatch ? (
             <span className='flex items-center gap-1.5 justify-center'>
               <Edit3 className='w-3.5 h-3.5' /> Revisi Batch
             </span>
+          ) : isWaiting ? (
+            <span>Menunggu Snapshot Sebelumnya</span>
           ) : isOlderLocked ? (
             <span className='flex items-center gap-1.5 justify-center'>
               <Lock className='w-3.5 h-3.5' /> Terkunci (Selesai)
