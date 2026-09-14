@@ -39,10 +39,17 @@ export interface PatientTableProps {
   onOpenPindah?: (patient: Patient) => void;
   onPindahOptimistic?: (
     patientId: number,
-    targetGedung: string,
+    /** Nomor kamar tujuan (disimpan ke kolom pasien `gedung`). */
+    targetKamar: string,
     targetRuangan: string,
+    /** Label bed tujuan, cth. `Bed 1`. */
+    targetBed: string,
+    /** Kelas mengikuti konfigurasi kamar tujuan. */
+    targetKelas: string,
   ) => void;
   gedungList?: GedungWithRuangan[];
+  /** Seluruh pasien (tanpa filter search) untuk hitung hunian kamar/bed. */
+  allPatients?: Patient[];
   kelasList?: KelasOption[];
   totalBedCapacity?: number;
   ruangan?: string;
@@ -86,12 +93,19 @@ export interface PatientFormDialogProps {
 export interface PindahRuanganDialogProps {
   patient: Patient | null;
   gedungList: GedungWithRuangan[];
+  /** Seluruh pasien (tanpa filter search) untuk hitung hunian kamar/bed. */
+  patients?: Patient[];
   onClose: () => void;
   onSuccess?: (patientId: number) => void;
   onPindahOptimistic?: (
     patientId: number,
-    targetGedung: string,
+    /** Nomor kamar tujuan (disimpan ke kolom pasien `gedung`). */
+    targetKamar: string,
     targetRuangan: string,
+    /** Label bed tujuan, cth. `Bed 1`. */
+    targetBed: string,
+    /** Kelas mengikuti konfigurasi kamar tujuan. */
+    targetKelas: string,
   ) => void;
   revisionContext?: RevisionContext;
 }

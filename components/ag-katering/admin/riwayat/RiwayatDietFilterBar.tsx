@@ -160,6 +160,11 @@ export function RiwayatDietFilterBar({
               <SelectItem value='NPO' className='text-xs'>Puasa / NPO</SelectItem>
               <SelectItem value='ROOM_TRANSFER' className='text-xs'>Pindah Ruangan</SelectItem>
               <SelectItem value='DISCHARGE' className='text-xs'>Pasien Pulang</SelectItem>
+              <SelectItem value='KOREKSI_NAMA' className='text-xs'>Koreksi Nama</SelectItem>
+              <SelectItem value='KOREKSI_NO_RM' className='text-xs'>Koreksi No RM</SelectItem>
+              <SelectItem value='KOREKSI_KELAS' className='text-xs'>Koreksi Kelas</SelectItem>
+              <SelectItem value='KOREKSI_KAMAR' className='text-xs'>Koreksi No Kamar</SelectItem>
+              <SelectItem value='KOREKSI_BED' className='text-xs'>Koreksi Bed</SelectItem>
             </SelectContent>
           </Select>
 

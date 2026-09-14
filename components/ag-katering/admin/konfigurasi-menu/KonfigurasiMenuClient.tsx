@@ -32,15 +32,12 @@ interface KonfigurasiMenuClientProps {
 
 const CATEGORY_TABS: Array<{ id: string; label: string; icon: string }> = [
   { id: 'ALL', label: 'Semua Kategori', icon: '📋' },
-  { id: 'KARBO', label: 'Karbohidrat', icon: '🌾' },
+  { id: 'BENTUK_MAKANAN', label: 'Bentuk Makanan', icon: '🍚' },
   { id: 'HEWANI', label: 'Lauk Hewani', icon: '🍗' },
   { id: 'NABATI', label: 'Lauk Nabati', icon: '🫘' },
   { id: 'SAYUR', label: 'Sayur', icon: '🥦' },
   { id: 'BUAH', label: 'Buah', icon: '🍊' },
   { id: 'SNACK', label: 'Snack', icon: '🍪' },
-  { id: 'DIIT', label: 'Diet Khusus', icon: '🩺' },
-  { id: 'BENTUK_MAKANAN', label: 'Bentuk Makanan', icon: '🍚' },
-  { id: 'EXTRA', label: 'Extra', icon: '🥛' },
 ];
 
 const SORT_OPTIONS: Array<{ value: string; label: string }> = [
@@ -166,8 +163,8 @@ export default function KonfigurasiMenuClient({
             </Badge>
           </div>
           <p className='text-xs sm:text-sm text-muted-foreground'>
-            Kelola master data item menu katering (Karbo, Hewani, Nabati, Sayur,
-            Buah, Snack, Diit) untuk standarisasi etiket & laporan.
+            Kelola master data item menu katering (Bentuk Makanan, Hewani,
+            Nabati, Sayur, Buah, Snack) untuk standarisasi etiket & laporan.
           </p>
         </div>
 

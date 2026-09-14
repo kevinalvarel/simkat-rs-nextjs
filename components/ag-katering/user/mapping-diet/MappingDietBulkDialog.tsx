@@ -4,7 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { useForm, Controller, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { mappingDietFormSchema, type MappingDietFormValues } from '@/lib/mapping-diet-schema';
-import { hasFormFoodMapping, selectBentukMakanan } from '@/lib/mapping-diet-fields';
+import { hasFormFoodMapping, selectBentukMakanan, getTugasKateringCodes, isBentukTugasKatering } from '@/lib/mapping-diet-fields';
 import type { KategoriMenuOption } from '@/servers/mapping-diet.service';
 import {
   Dialog,
@@ -107,6 +107,12 @@ export default function MappingDietBulkDialog({
     [options],
   );
 
+  // Kode bentuk yang berflag tugas AG Katering → otomatis masuk Live Katering
+  const tugasKateringCodes = useMemo(
+    () => getTugasKateringCodes(options),
+    [options],
+  );
+
   const {
     control,
     handleSubmit,
@@ -162,7 +168,6 @@ export default function MappingDietBulkDialog({
 
       const res = await bulkSaveDietMapping(selectedRaws, {
         mode,
-        status_mapping: mode === 'KATERING' ? 'KATERING' : undefined,
         bentuk_makanan: bentukMakanan || null,
         kategori_diet: hewani || null,
         nabati: nabati || null,
@@ -203,6 +208,7 @@ export default function MappingDietBulkDialog({
   }
 
   const isFormIncomplete = mode === 'STANDARD' && !hasFormFoodMapping({ bentukMakanan, hewani, nabati, sayur, buah, snack });
+  const isTugasKatering = isBentukTugasKatering(bentukMakanan, tugasKateringCodes);
 
   return (
     <>
@@ -349,6 +355,13 @@ export default function MappingDietBulkDialog({
                   )}
                 />
               </div>
+
+              {isTugasKatering && (
+                <p className='text-[11px] text-blue-800 dark:text-blue-300 bg-blue-500/10 border border-blue-200 dark:border-blue-900 rounded-lg p-2.5'>
+                  Bentuk ini tugas AG Katering: {selectedRaws.length} diet akan
+                  otomatis masuk Live Katering dan tidak diproduksi di dapur umum.
+                </p>
+              )}
             </div>
 
             <DialogFooter className='gap-2 sm:gap-0 pt-3 border-t mt-3'>
@@ -397,6 +410,7 @@ export default function MappingDietBulkDialog({
           sayur,
           buah,
           snack,
+          isTugasKatering,
         }))}
         isSubmitting={isSubmitting}
         onConfirm={handleFinalSave}

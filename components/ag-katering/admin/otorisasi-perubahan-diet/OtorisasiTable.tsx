@@ -93,6 +93,36 @@ export default function OtorisasiTable({
             Pasien Pulang
           </Badge>
         );
+      case 'KOREKSI_NAMA':
+        return (
+          <Badge className='bg-slate-500/15 text-slate-700 dark:text-slate-300 border-slate-300 hover:bg-slate-500/25'>
+            Koreksi Nama
+          </Badge>
+        );
+      case 'KOREKSI_NO_RM':
+        return (
+          <Badge className='bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-300 hover:bg-orange-500/25'>
+            Koreksi No RM
+          </Badge>
+        );
+      case 'KOREKSI_KELAS':
+        return (
+          <Badge className='bg-teal-500/15 text-teal-700 dark:text-teal-300 border-teal-300 hover:bg-teal-500/25'>
+            Koreksi Kelas
+          </Badge>
+        );
+      case 'KOREKSI_KAMAR':
+        return (
+          <Badge className='bg-lime-500/15 text-lime-700 dark:text-lime-300 border-lime-300 hover:bg-lime-500/25'>
+            Koreksi No Kamar
+          </Badge>
+        );
+      case 'KOREKSI_BED':
+        return (
+          <Badge className='bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-300 hover:bg-sky-500/25'>
+            Koreksi Bed
+          </Badge>
+        );
       default:
         return <Badge variant='outline'>{jenis}</Badge>;
     }
@@ -129,6 +159,26 @@ export default function OtorisasiTable({
     }
   }
 
+  /** Field yang benar-benar berubah — dasar tampilan diff per field. */
+  function getChangedFields(item: RevisiPostSnapshotItem) {
+    const defs: { key: 'nama_pasien' | 'no_rm' | 'diet' | 'kelas' | 'gedung' | 'ruangan' | 'bed'; label: string }[] = [
+      { key: 'nama_pasien', label: 'Nama' },
+      { key: 'no_rm', label: 'No RM' },
+      { key: 'diet', label: 'Diet' },
+      { key: 'kelas', label: 'Kelas' },
+      { key: 'gedung', label: 'No Kamar' },
+      { key: 'ruangan', label: 'Ruangan' },
+      { key: 'bed', label: 'Bed' },
+    ];
+    return defs
+      .map((d) => {
+        const lama = (item.data_lama?.[d.key] || '').trim();
+        const baru = (item.data_baru?.[d.key] || '').trim();
+        return { ...d, lama, baru, changed: lama.toLowerCase() !== baru.toLowerCase() && (lama !== '' || baru !== '') };
+      })
+      .filter((d) => d.changed);
+  }
+
   function renderDiffView(item: RevisiPostSnapshotItem) {
     if (item.jenis_perubahan === 'NEW_PATIENT') {
       return (
@@ -140,26 +190,6 @@ export default function OtorisasiTable({
           <span className='font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-md border border-emerald-200'>
             {item.data_baru?.diet || 'Diet Standar RS'}
           </span>
-        </div>
-      );
-    }
-
-    if (item.jenis_perubahan === 'ROOM_TRANSFER') {
-      return (
-        <div className='flex flex-col gap-1 text-xs'>
-          <div className='flex items-center gap-1 text-muted-foreground line-through'>
-            <Building2 className='w-3 h-3' />
-            <span>
-              {item.data_lama?.ruangan || 'Lama'} ({item.data_lama?.bed || '-'})
-            </span>
-          </div>
-          <div className='flex items-center gap-1 font-semibold text-cyan-700 dark:text-cyan-300'>
-            <ArrowRight className='w-3 h-3 text-cyan-500' />
-            <span>
-              {item.data_baru?.ruangan || item.ruangan} (
-              {item.data_baru?.bed || item.bed})
-            </span>
-          </div>
         </div>
       );
     }
@@ -192,16 +222,58 @@ export default function OtorisasiTable({
       );
     }
 
-    // Default: DIET_CHANGE
+    // DIET_CHANGE / ROOM_TRANSFER / KOREKSI_*: tampilkan per field yang berubah
+    const changed = getChangedFields(item);
+    if (changed.length === 0) {
+      // Fallback untuk data lama yang diff-nya kosong
+      if (item.jenis_perubahan === 'ROOM_TRANSFER') {
+        return (
+          <div className='flex flex-col gap-1 text-xs'>
+            <div className='flex items-center gap-1 text-muted-foreground line-through'>
+              <Building2 className='w-3 h-3' />
+              <span>
+                {item.data_lama?.ruangan || 'Lama'} ({item.data_lama?.bed || '-'})
+              </span>
+            </div>
+            <div className='flex items-center gap-1 font-semibold text-cyan-700 dark:text-cyan-300'>
+              <ArrowRight className='w-3 h-3 text-cyan-500' />
+              <span>
+                {item.data_baru?.ruangan || item.ruangan} (
+                {item.data_baru?.bed || item.bed})
+              </span>
+            </div>
+          </div>
+        );
+      }
+      return (
+        <div className='flex flex-col sm:flex-row sm:items-center gap-1 text-xs'>
+          <span className='text-muted-foreground line-through bg-muted/60 px-2 py-0.5 rounded-md'>
+            {item.data_lama?.diet || 'Diet Lama'}
+          </span>
+          <ArrowRight className='w-3.5 h-3.5 text-primary shrink-0 hidden sm:inline' />
+          <span className='font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20'>
+            {item.data_baru?.diet || 'Diet Baru'}
+          </span>
+        </div>
+      );
+    }
+
     return (
-      <div className='flex flex-col sm:flex-row sm:items-center gap-1 text-xs'>
-        <span className='text-muted-foreground line-through bg-muted/60 px-2 py-0.5 rounded-md'>
-          {item.data_lama?.diet || 'Diet Lama'}
-        </span>
-        <ArrowRight className='w-3.5 h-3.5 text-primary shrink-0 hidden sm:inline' />
-        <span className='font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20'>
-          {item.data_baru?.diet || 'Diet Baru'}
-        </span>
+      <div className='flex flex-col gap-1 text-xs'>
+        {changed.map((c) => (
+          <div key={c.key} className='flex flex-wrap items-center gap-1'>
+            <span className='font-semibold text-muted-foreground min-w-[62px]'>
+              {c.label}:
+            </span>
+            <span className='text-muted-foreground line-through bg-muted/60 px-1.5 py-0.5 rounded-md'>
+              {c.lama || '-'}
+            </span>
+            <ArrowRight className='w-3 h-3 text-primary shrink-0' />
+            <span className='font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded-md border border-primary/20'>
+              {c.baru || '-'}
+            </span>
+          </div>
+        ))}
       </div>
     );
   }
@@ -234,7 +306,7 @@ export default function OtorisasiTable({
                 Jenis Perubahan
               </TableHead>
               <TableHead className='min-w-[250px] text-xs font-semibold'>
-                Perubahan Diet / Ruangan
+                Rincian Perubahan
               </TableHead>
               <TableHead className='w-[170px] text-xs font-semibold'>
                 Dampak Dapur

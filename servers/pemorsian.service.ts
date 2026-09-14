@@ -304,6 +304,24 @@ export async function getLivePemorsianData(
           isChanged = true;
           changeType = 'ROOM_TRANSFER';
           note = `Pindah kamar dari ${sd.ruangan} (Bed ${sd.no_bed}) ke ${liveP.ruangan} (Bed ${liveP.bed})`;
+        } else if (
+          (liveP.nama_pasien || '').trim().toLowerCase() !== (sd.nama_pasien || '').trim().toLowerCase()
+        ) {
+          isChanged = true;
+          changeType = 'KOREKSI_NAMA';
+          note = `Koreksi nama dari "${sd.nama_pasien}" menjadi "${liveP.nama_pasien}"`;
+        } else if (
+          (liveP.kelas || '').trim().toLowerCase() !== (sd.kelas || '').trim().toLowerCase()
+        ) {
+          isChanged = true;
+          changeType = 'KOREKSI_KELAS';
+          note = `Koreksi kelas dari "${sd.kelas}" menjadi "${liveP.kelas}"`;
+        } else if (
+          (liveP.gedung || '').trim().toLowerCase() !== (sd.gedung || '').trim().toLowerCase()
+        ) {
+          isChanged = true;
+          changeType = 'KOREKSI_KAMAR';
+          note = `Koreksi no kamar dari "${sd.gedung}" menjadi "${liveP.gedung}"`;
         }
 
         // Also check if there is an approved otorisasi record for this patient
@@ -346,13 +364,19 @@ export async function getLivePemorsianData(
             waktu_makan: selectedBatch.waktu_makan,
             jenis_perubahan: changeType,
             data_lama: {
+              nama_pasien: sd.nama_pasien,
+              no_rm: sd.no_rm,
               diet: sd.diet_rs_raw,
+              gedung: sd.gedung,
               ruangan: sd.ruangan,
               bed: sd.no_bed,
               kelas: sd.kelas,
             },
             data_baru: {
+              nama_pasien: liveP?.nama_pasien || sd.nama_pasien,
+              no_rm: liveP?.no_rm || sd.no_rm,
               diet: liveP?.diet || (liveIsNpo ? 'NPO (Puasa)' : 'Pasien Pulang'),
+              gedung: liveP?.gedung || sd.gedung,
               ruangan: liveP?.ruangan || sd.ruangan,
               bed: liveP?.bed || sd.no_bed,
               kelas: liveP?.kelas || sd.kelas,
@@ -366,6 +390,16 @@ export async function getLivePemorsianData(
                 ? `Pindah ke: ${liveP?.ruangan} (Bed ${liveP?.bed})`
                 : changeType === 'NPO'
                 ? 'Puasa / NPO (-1)'
+                : changeType === 'KOREKSI_NAMA'
+                ? `Koreksi Nama: ${liveP?.nama_pasien || '-'}`
+                : changeType === 'KOREKSI_KELAS'
+                ? `Koreksi Kelas: ${liveP?.kelas || '-'}`
+                : changeType === 'KOREKSI_KAMAR'
+                ? `Koreksi No Kamar: ${liveP?.gedung || '-'}`
+                : changeType === 'KOREKSI_BED'
+                ? `Koreksi Bed: ${liveP?.bed || '-'}`
+                : changeType === 'KOREKSI_NO_RM'
+                ? `Koreksi No RM: ${liveP?.no_rm || '-'}`
                 : 'Pasien Pulang (-1)',
             requested_by: liveP?.updated_by || 'AG RS',
             requested_at: new Date().toLocaleTimeString('id-ID'),

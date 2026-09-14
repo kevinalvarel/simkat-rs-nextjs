@@ -50,24 +50,17 @@ interface MenuTableProps {
 }
 
 const CATEGORY_BADGE_STYLE: Record<string, string> = {
-  KARBO:
-    'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border-blue-300',
   HEWANI:
     'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 border-indigo-300',
   NABATI:
     'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300 border-teal-300',
   SAYUR:
     'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300 border-green-300',
-  BUAH:
-    'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300',
+  BUAH: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300',
   SNACK:
     'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border-purple-300',
-  DIIT:
-    'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-300',
   BENTUK_MAKANAN:
     'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300 border-sky-300',
-  EXTRA:
-    'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border-rose-300',
 };
 
 export default function MenuTable({
@@ -202,6 +195,9 @@ export default function MenuTable({
                   {renderSortIcon('status')}
                 </button>
               </TableHead>
+              <TableHead className='text-center text-xs font-semibold'>
+                Tugas AG
+              </TableHead>
               <TableHead className='text-right text-xs font-semibold pr-6'>
                 Aksi
               </TableHead>
@@ -232,7 +228,16 @@ export default function MenuTable({
                     </span>
                   </TableCell>
                   <TableCell className='text-xs font-semibold text-foreground'>
-                    {item.label_item}
+                    <span>{item.label_item}</span>
+                    {item.nama_kategori === 'BENTUK_MAKANAN' &&
+                      item.is_tugas_ag_katering && (
+                        <Badge
+                          variant='outline'
+                          className='ml-2 text-[10px] font-bold px-2 py-0 bg-primary/10 text-primary border-primary/30'
+                        >
+                          Tugas AG
+                        </Badge>
+                      )}
                   </TableCell>
                   <TableCell className='text-center'>
                     <button
@@ -251,6 +256,21 @@ export default function MenuTable({
                         </span>
                       )}
                     </button>
+                  </TableCell>
+                  <TableCell className='text-center'>
+                    {item.nama_kategori === 'BENTUK_MAKANAN' &&
+                    item.is_tugas_ag_katering ? (
+                      <Badge
+                        variant='outline'
+                        className='text-[11px] font-bold px-2.5 py-0.5 bg-primary/10 text-primary border-primary/30'
+                      >
+                        Tugas AG
+                      </Badge>
+                    ) : (
+                      <span className='text-[11px] text-muted-foreground/50'>
+                        —
+                      </span>
+                    )}
                   </TableCell>
                   <TableCell className='text-right pr-4'>
                     <div className='flex items-center justify-end gap-1'>

@@ -5,6 +5,11 @@
   "scripts": {
     "dev": "next dev",
     "studio": "npx drizzle-kit studio",
+    "db:generate": "drizzle-kit generate",
+    "db:check": "drizzle-kit check",
+    "db:push": "drizzle-kit push",
+    "db:migrate": "drizzle-kit migrate",
+    "db:seed": "tsx scripts/seed.ts",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"

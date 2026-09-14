@@ -84,6 +84,36 @@ export default function RevisiTable({
             Pasien Pulang
           </Badge>
         );
+      case 'KOREKSI_NAMA':
+        return (
+          <Badge className='bg-slate-500/15 text-slate-700 dark:text-slate-300 border-slate-300 hover:bg-slate-500/25'>
+            Koreksi Nama
+          </Badge>
+        );
+      case 'KOREKSI_NO_RM':
+        return (
+          <Badge className='bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-300 hover:bg-orange-500/25'>
+            Koreksi No RM
+          </Badge>
+        );
+      case 'KOREKSI_KELAS':
+        return (
+          <Badge className='bg-teal-500/15 text-teal-700 dark:text-teal-300 border-teal-300 hover:bg-teal-500/25'>
+            Koreksi Kelas
+          </Badge>
+        );
+      case 'KOREKSI_KAMAR':
+        return (
+          <Badge className='bg-lime-500/15 text-lime-700 dark:text-lime-300 border-lime-300 hover:bg-lime-500/25'>
+            Koreksi No Kamar
+          </Badge>
+        );
+      case 'KOREKSI_BED':
+        return (
+          <Badge className='bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-300 hover:bg-sky-500/25'>
+            Koreksi Bed
+          </Badge>
+        );
       default:
         return <Badge variant='outline'>{jenis}</Badge>;
     }
@@ -133,6 +163,50 @@ export default function RevisiTable({
           </span>
         </div>
       );
+    }
+
+    // DIET_CHANGE / ROOM_TRANSFER / KOREKSI_*: tampilkan per field yang berubah
+    {
+      const defs: { key: 'nama_pasien' | 'no_rm' | 'diet' | 'kelas' | 'gedung' | 'ruangan' | 'bed'; label: string }[] = [
+        { key: 'nama_pasien', label: 'Nama' },
+        { key: 'no_rm', label: 'No RM' },
+        { key: 'diet', label: 'Diet' },
+        { key: 'kelas', label: 'Kelas' },
+        { key: 'gedung', label: 'No Kamar' },
+        { key: 'ruangan', label: 'Ruangan' },
+        { key: 'bed', label: 'Bed' },
+      ];
+      const changed = defs
+        .map((d) => {
+          const lama = (item.data_lama?.[d.key] || '').trim();
+          const baru = (item.data_baru?.[d.key] || '').trim();
+          return { ...d, lama, baru };
+        })
+        .filter(
+          (d) =>
+            d.lama.toLowerCase() !== d.baru.toLowerCase() &&
+            (d.lama !== '' || d.baru !== ''),
+        );
+      if (changed.length > 0) {
+        return (
+          <div className='flex flex-col gap-1 text-xs'>
+            {changed.map((c) => (
+              <div key={c.key} className='flex flex-wrap items-center gap-1'>
+                <span className='font-semibold text-muted-foreground min-w-[62px]'>
+                  {c.label}:
+                </span>
+                <span className='text-muted-foreground line-through bg-muted/60 px-1.5 py-0.5 rounded-md'>
+                  {c.lama || '-'}
+                </span>
+                <ArrowRight className='w-3 h-3 text-primary shrink-0' />
+                <span className='font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded-md border border-primary/20'>
+                  {c.baru || '-'}
+                </span>
+              </div>
+            ))}
+          </div>
+        );
+      }
     }
 
     if (item.jenis_perubahan === 'ROOM_TRANSFER') {

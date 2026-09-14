@@ -92,6 +92,11 @@ export default function OtorisasiFilterBar({
             <option value='ROOM_TRANSFER'>Pindah Ruangan</option>
             <option value='NPO'>NPO / Puasa</option>
             <option value='DISCHARGE'>Pasien Pulang</option>
+            <option value='KOREKSI_NAMA'>Koreksi Nama</option>
+            <option value='KOREKSI_NO_RM'>Koreksi No RM</option>
+            <option value='KOREKSI_KELAS'>Koreksi Kelas</option>
+            <option value='KOREKSI_KAMAR'>Koreksi No Kamar</option>
+            <option value='KOREKSI_BED'>Koreksi Bed</option>
           </select>
         </div>
 

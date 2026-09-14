@@ -93,10 +93,7 @@ export function SelectField({
           </SelectTrigger>
           <SelectContent>
             {includeSpecial && (
-              <>
-                <SelectItem value='NPO'>NPO / Puasa</SelectItem>
-                <SelectItem value='KATERING'>AG Katering</SelectItem>
-              </>
+              <SelectItem value='NPO'>NPO / Puasa</SelectItem>
             )}
             {/* Clear option inside dropdown */}
             {hasValue && allowClear && (
@@ -117,7 +114,7 @@ export function SelectField({
                 Tidak ada pilihan standar
               </div>
             ) : (
-              options.filter((opt) => opt.kodeItem !== 'NPO' && opt.kodeItem !== 'KATERING').map((opt) => (
+              options.filter((opt) => opt.kodeItem !== 'NPO').map((opt) => (
                 <SelectItem key={opt.id} value={opt.kodeItem}>
                   <span className='font-mono font-bold text-primary mr-1'>
                     {opt.kodeItem}

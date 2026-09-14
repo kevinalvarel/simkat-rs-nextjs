@@ -2,6 +2,7 @@
 
 import React from 'react';
 import type { RiwayatDietItem } from '@/servers/riwayat-diet.service';
+import { revisionTypeLabel } from '@/lib/revisi-etiket';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -106,6 +107,9 @@ export function RiwayatDietTimeline({
                 changeIcon = <LogOut className='w-4 h-4 text-rose-500' />;
                 badgeColor = 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20';
                 typeLabel = 'Pasien Pulang';
+              } else if (item.jenis_perubahan.startsWith('KOREKSI_')) {
+                badgeColor = 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20';
+                typeLabel = revisionTypeLabel(item.jenis_perubahan);
               }
 
               return (

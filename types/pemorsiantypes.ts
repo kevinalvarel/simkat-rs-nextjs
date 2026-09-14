@@ -41,6 +41,8 @@ export interface PemorsianDietCount {
 }
 
 export interface DataDietDetail {
+  nama_pasien?: string;
+  no_rm?: string;
   diet?: string;
   gedung?: string;
   kamar?: string;
@@ -61,7 +63,7 @@ export interface PemorsianRevisiItem {
   bed: string;
   kelas: string;
   waktu_makan: string;
-  jenis_perubahan: string; // DIET_CHANGE | ROOM_TRANSFER | NEW_PATIENT | DISCHARGE | NPO
+  jenis_perubahan: string; // DIET_CHANGE | ROOM_TRANSFER | NEW_PATIENT | DISCHARGE | NPO | KOREKSI_NAMA | KOREKSI_NO_RM | KOREKSI_KELAS | KOREKSI_KAMAR | KOREKSI_BED
   data_lama?: DataDietDetail | null;
   data_baru?: DataDietDetail | null;
   alasan: string;

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm, Controller, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import {
@@ -13,6 +13,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -38,15 +39,12 @@ interface MenuFormDialogProps {
 }
 
 const CATEGORY_OPTIONS = [
-  { value: 'KARBO', label: '🌾 KARBO (Karbohidrat)' },
-  { value: 'HEWANI', label: '🍗 HEWANI (Lauk Hewani)' },
-  { value: 'NABATI', label: '🫘 NABATI (Lauk Nabati)' },
-  { value: 'SAYUR', label: '🥦 SAYUR (Sayur Mayur)' },
-  { value: 'BUAH', label: '🍊 BUAH (Buah Segar)' },
-  { value: 'SNACK', label: '🍪 SNACK (Makanan Selingan)' },
-  { value: 'DIIT', label: '🩺 DIIT (Diet Khusus)' },
-  { value: 'BENTUK_MAKANAN', label: '🍚 BENTUK_MAKANAN (Bentuk Makanan)' },
-  { value: 'EXTRA', label: '🥛 EXTRA (Extra Makanan)' },
+  { value: 'BENTUK_MAKANAN', label: 'BENTUK MAKANAN' },
+  { value: 'HEWANI', label: 'HEWANI' },
+  { value: 'NABATI', label: 'NABATI' },
+  { value: 'SAYUR', label: 'SAYUR' },
+  { value: 'BUAH', label: 'BUAH' },
+  { value: 'SNACK', label: 'SNACK' },
 ];
 
 const STATUS_OPTIONS = [
@@ -54,15 +52,26 @@ const STATUS_OPTIONS = [
   { value: 'false', label: '🔴 Non-Aktif (Disembunyikan)' },
 ];
 
-const MenuSchema = z.object({
-  nama_kategori: z.string().min(1, 'Kategori menu wajib dipilih.'),
-  kode_item: z
-    .string()
-    .min(1, 'Kode item wajib diisi.')
-    .max(15, 'Maksimal 15 karakter.'),
-  label_item: z.string().min(2, 'Label item minimal 2 karakter.'),
-  is_active: z.boolean(),
-});
+const MenuSchema = z
+  .object({
+    nama_kategori: z.string().min(1, 'Kategori menu wajib dipilih.'),
+    kode_item: z
+      .string()
+      .min(1, 'Kode item wajib diisi.')
+      .max(15, 'Maksimal 15 karakter.'),
+    label_item: z.string().min(2, 'Label item minimal 2 karakter.'),
+    is_active: z.boolean(),
+    is_tugas_ag_katering: z.boolean(),
+  })
+  .superRefine((val, ctx) => {
+    if (val.is_tugas_ag_katering && val.nama_kategori !== 'BENTUK_MAKANAN') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['is_tugas_ag_katering'],
+        message: 'Tugas AG Katering hanya berlaku untuk Bentuk Makanan.',
+      });
+    }
+  });
 
 type MenuFormValues = z.infer<typeof MenuSchema>;
 
@@ -79,16 +88,21 @@ export default function MenuFormDialog({
     register,
     handleSubmit,
     reset,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<MenuFormValues>({
     resolver: zodResolver(MenuSchema),
     defaultValues: {
-      nama_kategori: 'KARBO',
+      nama_kategori: '',
       kode_item: '',
       label_item: '',
       is_active: true,
+      is_tugas_ag_katering: false,
     },
   });
+
+  const watchedKategori = useWatch({ control, name: 'nama_kategori' });
+  const isBentukMakanan = watchedKategori === 'BENTUK_MAKANAN';
 
   useEffect(() => {
     if (open) {
@@ -98,22 +112,38 @@ export default function MenuFormDialog({
           kode_item: itemToEdit.kode_item,
           label_item: itemToEdit.label_item,
           is_active: itemToEdit.is_active,
+          is_tugas_ag_katering: itemToEdit.is_tugas_ag_katering ?? false,
         });
       } else {
         reset({
-          nama_kategori: 'KARBO',
+          nama_kategori: '',
           kode_item: '',
           label_item: '',
           is_active: true,
+          is_tugas_ag_katering: false,
         });
       }
     }
   }, [open, itemToEdit, reset]);
 
+  // Tugas AG Katering hanya relevan untuk Bentuk Makanan — reset saat kategori diganti.
+  useEffect(() => {
+    if (!isBentukMakanan) {
+      setValue('is_tugas_ag_katering', false, { shouldValidate: false });
+    }
+  }, [isBentukMakanan, setValue]);
+
   async function onSubmit(data: MenuFormValues) {
+    const payload = {
+      ...data,
+      is_tugas_ag_katering:
+        data.nama_kategori === 'BENTUK_MAKANAN'
+          ? data.is_tugas_ag_katering
+          : false,
+    };
     try {
       if (isEdit && itemToEdit) {
-        const res = await updateKategoriMenuItem(itemToEdit.id, data);
+        const res = await updateKategoriMenuItem(itemToEdit.id, payload);
         if (res.success) {
           toast.success(res.message);
           onSuccess();
@@ -122,7 +152,7 @@ export default function MenuFormDialog({
           toast.error(res.message);
         }
       } else {
-        const res = await createKategoriMenuItem(data);
+        const res = await createKategoriMenuItem(payload);
         if (res.success) {
           toast.success(res.message);
           onSuccess();
@@ -167,8 +197,11 @@ export default function MenuFormDialog({
                 >
                   <SelectTrigger className='w-full h-9 text-xs bg-background'>
                     <SelectValue placeholder='Pilih kategori menu...'>
-                      {CATEGORY_OPTIONS.find((opt) => opt.value === field.value)
-                        ?.label || field.value}
+                      {field.value
+                        ? CATEGORY_OPTIONS.find(
+                            (opt) => opt.value === field.value,
+                          )?.label || field.value
+                        : undefined}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
@@ -187,6 +220,43 @@ export default function MenuFormDialog({
               </p>
             )}
           </div>
+
+          {/* Tugas AG Katering — hanya untuk Bentuk Makanan */}
+          {isBentukMakanan && (
+            <div className='rounded-lg border border-dashed border-primary/30 bg-primary/[0.04] p-3'>
+              <Controller
+                name='is_tugas_ag_katering'
+                control={control}
+                render={({ field }) => (
+                  <div className='flex items-start gap-2.5'>
+                    <Checkbox
+                      id='tugas-ag-katering'
+                      checked={field.value}
+                      onCheckedChange={(v) => field.onChange(v === true)}
+                      className='mt-0.5'
+                    />
+                    <div className='space-y-0.5'>
+                      <Label
+                        htmlFor='tugas-ag-katering'
+                        className='text-xs font-semibold cursor-pointer'
+                      >
+                        Tugas AG Katering
+                      </Label>
+                      <p className='text-[11px] text-muted-foreground leading-snug'>
+                        Centang jika item Bentuk Makanan ini dikerjakan oleh AG
+                        Katering.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              />
+              {errors.is_tugas_ag_katering && (
+                <p className='text-[11px] text-destructive mt-1.5'>
+                  {errors.is_tugas_ag_katering.message}
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Kode Item */}
           <div className='space-y-1.5'>

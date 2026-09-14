@@ -164,25 +164,81 @@ export default function OtorisasiActionDialog({
             </div>
           </div>
 
-          {/* Diff Box */}
-          <div className='grid grid-cols-1 sm:grid-cols-2 gap-3'>
-            <div className='bg-rose-500/5 p-3.5 rounded-xl border border-rose-200/60 dark:border-rose-950 space-y-1'>
-              <span className='text-[11px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider block'>
-                Sebelum (Snapshot Locked)
-              </span>
-              <p className='font-medium text-foreground text-xs'>
-                {item.data_lama?.diet || 'Belum Ada Data'}
-              </p>
-            </div>
-            <div className='bg-emerald-500/5 p-3.5 rounded-xl border border-emerald-200/60 dark:border-emerald-950 space-y-1'>
-              <span className='text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block'>
-                Sesudah (Diajukan)
-              </span>
-              <p className='font-medium text-foreground text-xs'>
-                {item.data_baru?.diet || item.dampak_dapur}
-              </p>
-            </div>
-          </div>
+          {/* Diff Box — per field yang berubah */}
+          {(() => {
+            const defs: { key: 'nama_pasien' | 'no_rm' | 'diet' | 'kelas' | 'gedung' | 'ruangan' | 'bed'; label: string }[] = [
+              { key: 'nama_pasien', label: 'Nama Pasien' },
+              { key: 'no_rm', label: 'No RM' },
+              { key: 'diet', label: 'Diet' },
+              { key: 'kelas', label: 'Kelas' },
+              { key: 'gedung', label: 'No Kamar' },
+              { key: 'ruangan', label: 'Ruangan' },
+              { key: 'bed', label: 'Bed' },
+            ];
+            const rows = defs
+              .map((d) => ({
+                ...d,
+                lama: (item.data_lama?.[d.key] || '').trim(),
+                baru: (item.data_baru?.[d.key] || '').trim(),
+              }))
+              .filter(
+                (r) =>
+                  r.lama.toLowerCase() !== r.baru.toLowerCase() &&
+                  (r.lama !== '' || r.baru !== ''),
+              );
+            if (
+              rows.length === 0 ||
+              item.jenis_perubahan === 'NEW_PATIENT' ||
+              item.jenis_perubahan === 'DISCHARGE' ||
+              item.jenis_perubahan === 'NPO'
+            ) {
+              return (
+                <div className='grid grid-cols-1 sm:grid-cols-2 gap-3'>
+                  <div className='bg-rose-500/5 p-3.5 rounded-xl border border-rose-200/60 dark:border-rose-950 space-y-1'>
+                    <span className='text-[11px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider block'>
+                      Sebelum (Snapshot Locked)
+                    </span>
+                    <p className='font-medium text-foreground text-xs'>
+                      {item.data_lama?.diet || 'Belum Ada Data'}
+                    </p>
+                  </div>
+                  <div className='bg-emerald-500/5 p-3.5 rounded-xl border border-emerald-200/60 dark:border-emerald-950 space-y-1'>
+                    <span className='text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block'>
+                      Sesudah (Diajukan)
+                    </span>
+                    <p className='font-medium text-foreground text-xs'>
+                      {item.data_baru?.diet || item.dampak_dapur}
+                    </p>
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <div className='rounded-xl border overflow-hidden'>
+                <div className='grid grid-cols-[110px_1fr_1fr] gap-0 bg-muted/60 text-[11px] font-bold uppercase tracking-wider text-muted-foreground'>
+                  <span className='px-3 py-2'>Field</span>
+                  <span className='px-3 py-2 text-rose-600 dark:text-rose-400'>Sebelum</span>
+                  <span className='px-3 py-2 text-emerald-600 dark:text-emerald-400'>Sesudah</span>
+                </div>
+                {rows.map((r) => (
+                  <div
+                    key={r.key}
+                    className='grid grid-cols-[110px_1fr_1fr] gap-0 text-xs border-t'
+                  >
+                    <span className='px-3 py-2 font-semibold text-muted-foreground bg-muted/30'>
+                      {r.label}
+                    </span>
+                    <span className='px-3 py-2 text-muted-foreground line-through bg-rose-500/5'>
+                      {r.lama || '-'}
+                    </span>
+                    <span className='px-3 py-2 font-semibold text-foreground bg-emerald-500/5'>
+                      {r.baru || '-'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
 
           {/* Impact Banner */}
           <div className='flex items-center gap-2 bg-amber-50 dark:bg-amber-950/60 p-3 rounded-xl border border-amber-200 dark:border-amber-900 text-amber-900 dark:text-amber-200'>

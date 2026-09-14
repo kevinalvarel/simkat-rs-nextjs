@@ -6,7 +6,7 @@ import KonfigurasiMenuClient from '@/components/ag-katering/admin/konfigurasi-me
 export const metadata: Metadata = {
   title: 'Konfigurasi Master Menu - Admin Katering',
   description:
-    'Modul khusus Admin Katering untuk pengelolaan master data item menu (Karbo, Hewani, Nabati, Sayur, Buah, Snack, Diit).',
+    'Modul khusus Admin Katering untuk pengelolaan master data item menu (Bentuk Makanan, Hewani, Nabati, Sayur, Buah, Snack).',
 };
 
 export default async function KonfigurasiMenuPage() {

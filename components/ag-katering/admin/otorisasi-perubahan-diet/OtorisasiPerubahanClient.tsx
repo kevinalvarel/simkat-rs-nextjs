@@ -127,8 +127,18 @@ export default function OtorisasiPerubahanClient({
         const matchRm = item.no_rm.toLowerCase().includes(q);
         const matchRuang = item.ruangan.toLowerCase().includes(q);
         const matchBed = item.bed.toLowerCase().includes(q);
+        const matchKelas = (item.kelas || '').toLowerCase().includes(q);
+        const matchKamar = (item.gedung || '').toLowerCase().includes(q);
         const matchDiet = (item.data_baru?.diet || '').toLowerCase().includes(q);
-        if (!matchName && !matchRm && !matchRuang && !matchBed && !matchDiet) {
+        if (
+          !matchName &&
+          !matchRm &&
+          !matchRuang &&
+          !matchBed &&
+          !matchKelas &&
+          !matchKamar &&
+          !matchDiet
+        ) {
           return false;
         }
       }

@@ -6,6 +6,7 @@ import { db } from '@/drizzle';
 import { otorisasiPerubahanDietTable } from '@/db/schemas/snapshot/perizinan-revisi';
 import { pasienTable } from '@/db/schemas/patient/pasien';
 import { snapshotBatchTable } from '@/db/schemas/snapshot/snapshot-batch';
+import { dampakDapurForJenis } from '@/lib/revisi-jenis';
 
 export type WaktuMakanType = 'PAGI' | 'SIANG' | 'MALAM';
 export type JenisPerubahanType =
@@ -13,7 +14,12 @@ export type JenisPerubahanType =
   | 'ROOM_TRANSFER'
   | 'NEW_PATIENT'
   | 'DISCHARGE'
-  | 'NPO';
+  | 'NPO'
+  | 'KOREKSI_NAMA'
+  | 'KOREKSI_NO_RM'
+  | 'KOREKSI_KELAS'
+  | 'KOREKSI_KAMAR'
+  | 'KOREKSI_BED';
 
 export type StatusRevisiType = 'PENDING' | 'APPROVED' | 'REJECTED' | 'SELESAI';
 
@@ -124,11 +130,10 @@ export async function getRevisiPostSnapshot(
         } catch (_) {}
 
         const jenis = r.jenis_perubahan as JenisPerubahanType;
-        let dampak = 'Perubahan Etiket Diet';
-        if (jenis === 'NEW_PATIENT') dampak = '+1 Porsi Emergent (Tambahan Makanan)';
-        else if (jenis === 'DISCHARGE') dampak = '-1 Porsi Dibatalkan (Pasien Pulang)';
-        else if (jenis === 'NPO') dampak = '-1 Porsi Dibatalkan (Puasa/NPO)';
-        else if (jenis === 'ROOM_TRANSFER') dampak = 'Pindah Lokasi Antar Makanan';
+        const dampak =
+          jenis === 'NEW_PATIENT'
+            ? '+1 Porsi Emergent (Tambahan Makanan)'
+            : dampakDapurForJenis(jenis);
 
         return {
           id: r.id,

@@ -5,7 +5,7 @@ import { CheckCircle2, RotateCcw } from 'lucide-react';
 
 export interface ReadyDietRow {
   diet_rs_raw: string;
-  mode?: 'STANDARD' | 'NPO' | 'KATERING';
+  mode?: 'STANDARD' | 'NPO';
   bentukMakanan: string;
   hewani: string;
   nabati: string;
@@ -13,6 +13,8 @@ export interface ReadyDietRow {
   buah: string;
   snack: string;
   jumlahPasien?: number;
+  /** True bila bentuk yang dipilih berflag tugas AG Katering (→ Live Katering). */
+  isTugasKatering?: boolean;
 }
 
 interface MappingDietFloatingBarProps {

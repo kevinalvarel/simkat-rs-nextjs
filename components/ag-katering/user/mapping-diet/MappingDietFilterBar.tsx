@@ -74,7 +74,7 @@ export default function MappingDietFilterBar({
               <>
                 <SelectItem value='STANDARD'>Menu Standar Siklus</SelectItem>
                 <SelectItem value='NPO'>NPO / Puasa</SelectItem>
-                <SelectItem value='KATERING'>Alihkan ke AG Katering</SelectItem>
+                <SelectItem value='KATERING'>Tugas AG Katering</SelectItem>
               </>
             )}
           </SelectContent>

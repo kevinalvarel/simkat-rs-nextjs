@@ -51,6 +51,7 @@ export default function PatientTable({
   kamarId = '',
   searchQuery = '',
   revisionContext,
+  allPatients,
 }: PatientTableProps) {
   const router = useRouter();
 
@@ -621,16 +622,20 @@ export default function PatientTable({
         onQuickPulang={handleQuickPulang}
       />
 
-      {/* Extracted Pindah Ruangan Dialog */}
+      {/* Extracted Pindah Ruangan Dialog (remount per pasien agar state terinisialisasi ulang) */}
       <PindahRuanganDialog
+        key={pindahPatient ? `pindah-${pindahPatient.id}` : 'pindah-closed'}
         patient={pindahPatient}
         gedungList={gedungList}
+        patients={allPatients || patients}
         onClose={() => setPindahPatient(null)}
         revisionContext={revisionContext}
         onPindahOptimistic={onPindahOptimistic}
         onSuccess={(id) => {
           markAsModified(id, 'ruangan');
           markAsModified(id, 'gedung');
+          markAsModified(id, 'bed');
+          markAsModified(id, 'kelas');
           markAsModified(id, 'status_pasien');
         }}
       />

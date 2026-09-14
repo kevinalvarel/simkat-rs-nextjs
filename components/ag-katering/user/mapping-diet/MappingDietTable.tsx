@@ -39,7 +39,7 @@ import MappingDietFloatingBar, {
   type ReadyDietRow,
 } from './MappingDietFloatingBar';
 import MappingDietConfirmDialog from './MappingDietConfirmDialog';
-import { hasFormFoodMapping, selectBentukMakanan } from '@/lib/mapping-diet-fields';
+import { hasFormFoodMapping, selectBentukMakanan, getTugasKateringCodes, isBentukTugasKatering, isLegacyKateringMapping } from '@/lib/mapping-diet-fields';
 
 interface MappingDietTableProps {
   items: UnmappedDietItem[];
@@ -60,7 +60,7 @@ interface RowFormState {
   sayur: string;
   buah: string;
   snack: string;
-  mode: 'STANDARD' | 'NPO' | 'KATERING';
+  mode: 'STANDARD' | 'NPO';
   status: 'idle' | 'saving' | 'saved' | 'error';
   isDirty?: boolean;
 }
@@ -75,7 +75,7 @@ function rowFromItem(item: UnmappedDietItem): RowFormState {
     sayur: item.sayur || (useLegacyExtra ? legacyParts[1] : '') || '',
     buah: item.buah ?? '',
     snack: item.snack ?? '',
-    mode: item.status_mapping === 'KATERING' ? 'KATERING' : item.diet_rs_raw.trim().toUpperCase() === 'NPO' || item.bentuk_makanan === 'NPO' ? 'NPO' : 'STANDARD',
+    mode: item.diet_rs_raw.trim().toUpperCase() === 'NPO' || item.bentuk_makanan === 'NPO' ? 'NPO' : 'STANDARD',
     status: 'idle',
     isDirty: false,
   };
@@ -112,10 +112,6 @@ function CategorySelectCell({
         <SelectValue placeholder='-'>
           {value === 'NPO' ? (
             <span className='font-mono font-bold text-foreground'>NPO</span>
-          ) : value === 'KATERING' ? (
-            <span className='font-mono font-bold text-foreground'>
-              KATERING
-            </span>
           ) : value ? (
             <span className='font-mono font-bold text-foreground'>{value}</span>
           ) : (
@@ -125,10 +121,7 @@ function CategorySelectCell({
       </SelectTrigger>
       <SelectContent className='max-h-64 min-w-[180px] w-full z-50'>
         {includeSpecial && (
-          <>
-            <SelectItem value='NPO'>NPO / Puasa</SelectItem>
-            <SelectItem value='KATERING'>AG Katering</SelectItem>
-          </>
+          <SelectItem value='NPO'>NPO / Puasa</SelectItem>
         )}
         <SelectItem
           value='__EMPTY__'
@@ -137,7 +130,7 @@ function CategorySelectCell({
           -- Kosong / Hapus --
         </SelectItem>
 
-        {options.filter((opt) => opt.kodeItem !== 'NPO' && opt.kodeItem !== 'KATERING').map((opt) => (
+        {options.filter((opt) => opt.kodeItem !== 'NPO').map((opt) => (
           <SelectItem
             key={opt.id}
             value={opt.kodeItem}
@@ -239,6 +232,12 @@ export default function MappingDietTable({
     [options],
   );
 
+  // Kode bentuk yang berflag tugas AG Katering → otomatis masuk Live Katering
+  const tugasKateringCodes = useMemo(
+    () => getTugasKateringCodes(options),
+    [options],
+  );
+
   // Handle instant inline change of a single cell — DRAFT ONLY, NO AUTO-SAVE!
   function handleCellChange(
     diet_rs_raw: string,
@@ -279,6 +278,7 @@ export default function MappingDietTable({
           buah: state.buah,
           snack: state.snack,
           jumlahPasien: item.jumlah_pasien,
+          isTugasKatering: isBentukTugasKatering(state.bentukMakanan, tugasKateringCodes),
         });
       }
     }
@@ -467,7 +467,14 @@ export default function MappingDietTable({
 
               const isNpoRow = row.mode === 'NPO';
 
-              const isKateringRow = row.mode === 'KATERING';
+              // Baris teralihkan ke Live Katering: bentuk berflag tugas, atau data legacy 'KATERING'
+              const isKateringRow =
+                isBentukTugasKatering(row.bentukMakanan, tugasKateringCodes) ||
+                isLegacyKateringMapping({
+                  status_mapping: item.status_mapping,
+                  bentuk_makanan: row.bentukMakanan,
+                  kategori_diet: row.hewani,
+                });
 
               const isComplete = isNpoRow || isKateringRow || hasFormFoodMapping(row);
 

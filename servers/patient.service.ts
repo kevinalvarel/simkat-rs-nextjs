@@ -23,6 +23,18 @@ export interface RevisionContext {
   requestedBy?: string;
 }
 
+import {
+  diffPasienFields,
+  detectJenisPerubahan,
+  buildRevisiAlasan,
+} from '@/lib/revisi-jenis';
+import type {
+  JenisRevisiPerubahan,
+  PasienFieldDiff,
+} from '@/lib/revisi-jenis';
+
+export type { JenisRevisiPerubahan, PasienFieldDiff };
+
 export async function getPatientsByRoom(
   ruangan: string,
   kamar?: string,
@@ -205,22 +217,10 @@ export async function updatePatient(
     );
 
     if (isRevisi && oldPatient) {
-      let jenisPerubahan:
-        | 'DIET_CHANGE'
-        | 'ROOM_TRANSFER'
-        | 'DISCHARGE'
-        | 'NPO' = 'DIET_CHANGE';
-
-      if (parsed.data.is_npo || parsed.data.status_pasien === 'NPO') {
-        jenisPerubahan = 'NPO';
-      } else if (parsed.data.status_pasien === 'PULANG') {
-        jenisPerubahan = 'DISCHARGE';
-      } else if (
-        parsed.data.ruangan !== oldPatient.ruangan ||
-        parsed.data.gedung !== oldPatient.gedung
-      ) {
-        jenisPerubahan = 'ROOM_TRANSFER';
-      }
+      const jenisPerubahan = detectJenisPerubahan(
+        oldPatient as unknown as Record<string, unknown>,
+        parsed.data as unknown as Record<string, unknown>,
+      );
 
       await db.insert(otorisasiPerubahanDietTable).values({
         pasien_id: id,
@@ -231,7 +231,10 @@ export async function updatePatient(
         data_baru: JSON.stringify(parsed.data),
         alasan:
           revisionContext?.alasan ||
-          'Perubahan data pasien pada mode revisi pasca-snapshot',
+          buildRevisiAlasan(
+            oldPatient as unknown as Record<string, unknown>,
+            parsed.data as unknown as Record<string, unknown>,
+          ),
         status: 'PENDING',
         requested_by: actor,
       });
@@ -248,27 +251,28 @@ export async function updatePatient(
 
     // Normal mode (non-revisi): Check if diet or significant field changed to log in Tracker
     if (oldPatient) {
-      const hasDietChange = oldPatient.diet !== parsed.data.diet;
-      const hasRoomChange =
-        oldPatient.ruangan !== parsed.data.ruangan ||
-        oldPatient.bed !== parsed.data.bed;
+      const oldRec = oldPatient as unknown as Record<string, unknown>;
+      const newRec = parsed.data as unknown as Record<string, unknown>;
+      const fieldDiffs = diffPasienFields(oldRec, newRec);
       const hasNpoChange = oldPatient.is_npo !== parsed.data.is_npo;
       const hasStatusChange =
         oldPatient.status_pasien !== parsed.data.status_pasien;
 
-      if (hasDietChange || hasRoomChange || hasNpoChange || hasStatusChange) {
-        let jenis: 'DIET_CHANGE' | 'ROOM_TRANSFER' | 'DISCHARGE' | 'NPO' =
-          'DIET_CHANGE';
-        let alasan = `Perubahan diet: ${oldPatient.diet} ➔ ${parsed.data.diet}`;
+      if (
+        fieldDiffs.length > 0 ||
+        hasNpoChange ||
+        hasStatusChange
+      ) {
+        const jenis: JenisRevisiPerubahan = detectJenisPerubahan(oldRec, newRec);
+        let alasan = buildRevisiAlasan(oldRec, newRec);
 
         if (parsed.data.is_npo || parsed.data.status_pasien === 'NPO') {
-          jenis = 'NPO';
           alasan = 'Instruksi Pasien Puasa / NPO';
         } else if (parsed.data.status_pasien === 'PULANG') {
-          jenis = 'DISCHARGE';
           alasan = 'Pasien Pulang / Selesai Rawat';
-        } else if (hasRoomChange) {
-          jenis = 'ROOM_TRANSFER';
+        } else if (jenis === 'DIET_CHANGE') {
+          alasan = `Perubahan diet: ${oldPatient.diet} ➔ ${parsed.data.diet}`;
+        } else if (jenis === 'ROOM_TRANSFER') {
           alasan = `Pindah ruangan dari ${oldPatient.ruangan || '-'} (${oldPatient.bed || '-'}) ke ${parsed.data.ruangan} (${parsed.data.bed})`;
         }
 
@@ -339,19 +343,12 @@ export async function updatePatientField(
     );
 
     if (isRevisi && oldPatient) {
-      let jenisPerubahan:
-        | 'DIET_CHANGE'
-        | 'ROOM_TRANSFER'
-        | 'DISCHARGE'
-        | 'NPO' = 'DIET_CHANGE';
-
-      if (fields.is_npo || fields.status_pasien === 'NPO') {
-        jenisPerubahan = 'NPO';
-      } else if (fields.status_pasien === 'PULANG') {
-        jenisPerubahan = 'DISCHARGE';
-      } else if (fields.ruangan || fields.gedung) {
-        jenisPerubahan = 'ROOM_TRANSFER';
-      }
+      const oldRec = oldPatient as unknown as Record<string, unknown>;
+      const mergedRec = {
+        ...oldRec,
+        ...(fields as unknown as Record<string, unknown>),
+      };
+      const jenisPerubahan = detectJenisPerubahan(oldRec, mergedRec);
 
       await db.insert(otorisasiPerubahanDietTable).values({
         pasien_id: id,
@@ -361,8 +358,7 @@ export async function updatePatientField(
         data_lama: JSON.stringify(oldPatient),
         data_baru: JSON.stringify({ ...oldPatient, ...fields }),
         alasan:
-          revisionContext?.alasan ||
-          `Revisi ${Object.keys(fields).join(', ')} pasca-snapshot`,
+          revisionContext?.alasan || buildRevisiAlasan(oldRec, mergedRec),
         status: 'PENDING',
         requested_by: actor,
       });
@@ -379,20 +375,33 @@ export async function updatePatientField(
     }
 
     // Normal mode: check if diet or significant field changed
-    if (oldPatient && (fields.diet || fields.is_npo !== undefined || fields.ruangan || fields.status_pasien)) {
-      let jenis: 'DIET_CHANGE' | 'ROOM_TRANSFER' | 'DISCHARGE' | 'NPO' = 'DIET_CHANGE';
-      let alasan = `Pembaruan kolom: ${Object.keys(fields).join(', ')}`;
+    if (
+      oldPatient &&
+      (fields.diet ||
+        fields.is_npo !== undefined ||
+        fields.ruangan ||
+        fields.status_pasien ||
+        fields.nama_pasien !== undefined ||
+        fields.no_rm !== undefined ||
+        fields.kelas !== undefined ||
+        fields.gedung !== undefined ||
+        fields.bed !== undefined)
+    ) {
+      const oldRec = oldPatient as unknown as Record<string, unknown>;
+      const mergedRec = {
+        ...oldRec,
+        ...(fields as unknown as Record<string, unknown>),
+      };
+      const jenis: JenisRevisiPerubahan = detectJenisPerubahan(oldRec, mergedRec);
+      let alasan = buildRevisiAlasan(oldRec, mergedRec);
 
       if (fields.is_npo || fields.status_pasien === 'NPO') {
-        jenis = 'NPO';
         alasan = 'Instruksi Pasien Puasa / NPO';
       } else if (fields.status_pasien === 'PULANG') {
-        jenis = 'DISCHARGE';
         alasan = 'Pasien Pulang / Selesai Rawat';
-      } else if (fields.ruangan || fields.bed) {
-        jenis = 'ROOM_TRANSFER';
+      } else if (jenis === 'ROOM_TRANSFER') {
         alasan = `Pindah ruangan ke ${fields.ruangan || oldPatient.ruangan} (${fields.bed || oldPatient.bed})`;
-      } else if (fields.diet) {
+      } else if (jenis === 'DIET_CHANGE' && fields.diet) {
         alasan = `Perubahan diet: ${oldPatient.diet} ➔ ${fields.diet}`;
       }
 

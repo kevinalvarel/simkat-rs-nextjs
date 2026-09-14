@@ -9,10 +9,10 @@ export const FOOD_FIELDS = [
 
 export type FoodField = (typeof FOOD_FIELDS)[number];
 
-export type MappingMode = 'STANDARD' | 'NPO' | 'KATERING';
+export type MappingMode = 'STANDARD' | 'NPO';
 
 export function modeFromBentukMakanan(value: string | null | undefined): MappingMode {
-  return value === 'NPO' ? 'NPO' : value === 'KATERING' ? 'KATERING' : 'STANDARD';
+  return value === 'NPO' ? 'NPO' : 'STANDARD';
 }
 
 export function selectBentukMakanan<T extends { hewani: string; nabati: string; sayur: string; buah: string; snack: string }>(
@@ -20,16 +20,16 @@ export function selectBentukMakanan<T extends { hewani: string; nabati: string; 
   bentukMakanan: string,
 ): T & { bentukMakanan: string; mode: MappingMode } {
   const mode = modeFromBentukMakanan(bentukMakanan);
-  const clean = (value: string) => value === 'NPO' || value === 'KATERING' ? '' : value;
+  const clean = (value: string) => (value === 'NPO' ? '' : value);
   return {
     ...current,
     bentukMakanan,
     mode,
-    hewani: mode === 'NPO' ? 'NPO' : mode === 'KATERING' ? 'KATERING' : clean(current.hewani),
-    nabati: mode === 'NPO' ? 'NPO' : mode === 'KATERING' ? '' : clean(current.nabati),
-    sayur: mode === 'NPO' ? 'NPO' : mode === 'KATERING' ? '' : clean(current.sayur),
-    buah: mode === 'NPO' ? 'NPO' : mode === 'KATERING' ? '' : clean(current.buah),
-    snack: mode === 'NPO' ? 'NPO' : mode === 'KATERING' ? '' : clean(current.snack),
+    hewani: mode === 'NPO' ? 'NPO' : clean(current.hewani),
+    nabati: mode === 'NPO' ? 'NPO' : clean(current.nabati),
+    sayur: mode === 'NPO' ? 'NPO' : clean(current.sayur),
+    buah: mode === 'NPO' ? 'NPO' : clean(current.buah),
+    snack: mode === 'NPO' ? 'NPO' : clean(current.snack),
   };
 }
 
@@ -57,4 +57,54 @@ export function hasFormFoodMapping(values: {
 }): boolean {
   return [values.bentukMakanan, values.hewani, values.nabati, values.sayur, values.buah, values.snack]
     .some((value) => Boolean(value?.trim()));
+}
+
+// ─── Tugas AG Katering (otomatis via flag kategori_menu.is_tugas_ag_katering) ──
+
+export interface TugasKateringOption {
+  kodeItem: string;
+  isTugasAgKatering?: boolean | null;
+}
+
+/** Set kode bentuk (uppercase) yang berflag tugas AG Katering. */
+export function getTugasKateringCodes(
+  options: TugasKateringOption[],
+): Set<string> {
+  return new Set(
+    options
+      .filter((o) => o.isTugasAgKatering)
+      .map((o) => o.kodeItem.trim().toUpperCase())
+      .filter(Boolean),
+  );
+}
+
+/** True bila nilai bentuk makanan mengandung kode yang berflag tugas AG Katering. */
+export function isBentukTugasKatering(
+  bentukMakanan: string | null | undefined,
+  tugasCodes: Set<string>,
+): boolean {
+  if (!bentukMakanan || tugasCodes.size === 0) return false;
+  return bentukMakanan
+    .split(/[,;/]+/)
+    .map((s) => s.trim().toUpperCase())
+    .filter(Boolean)
+    .some((code) => tugasCodes.has(code));
+}
+
+/**
+ * True untuk data lama era "Alihkan ke AG Katering" manual
+ * (status/bentuk/kategori berisi sentinel 'KATERING').
+ */
+export function isLegacyKateringMapping(item: {
+  status_mapping?: string | null;
+  bentuk_makanan?: string | null;
+  kategori_diet?: string | null;
+}): boolean {
+  const has = (v: string | null | undefined) =>
+    (v || '').trim().toUpperCase() === 'KATERING';
+  return (
+    (item.status_mapping || '').trim().toUpperCase() === 'KATERING' ||
+    has(item.bentuk_makanan) ||
+    has(item.kategori_diet)
+  );
 }

@@ -24,6 +24,11 @@ export function revisionTypeLabel(jenis: string): string {
     NEW_PATIENT: 'Pasien Baru',
     DISCHARGE: 'Pasien Pulang',
     NPO: 'Puasa',
+    KOREKSI_NAMA: 'Koreksi Nama',
+    KOREKSI_NO_RM: 'Koreksi No RM',
+    KOREKSI_KELAS: 'Koreksi Kelas',
+    KOREKSI_KAMAR: 'Koreksi No Kamar',
+    KOREKSI_BED: 'Koreksi Bed',
   };
   return labels[jenis] || jenis;
 }

@@ -37,9 +37,4 @@ test('switching food shape applies special modes and clears their sentinel value
   assert.equal(ordinary.mode, 'STANDARD');
   assert.equal(ordinary.bentukMakanan, 'BN');
   assert.deepEqual([ordinary.hewani, ordinary.nabati, ordinary.sayur, ordinary.buah, ordinary.snack], Array(5).fill(''));
-
-  const katering = selectBentukMakanan(initial, 'KATERING');
-  assert.equal(katering.mode, 'KATERING');
-  assert.equal(katering.hewani, 'KATERING');
-  assert.deepEqual([katering.nabati, katering.sayur, katering.buah, katering.snack], Array(4).fill(''));
 });

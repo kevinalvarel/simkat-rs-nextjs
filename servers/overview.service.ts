@@ -157,6 +157,46 @@ function extractCodes(val: string | null | undefined): string[] {
 }
 
 /**
+ * Sentinel era "Alihkan ke AG Katering" manual — hanya untuk data lama.
+ * Mapping baru tidak lagi menulis nilai ini (lihat mapping-diet.service).
+ */
+function isLegacyKateringCode(code: string): boolean {
+  return code.trim().toUpperCase() === 'KATERING';
+}
+
+/**
+ * Kode bentuk makanan (uppercase) yang berflag tugas AG Katering
+ * (kategori_menu.is_tugas_ag_katering). Tahan terhadap DB yang belum
+ * di-migrate: kembalikan set kosong bila kolom belum ada.
+ */
+async function getTugasAgKateringCodes(): Promise<Set<string>> {
+  try {
+    const rows = await db
+      .select({ kode_item: kategoriMenuTable.kode_item })
+      .from(kategoriMenuTable)
+      .where(eq(kategoriMenuTable.is_tugas_ag_katering, true));
+    return new Set(
+      rows.map((r) => r.kode_item.trim().toUpperCase()).filter(Boolean),
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+/**
+ * True bila salah satu kode bentuk teralihkan ke Live Katering: berflag
+ * tugas AG Katering, atau sentinel legacy 'KATERING'.
+ */
+function isKateringBentuk(
+  bentukCodes: string[],
+  tugasCodes: Set<string>,
+): boolean {
+  return bentukCodes.some(
+    (c) => tugasCodes.has(c.toUpperCase()) || isLegacyKateringCode(c),
+  );
+}
+
+/**
  * Check if a dish's assigned kelas matches a patient's kelas
  */
 function matchesKelas(dishKelas: string | null | undefined, patientKelas: string | null | undefined): boolean {
@@ -576,6 +616,17 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
       labelMap.set(item.kode_item.toUpperCase(), item.label_item);
     }
 
+    // Kode bentuk yang otomatis teralihkan ke Live Katering (flag tugas AG Katering)
+    const tugasKateringCodes = new Set(
+      masterMenuItems
+        .filter(
+          (item) =>
+            (item as { is_tugas_ag_katering?: boolean })
+              .is_tugas_ag_katering,
+        )
+        .map((item) => item.kode_item.trim().toUpperCase()),
+    );
+
     // Common default labels for medical diets & food items
     const defaultLabels: Record<string, string> = {
       BN: 'Biasa Nasi',
@@ -748,10 +799,11 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
         continue;
       }
 
-      // Check if mapped to AG KATERING (Alihkan ke AG Katering) -> skip live production entirely
+      // Pengalihan ke Live Katering: otomatis bila kode bentuk berflag tugas
+      // AG Katering; sentinel 'KATERING' lama tetap didukung (kompatibilitas) -> skip live production entirely
       const isKateringMapped =
-        bentukCodes.some((c) => c.toUpperCase() === 'KATERING') ||
-        hewaniCodes.some((c) => c.toUpperCase() === 'KATERING');
+        isKateringBentuk(bentukCodes, tugasKateringCodes) ||
+        hewaniCodes.some((c) => isLegacyKateringCode(c));
 
       if (isKateringMapped) {
         continue;
@@ -942,10 +994,10 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
           continue;
         }
 
-        // Check if mapped to AG KATERING (Alihkan ke AG Katering) -> skip live production snapshot entirely
+        // Pengalihan ke Live Katering: otomatis via flag tugas (sentinel lama tetap didukung) -> skip live production snapshot entirely
         const isKateringMapped =
-          bentukCodes.some((c) => c.toUpperCase() === 'KATERING') ||
-          hewaniCodes.some((c) => c.toUpperCase() === 'KATERING');
+          isKateringBentuk(bentukCodes, tugasKateringCodes) ||
+          hewaniCodes.some((c) => isLegacyKateringCode(c));
 
         if (isKateringMapped) {
           continue;
@@ -1167,6 +1219,8 @@ export interface LiveKateringPatient {
   bed?: string | null;
   kelas: string;
   status_mapping: string;
+  /** True bila masuk via flag tugas AG Katering; false = data legacy 'KATERING'. */
+  is_tugas_ag_katering: boolean;
 }
 
 export interface LiveKateringSummary {
@@ -1178,7 +1232,9 @@ export interface LiveKateringSummary {
 }
 
 /**
- * Fetch active patients whose diets are diverted to AG Katering (e.g. Bubur Saring, Sonde, or mapped to KATERING).
+ * Fetch active patients whose mapped bentuk makanan is flagged as
+ * tugas AG Katering (kategori_menu.is_tugas_ag_katering), plus data lama
+ * era "Alihkan ke AG Katering" manual (sentinel 'KATERING').
  * Uses original raw text for patient display as required.
  */
 export async function getLiveKateringData(): Promise<LiveKateringSummary> {
@@ -1224,6 +1280,9 @@ export async function getLiveKateringData(): Promise<LiveKateringSummary> {
       mappingByRaw.set(m.diet_rs_raw.trim().toLowerCase(), m);
     }
 
+    // 3b. Kode bentuk yang otomatis teralihkan ke Live Katering (flag tugas)
+    const tugasKateringCodes = await getTugasAgKateringCodes();
+
     // 4. Identify patients for AG Katering
     const kateringPatients: LiveKateringPatient[] = [];
     const countMap = new Map<string, number>();
@@ -1233,20 +1292,16 @@ export async function getLiveKateringData(): Promise<LiveKateringSummary> {
       if (!raw) continue;
 
       const mapped = mappingByRaw.get(raw.toLowerCase());
-      const isExplicitKatering =
-        mapped?.status_mapping === 'KATERING' ||
-        mapped?.bentuk_makanan === 'KATERING' ||
-        mapped?.kategori_diet === 'KATERING';
+      // Legacy manual: status/sentinel 'KATERING'. Baru: kode bentuk berflag tugas.
+      const isLegacyKatering =
+        (mapped?.status_mapping || '').trim().toUpperCase() === 'KATERING' ||
+        extractCodes(mapped?.bentuk_makanan).some((c) => isLegacyKateringCode(c)) ||
+        extractCodes(mapped?.kategori_diet).some((c) => isLegacyKateringCode(c));
+      const isTugasKatering =
+        !isLegacyKatering &&
+        isKateringBentuk(extractCodes(mapped?.bentuk_makanan), tugasKateringCodes);
 
-      const lowerRaw = raw.toLowerCase();
-      const isKeywordKatering =
-        lowerRaw.includes('bubur saring') ||
-        lowerRaw.includes('saring') ||
-        lowerRaw.includes('sonde') ||
-        lowerRaw.includes('enteral') ||
-        lowerRaw.includes('cair khusus');
-
-      if (isExplicitKatering || isKeywordKatering) {
+      if (isLegacyKatering || isTugasKatering) {
         kateringPatients.push({
           id: p.id,
           nama_pasien: p.nama_pasien,
@@ -1257,6 +1312,7 @@ export async function getLiveKateringData(): Promise<LiveKateringSummary> {
           bed: p.bed,
           kelas: p.kelas || 'Kelas 1',
           status_mapping: mapped?.status_mapping || 'UNMAPPED (RAW)',
+          is_tugas_ag_katering: isTugasKatering,
         });
 
         countMap.set(raw, (countMap.get(raw) ?? 0) + 1);

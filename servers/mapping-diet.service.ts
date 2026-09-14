@@ -25,6 +25,7 @@ export type KategoriMenuOption = {
   kodeItem: string;
   labelItem: string;
   urutan: number;
+  isTugasAgKatering?: boolean;
 };
 
 export type KategoriMenuGrouped = {
@@ -144,7 +145,7 @@ export async function getUnmappedDietItems(): Promise<UnmappedDietItem[]> {
       const existing = mappingByRaw.get(rawDiet);
       const statusMapping = existing?.status_mapping ?? 'UNMAPPED';
 
-      // Skip fully MAPPED or KATERING ones
+      // Skip fully MAPPED ones (termasuk baris legacy KATERING — tetap dianggap sudah ditangani)
       if (statusMapping === 'MAPPED' || statusMapping === 'KATERING') continue;
 
       const kelasList = Array.from(kelasMap.get(rawDiet) || []).sort();
@@ -194,7 +195,8 @@ export async function getUnmappedDietItems(): Promise<UnmappedDietItem[]> {
 }
 
 /**
- * Fetch all diet strings that have been successfully mapped (status MAPPED or KATERING).
+ * Fetch all diet strings that have been successfully mapped
+ * (status MAPPED, termasuk baris legacy KATERING agar bisa dipetakan ulang).
  * Also maps with active patient counts and classes.
  */
 export async function getMappedDietItems(): Promise<UnmappedDietItem[]> {
@@ -310,9 +312,48 @@ export async function getMappedDietItems(): Promise<UnmappedDietItem[]> {
 }
 
 /**
+ * True when the DB error means a column from the current schema does not
+ * exist yet in the database (Postgres 42703) — i.e. the DB lags behind the
+ * migration (e.g. `is_tugas_ag_katering` not applied yet).
+ */
+function isMissingColumnError(error: unknown): boolean {
+  if (typeof error === 'object' && error !== null && 'code' in error) {
+    if ((error as { code?: unknown }).code === '42703') return true;
+  }
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === 'object' && error !== null && 'message' in error
+        ? String((error as { message: unknown }).message)
+        : String(error);
+  return /column .* does not exist/i.test(message);
+}
+
+/**
  * Fetch all active kategori menu options from master database (kategori_menu table).
+ *
+ * Tahan terhadap DB yang belum di-migrate: bila kolom baru
+ * (`is_tugas_ag_katering`) belum ada, fallback ke 6 kolom lama agar
+ * dropdown tetap terisi, bukan error/kosong.
  */
 export async function getKategoriMenuOptions(): Promise<KategoriMenuOption[]> {
+  const toOptions = (rows: {
+    id: number;
+    nama_kategori: string;
+    kode_item: string;
+    label_item: string;
+    urutan: number;
+    is_tugas_ag_katering?: boolean | null;
+  }[]): KategoriMenuOption[] =>
+    rows.map((i) => ({
+      id: i.id,
+      namaKategori: i.nama_kategori,
+      kodeItem: i.kode_item,
+      labelItem: i.label_item,
+      urutan: i.urutan,
+      isTugasAgKatering: i.is_tugas_ag_katering ?? false,
+    }));
+
   try {
     const items = await db
       .select()
@@ -321,17 +362,44 @@ export async function getKategoriMenuOptions(): Promise<KategoriMenuOption[]> {
       .orderBy(asc(kategoriMenuTable.nama_kategori), asc(kategoriMenuTable.urutan));
 
     if (items && items.length > 0) {
-      return items.map((i) => ({
-        id: i.id,
-        namaKategori: i.nama_kategori,
-        kodeItem: i.kode_item,
-        labelItem: i.label_item,
-        urutan: i.urutan,
-      }));
+      return toOptions(
+        items.map((i) => ({
+          ...i,
+          is_tugas_ag_katering: (i as { is_tugas_ag_katering?: boolean })
+            .is_tugas_ag_katering ?? false,
+        })),
+      );
     }
     return [];
   } catch (error) {
-    console.error('Error fetching kategori menu options from DB:', error);
+    if (!isMissingColumnError(error)) {
+      console.error('Error fetching kategori menu options from DB:', error);
+      return [];
+    }
+    console.warn(
+      'kategori_menu.is_tugas_ag_katering belum ada di DB — pakai fallback tanpa kolom itu. Jalankan migrasi 0007.',
+    );
+  }
+
+  try {
+    const legacyItems = await db
+      .select({
+        id: kategoriMenuTable.id,
+        nama_kategori: kategoriMenuTable.nama_kategori,
+        kode_item: kategoriMenuTable.kode_item,
+        label_item: kategoriMenuTable.label_item,
+        urutan: kategoriMenuTable.urutan,
+        is_active: kategoriMenuTable.is_active,
+      })
+      .from(kategoriMenuTable)
+      .where(eq(kategoriMenuTable.is_active, true))
+      .orderBy(asc(kategoriMenuTable.nama_kategori), asc(kategoriMenuTable.urutan));
+
+    return toOptions(
+      legacyItems.map((i) => ({ ...i, is_tugas_ag_katering: false })),
+    );
+  } catch (fallbackError) {
+    console.error('Error fetching kategori menu options from DB:', fallbackError);
     return [];
   }
 }
@@ -372,13 +440,18 @@ export type SaveMappingPayload = {
   buah?: string | null;
   snack?: string | null;
   status_mapping?: string | null;
-  mode?: 'STANDARD' | 'NPO' | 'KATERING';
+  mode?: 'STANDARD' | 'NPO';
   mapped_by?: string;
 };
 
 /**
  * Upsert a diet mapping record. Creates if new, updates if already exists.
- * Supports STANDARD, NPO (auto-fills all to NPO), and KATERING (Alihkan ke AG Katering).
+ * Supports STANDARD and NPO (auto-fills all to NPO).
+ *
+ * Pengalihan ke Live Katering TIDAK lagi dipilih manual — otomatis bila kode
+ * bentuk makanan yang dipetakan berflag `is_tugas_ag_katering` di master
+ * kategori_menu. Sentinel lama 'KATERING' dinormalisasi ke null agar data
+ * lama bisa dipetakan ulang ke kode bentuk asli.
  */
 export async function saveDietMapping(
   payload: SaveMappingPayload,
@@ -415,22 +488,27 @@ export async function saveDietMapping(
     snack = 'NPO';
     status_mapping = 'MAPPED';
   }
-  // Mode 2: Alihkan ke AG Katering
-  else if (
-    payload.mode === 'KATERING' ||
-    payload.status_mapping === 'KATERING'
-  ) {
-    bentuk_makanan = 'KATERING';
-    kategori_diet = 'KATERING';
-    extraCombined = null;
-    buah = null;
-    snack = null;
-    status_mapping = 'KATERING';
-  }
-  // Mode 3: Standard mapping
-  else {
-    if ([bentuk_makanan, kategori_diet, nabati, sayur, buah, snack].some((value) => value === 'NPO' || value === 'KATERING')) {
-      return { success: false, message: 'Pilih mode NPO atau AG Katering untuk nilai khusus.' };
+  // Mode 2: Standard mapping (pengalihan katering otomatis via flag,
+  // bukan mode manual)
+  {
+    // Normalisasi sentinel era manual: 'KATERING' bukan kode menu valid.
+    const clearLegacy = (value: string | null) =>
+      value && value.trim().toUpperCase() === 'KATERING' ? null : value;
+    bentuk_makanan = clearLegacy(bentuk_makanan);
+    kategori_diet = clearLegacy(kategori_diet);
+    nabati = clearLegacy(nabati);
+    sayur = clearLegacy(sayur);
+    buah = clearLegacy(buah);
+    snack = clearLegacy(snack);
+    extraCombined =
+      extraCombined &&
+      extraCombined
+        .split(/[,;/]+/)
+        .some((part) => part.trim().toUpperCase() === 'KATERING')
+        ? [nabati, sayur].filter(Boolean).join(', ') || null
+        : extraCombined;
+    if ([bentuk_makanan, kategori_diet, nabati, sayur, buah, snack].some((value) => value === 'NPO')) {
+      return { success: false, message: 'Pilih mode NPO untuk nilai khusus.' };
     }
     if (!hasFoodMapping({ bentuk_makanan, kategori_diet, nabati, sayur, buah, snack })) {
       return { success: false, message: 'Isi minimal satu jenis makanan sebelum menyimpan mapping.' };
@@ -488,12 +566,31 @@ export async function saveDietMapping(
       // Safe fallback when executed outside Next.js request context
     }
 
-    const labelMode =
-      status_mapping === 'KATERING'
-        ? 'dialihkan ke AG Katering'
-        : bentuk_makanan === 'NPO'
-        ? 'diset NPO (Puasa)'
-        : 'berhasil disimpan';
+    let labelMode = 'berhasil disimpan';
+    if (bentuk_makanan === 'NPO') {
+      labelMode = 'diset NPO (Puasa)';
+    } else if (bentuk_makanan) {
+      // Info dinamis: bentuk berflag tugas AG Katering otomatis masuk Live Katering.
+      try {
+        const tugasRows = await db
+          .select({ kode_item: kategoriMenuTable.kode_item })
+          .from(kategoriMenuTable)
+          .where(eq(kategoriMenuTable.is_tugas_ag_katering, true));
+        const bentukCodes = bentuk_makanan
+          .split(/[,;/]+/)
+          .map((s) => s.trim().toUpperCase());
+        if (
+          tugasRows.some((r) =>
+            bentukCodes.includes(r.kode_item.trim().toUpperCase()),
+          )
+        ) {
+          labelMode =
+            'berhasil disimpan dan otomatis masuk Live Katering (tugas AG Katering)';
+        }
+      } catch {
+        // DB belum di-migrate (kolom flag belum ada) — abaikan label khusus.
+      }
+    }
 
     return {
       success: true,
@@ -538,8 +635,7 @@ export async function bulkSaveDietMapping(
     const stored = existingByRaw.get(raw.trim());
     const existing = stored?.is_active ? stored : null;
     if (isStandard && (raw.trim().toUpperCase() === 'NPO' || existing?.status_mapping === 'KATERING' ||
-      existing?.bentuk_makanan === 'NPO' || existing?.kategori_diet === 'NPO' ||
-      existing?.bentuk_makanan === 'KATERING' || existing?.kategori_diet === 'KATERING')) {
+      existing?.bentuk_makanan === 'NPO' || existing?.kategori_diet === 'NPO')) {
       skippedRaws.push(raw);
       continue;
     }

@@ -17,7 +17,7 @@ export const otorisasiPerubahanDietTable = pgTable('otorisasi_perubahan_diet', {
   /** Siklus makan yang terpengaruh: PAGI | SIANG | MALAM */
   waktu_makan: text('waktu_makan').notNull(),
 
-  /** DIET_CHANGE | ROOM_TRANSFER | NEW_PATIENT | DISCHARGE */
+  /** DIET_CHANGE | ROOM_TRANSFER | NEW_PATIENT | DISCHARGE | NPO | KOREKSI_NAMA | KOREKSI_NO_RM | KOREKSI_KELAS | KOREKSI_KAMAR | KOREKSI_BED */
   jenis_perubahan: text('jenis_perubahan').notNull(),
 
   /** JSON string data sebelum perubahan. */

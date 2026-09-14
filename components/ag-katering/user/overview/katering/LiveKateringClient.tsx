@@ -257,19 +257,19 @@ export default function LiveKateringClient({
                       </div>
                     </TableCell>
                     <TableCell className='py-3'>
-                      {p.status_mapping === 'KATERING' ? (
+                      {p.is_tugas_ag_katering ? (
                         <Badge
                           variant='outline'
                           className='text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border-blue-200 gap-1'
                         >
-                          <Send className='w-3 h-3' /> AG Katering
+                          <Send className='w-3 h-3' /> Tugas AG Katering
                         </Badge>
                       ) : (
                         <Badge
                           variant='outline'
                           className='text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-200 gap-1'
                         >
-                          <AlertCircle className='w-3 h-3' /> Saring / Cair
+                          <AlertCircle className='w-3 h-3' /> AG Katering (Legacy)
                         </Badge>
                       )}
                     </TableCell>

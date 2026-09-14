@@ -80,6 +80,36 @@ export default function PemorsianRevisiTableSection({
             Pasien Pulang (-1)
           </Badge>
         );
+      case 'KOREKSI_NAMA':
+        return (
+          <Badge className='bg-slate-500/15 text-slate-700 dark:text-slate-300 border-slate-500/30 text-[11px] font-bold'>
+            Koreksi Nama
+          </Badge>
+        );
+      case 'KOREKSI_NO_RM':
+        return (
+          <Badge className='bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-500/30 text-[11px] font-bold'>
+            Koreksi No RM
+          </Badge>
+        );
+      case 'KOREKSI_KELAS':
+        return (
+          <Badge className='bg-teal-500/15 text-teal-700 dark:text-teal-300 border-teal-500/30 text-[11px] font-bold'>
+            Koreksi Kelas
+          </Badge>
+        );
+      case 'KOREKSI_KAMAR':
+        return (
+          <Badge className='bg-lime-500/15 text-lime-700 dark:text-lime-300 border-lime-500/30 text-[11px] font-bold'>
+            Koreksi No Kamar
+          </Badge>
+        );
+      case 'KOREKSI_BED':
+        return (
+          <Badge className='bg-sky-500/15 text-sky-700 dark:text-sky-300 border-sky-500/30 text-[11px] font-bold'>
+            Koreksi Bed
+          </Badge>
+        );
       default:
         return <Badge variant='outline'>{jenis}</Badge>;
     }
@@ -103,7 +133,7 @@ export default function PemorsianRevisiTableSection({
           </div>
           <p className='text-xs text-muted-foreground pl-10.5'>
             Pasien ini telah terdaftar di snapshot sebelumnya, namun AG RS melakukan
-            perubahan diet/ruangan susulan. Etiket lama harus ditarik/dicetak ulang.
+            perubahan diet/ruangan/koreksi data susulan. Etiket lama harus ditarik/dicetak ulang.
           </p>
         </div>
 
@@ -298,7 +328,39 @@ export default function PemorsianRevisiTableSection({
 
                     {/* Perbandingan Data: Data Lama vs Data Baru */}
                     <TableCell className='text-xs text-foreground'>
-                      {item.jenis_perubahan === 'ROOM_TRANSFER' ? (
+                      {item.jenis_perubahan.startsWith('KOREKSI_') ? (
+                        <div className='space-y-1 py-1'>
+                          {(
+                            [
+                              { key: 'nama_pasien', label: 'Nama' },
+                              { key: 'no_rm', label: 'No RM' },
+                              { key: 'diet', label: 'Diet' },
+                              { key: 'kelas', label: 'Kelas' },
+                              { key: 'gedung', label: 'No Kamar' },
+                              { key: 'ruangan', label: 'Ruangan' },
+                              { key: 'bed', label: 'Bed' },
+                            ] as const
+                          )
+                            .map((d) => ({
+                              ...d,
+                              lama: (item.data_lama?.[d.key] || '').trim(),
+                              baru: (item.data_baru?.[d.key] || '').trim(),
+                            }))
+                            .filter(
+                              (d) =>
+                                d.lama.toLowerCase() !== d.baru.toLowerCase() &&
+                                (d.lama !== '' || d.baru !== ''),
+                            )
+                            .map((d) => (
+                              <div key={d.key} className='flex flex-wrap items-center gap-1 text-[11px]'>
+                                <span className='font-semibold text-muted-foreground'>{d.label}:</span>
+                                <span className='text-rose-600/80 dark:text-rose-400/80 line-through'>{d.lama || '-'}</span>
+                                <ArrowRight className='w-3 h-3 text-emerald-600 shrink-0' />
+                                <span className='font-bold text-emerald-700 dark:text-emerald-300'>{d.baru || '-'}</span>
+                              </div>
+                            ))}
+                        </div>
+                      ) : item.jenis_perubahan === 'ROOM_TRANSFER' ? (
                         <div className='space-y-1 py-1'>
                           <div className='text-rose-600/80 dark:text-rose-400/80 line-through text-[11px] flex items-center gap-1'>
                             <span className='font-semibold'>Lama:</span>

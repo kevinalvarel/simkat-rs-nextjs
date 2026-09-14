@@ -341,11 +341,13 @@ export default function DataPasienClient({
     }
   };
 
-  // 5. Optimistic Room Transfer
+  // 5. Optimistic Room Transfer (targetKamar disimpan ke kolom `gedung`)
   const handleOptimisticPindahRuangan = async (
     patientId: number,
-    targetGedung: string,
+    targetKamar: string,
     targetRuangan: string,
+    targetBed: string,
+    targetKelas: string,
   ) => {
     const previousPatient = patientList.find((p) => p.id === patientId);
     if (!previousPatient) return;
@@ -359,8 +361,10 @@ export default function DataPasienClient({
           p.id === patientId
             ? {
                 ...p,
-                gedung: targetGedung,
+                gedung: targetKamar,
                 ruangan: targetRuangan,
+                bed: targetBed,
+                kelas: targetKelas || p.kelas,
                 status_pasien: 'PINDAH_RUANGAN',
               }
             : p,
@@ -371,8 +375,8 @@ export default function DataPasienClient({
 
     toast.success(
       isRevisiMode
-        ? `Revisi perpindahan ruangan ${previousPatient.nama_pasien} diajukan ke Otorisasi Supervisor.`
-        : `${previousPatient.nama_pasien} dipindahkan ke ${targetGedung} - ${targetRuangan}`,
+        ? `Revisi perpindahan ${previousPatient.nama_pasien} ke ${targetRuangan} ${targetKamar} (${targetBed}) diajukan ke Otorisasi Supervisor.`
+        : `${previousPatient.nama_pasien} dipindahkan ke ${targetRuangan} - ${targetKamar} (${targetBed})`,
     );
 
     // Background DB sync
@@ -380,8 +384,10 @@ export default function DataPasienClient({
       const res = await updatePatientField(
         patientId,
         {
-          gedung: targetGedung,
+          gedung: targetKamar,
           ruangan: targetRuangan,
+          bed: targetBed,
+          kelas: targetKelas || previousPatient.kelas,
           status_pasien: 'PINDAH_RUANGAN',
         },
         revisionContext,
@@ -526,6 +532,7 @@ export default function DataPasienClient({
         onQuickPulang={(p) => handleOptimisticSaveField(p, 'status_pasien', 'PULANG')}
         onPindahOptimistic={handleOptimisticPindahRuangan}
         gedungList={gedungList}
+        allPatients={patientList}
         kelasList={kelasList}
         totalBedCapacity={totalBedCapacity}
         ruangan={ruangan}

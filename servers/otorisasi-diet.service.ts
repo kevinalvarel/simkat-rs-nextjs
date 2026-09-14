@@ -15,6 +15,7 @@ import type {
   RevisiPostSnapshotItem,
   MutationResult,
 } from './revisi-snapshot.service';
+import { dampakDapurForJenis } from '@/lib/revisi-jenis';
 
 export interface OtorisasiStats {
   pendingCount: number;
@@ -87,14 +88,7 @@ export async function getOtorisasiList(
         } catch (_) {}
 
         const jenis = r.jenis_perubahan as JenisPerubahanType;
-        let dampak = 'Perubahan Etiket Diet';
-        if (jenis === 'NEW_PATIENT')
-          dampak = '+1 Porsi Makanan (Tambahan Makanan)';
-        else if (jenis === 'DISCHARGE')
-          dampak = '-1 Porsi Dibatalkan (Pasien Pulang)';
-        else if (jenis === 'NPO') dampak = '-1 Porsi Dibatalkan (Puasa/NPO)';
-        else if (jenis === 'ROOM_TRANSFER')
-          dampak = 'Pindah Lokasi Antar Makanan';
+        const dampak = dampakDapurForJenis(jenis);
 
         return {
           id: r.id,
@@ -161,6 +155,63 @@ export async function getOtorisasiStats(
   };
 }
 
+function normRevisiVal(v: unknown): string {
+  if (typeof v === 'string') return v.trim();
+  if (v === null || v === undefined) return '';
+  return String(v).trim();
+}
+
+function isRevisiChanged(a: unknown, b: unknown): boolean {
+  return normRevisiVal(a).toLowerCase() !== normRevisiVal(b).toLowerCase();
+}
+
+/**
+ * Isi patch identitas + lokasi (nama, no_rm, kelas, gedung/no-kamar,
+ * ruangan, bed) hanya untuk field yang benar-benar berubah.
+ */
+function applyIdentityPatch(
+  patch: Record<string, unknown>,
+  dataBaru: Record<string, unknown>,
+  patient: { nama_pasien?: unknown; no_rm?: unknown; kelas?: unknown; gedung?: unknown; ruangan?: unknown; bed?: unknown } | undefined,
+) {
+  if (
+    normRevisiVal(dataBaru.nama_pasien) &&
+    isRevisiChanged(patient?.nama_pasien, dataBaru.nama_pasien)
+  ) {
+    patch.nama_pasien = normRevisiVal(dataBaru.nama_pasien);
+  }
+  if (
+    normRevisiVal(dataBaru.no_rm) &&
+    isRevisiChanged(patient?.no_rm, dataBaru.no_rm)
+  ) {
+    patch.no_rm = normRevisiVal(dataBaru.no_rm);
+  }
+  if (
+    normRevisiVal(dataBaru.kelas) &&
+    isRevisiChanged(patient?.kelas, dataBaru.kelas)
+  ) {
+    patch.kelas = normRevisiVal(dataBaru.kelas);
+  }
+  if (
+    normRevisiVal(dataBaru.gedung) &&
+    isRevisiChanged(patient?.gedung, dataBaru.gedung)
+  ) {
+    patch.gedung = normRevisiVal(dataBaru.gedung);
+  }
+  if (
+    normRevisiVal(dataBaru.ruangan) &&
+    isRevisiChanged(patient?.ruangan, dataBaru.ruangan)
+  ) {
+    patch.ruangan = normRevisiVal(dataBaru.ruangan);
+  }
+  if (
+    normRevisiVal(dataBaru.bed) &&
+    isRevisiChanged(patient?.bed, dataBaru.bed)
+  ) {
+    patch.bed = normRevisiVal(dataBaru.bed);
+  }
+}
+
 async function applyApprovedRevisionToSnapshot(
   revisi: typeof otorisasiPerubahanDietTable.$inferSelect,
 ) {
@@ -170,6 +221,10 @@ async function applyApprovedRevisionToSnapshot(
       .from(pasienTable)
       .where(eq(pasienTable.id, revisi.pasien_id));
 
+    let dataLama: Record<string, unknown> = {};
+    try {
+      if (revisi.data_lama) dataLama = JSON.parse(revisi.data_lama);
+    } catch (_) {}
     let dataBaru: Record<string, any> = {};
     try {
       if (revisi.data_baru) dataBaru = JSON.parse(revisi.data_baru);
@@ -211,75 +266,120 @@ async function applyApprovedRevisionToSnapshot(
         .update(pasienTable)
         .set({ status_pasien: 'AKTIF', updated_at: new Date() })
         .where(eq(pasienTable.id, revisi.pasien_id));
+    } else if (revisi.jenis_perubahan === 'NPO') {
+      const targetNoRm = dataBaru.no_rm || patient?.no_rm;
+      if (revisi.batch_id && targetNoRm) {
+        await db
+          .update(snapshotDetailTable)
+          .set({
+            diet_rs_raw: 'NPO',
+            status_saat_snapshot: 'NPO',
+            is_printed: false,
+          })
+          .where(
+            and(
+              eq(snapshotDetailTable.batch_id, revisi.batch_id),
+              eq(snapshotDetailTable.no_rm, targetNoRm),
+            ),
+          );
+      }
+
+      // Apply NPO to master pasien table (+ koreksi identitas yang menyertai)
+      const npoPatch: Partial<typeof pasienTable.$inferInsert> = {
+        diet: 'NPO',
+        is_npo: true,
+        status_pasien: 'NPO',
+        updated_at: new Date(),
+      };
+      applyIdentityPatch(npoPatch, dataBaru, patient);
+      await db
+        .update(pasienTable)
+        .set(npoPatch)
+        .where(eq(pasienTable.id, revisi.pasien_id));
     } else if (
       revisi.jenis_perubahan === 'DIET_CHANGE' ||
-      revisi.jenis_perubahan === 'NPO'
+      revisi.jenis_perubahan === 'ROOM_TRANSFER' ||
+      revisi.jenis_perubahan.startsWith('KOREKSI_')
     ) {
-      const targetNoRm = dataBaru.no_rm || patient?.no_rm;
-      if (revisi.batch_id && targetNoRm) {
+      // Jalur generik: terapkan SELURUH field yang berubah (diet, lokasi,
+      // maupun koreksi identitas) ke master pasien + snapshot batch.
+      // Ini memperbaiki bug approve koreksi nama/no_rm/kelas/bed/kamar
+      // yang sebelumnya tidak mengubah apa-apa.
+      const oldRm =
+        normRevisiVal(dataLama.no_rm) || normRevisiVal(patient?.no_rm);
+      const newRm =
+        normRevisiVal(dataBaru.no_rm) || normRevisiVal(patient?.no_rm) || oldRm;
+
+      const pasienPatch: Partial<typeof pasienTable.$inferInsert> = {};
+      const snapshotPatch: Partial<typeof snapshotDetailTable.$inferInsert> =
+        {};
+
+      if (
+        normRevisiVal(dataBaru.diet) &&
+        isRevisiChanged(patient?.diet, dataBaru.diet)
+      ) {
+        pasienPatch.diet = normRevisiVal(dataBaru.diet);
+        snapshotPatch.diet_rs_raw = normRevisiVal(dataBaru.diet);
+      }
+      if (
+        dataBaru.is_npo !== undefined &&
+        Boolean(patient?.is_npo) !== Boolean(dataBaru.is_npo)
+      ) {
+        pasienPatch.is_npo = Boolean(dataBaru.is_npo);
+      }
+      const statusBaru = normRevisiVal(dataBaru.status_pasien);
+      if (
+        statusBaru &&
+        statusBaru.toUpperCase() !== 'PENDING_REVISI' &&
+        isRevisiChanged(patient?.status_pasien, statusBaru)
+      ) {
+        pasienPatch.status_pasien = statusBaru;
+      }
+      applyIdentityPatch(pasienPatch, dataBaru, patient);
+      // Cerminkan koreksi identitas + lokasi ke snapshot (mapping kolom beda nama)
+      if (pasienPatch.nama_pasien !== undefined)
+        snapshotPatch.nama_pasien = pasienPatch.nama_pasien;
+      if (pasienPatch.no_rm !== undefined)
+        snapshotPatch.no_rm = pasienPatch.no_rm;
+      if (pasienPatch.kelas !== undefined)
+        snapshotPatch.kelas = pasienPatch.kelas;
+      if (pasienPatch.gedung !== undefined)
+        snapshotPatch.gedung = pasienPatch.gedung;
+      if (pasienPatch.ruangan !== undefined)
+        snapshotPatch.ruangan = pasienPatch.ruangan;
+      if (pasienPatch.bed !== undefined)
+        snapshotPatch.no_bed = pasienPatch.bed;
+
+      if (Object.keys(pasienPatch).length > 0) {
+        pasienPatch.updated_at = new Date();
         await db
-          .update(snapshotDetailTable)
-          .set({
-            diet_rs_raw:
-              dataBaru.diet ||
-              (revisi.jenis_perubahan === 'NPO' ? 'NPO' : undefined),
-            status_saat_snapshot:
-              revisi.jenis_perubahan === 'NPO' ? 'NPO' : 'AKTIF',
-            is_printed: false,
-          })
-          .where(
-            and(
-              eq(snapshotDetailTable.batch_id, revisi.batch_id),
-              eq(snapshotDetailTable.no_rm, targetNoRm),
-            ),
-          );
+          .update(pasienTable)
+          .set(pasienPatch)
+          .where(eq(pasienTable.id, revisi.pasien_id));
       }
 
-      // Apply new diet to master pasien table
-      await db
-        .update(pasienTable)
-        .set({
-          diet:
-            dataBaru.diet ||
-            (revisi.jenis_perubahan === 'NPO' ? 'NPO' : undefined),
-          is_npo:
-            revisi.jenis_perubahan === 'NPO' ? true : Boolean(dataBaru.is_npo),
-          status_pasien:
-            revisi.jenis_perubahan === 'NPO'
-              ? 'NPO'
-              : dataBaru.status_pasien || 'AKTIF',
-          updated_at: new Date(),
-        })
-        .where(eq(pasienTable.id, revisi.pasien_id));
-    } else if (revisi.jenis_perubahan === 'ROOM_TRANSFER') {
-      const targetNoRm = dataBaru.no_rm || patient?.no_rm;
-      if (revisi.batch_id && targetNoRm) {
-        await db
-          .update(snapshotDetailTable)
-          .set({
-            gedung: dataBaru.gedung || undefined,
-            ruangan: dataBaru.ruangan || undefined,
-            no_bed: dataBaru.bed || undefined,
-            is_printed: false,
-          })
-          .where(
-            and(
-              eq(snapshotDetailTable.batch_id, revisi.batch_id),
-              eq(snapshotDetailTable.no_rm, targetNoRm),
-            ),
-          );
+      if (revisi.batch_id && Object.keys(snapshotPatch).length > 0) {
+        // Cari baris snapshot via No RM LAMA dulu (key bisa ikut terkoreksi),
+        // fallback ke No RM baru untuk kompatibilitas data lama.
+        const lookupRms = oldRm ? [oldRm] : [];
+        if (newRm && newRm.toLowerCase() !== oldRm.toLowerCase())
+          lookupRms.push(newRm);
+        for (const rm of lookupRms) {
+          const result = await db
+            .update(snapshotDetailTable)
+            .set({ ...snapshotPatch, is_printed: false })
+            .where(
+              and(
+                eq(snapshotDetailTable.batch_id, revisi.batch_id),
+                eq(snapshotDetailTable.no_rm, rm),
+              ),
+            );
+          void result;
+          // Lanjut ke RM berikutnya bila No RM ikut berubah (pindahkan key),
+          // agar tidak ada baris yatim dengan No RM lama.
+          if (snapshotPatch.no_rm === undefined) break;
+        }
       }
-
-      // Apply new room to master pasien table
-      await db
-        .update(pasienTable)
-        .set({
-          gedung: dataBaru.gedung || undefined,
-          ruangan: dataBaru.ruangan || undefined,
-          bed: dataBaru.bed || undefined,
-          updated_at: new Date(),
-        })
-        .where(eq(pasienTable.id, revisi.pasien_id));
     } else if (revisi.jenis_perubahan === 'DISCHARGE') {
       const targetNoRm = dataBaru.no_rm || patient?.no_rm;
       if (revisi.batch_id && targetNoRm) {

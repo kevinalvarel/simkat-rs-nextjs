@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useForm, Controller, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { mappingDietFormSchema, type MappingDietFormValues } from '@/lib/mapping-diet-schema';
-import { hasFormFoodMapping, selectBentukMakanan } from '@/lib/mapping-diet-fields';
+import { hasFormFoodMapping, selectBentukMakanan, getTugasKateringCodes, isBentukTugasKatering } from '@/lib/mapping-diet-fields';
 import type {
   UnmappedDietItem,
   KategoriMenuOption,
@@ -23,7 +23,7 @@ import {
   Edit,
   Save,
   Sparkles,
-  Info,
+  Send,
 } from 'lucide-react';
 import { SelectField, KATEGORI_LABEL } from './ui/SelectField';
 import MappingDietConfirmDialog from './MappingDietConfirmDialog';
@@ -114,6 +114,12 @@ export default function MappingDietEditDialog({
     [options],
   );
 
+  // Kode bentuk yang berflag tugas AG Katering → otomatis masuk Live Katering
+  const tugasKateringCodes = useMemo(
+    () => getTugasKateringCodes(options),
+    [options],
+  );
+
   const {
     control,
     handleSubmit,
@@ -163,11 +169,6 @@ export default function MappingDietEditDialog({
       item.kategori_diet === 'NPO' ||
       item.diet_rs_raw.trim().toUpperCase() === 'NPO';
 
-    const isKatering =
-      item.status_mapping === 'KATERING' ||
-      item.bentuk_makanan === 'KATERING' ||
-      item.kategori_diet === 'KATERING';
-
     if (isNpo) {
       reset({
         mode: 'NPO',
@@ -177,16 +178,6 @@ export default function MappingDietEditDialog({
         sayur: 'NPO',
         buah: 'NPO',
         snack: 'NPO',
-      });
-    } else if (isKatering) {
-      reset({
-        mode: 'KATERING',
-        bentukMakanan: 'KATERING',
-        hewani: 'KATERING',
-        nabati: '',
-        sayur: '',
-        buah: '',
-        snack: '',
       });
     } else {
       reset({
@@ -230,7 +221,6 @@ export default function MappingDietEditDialog({
       const res = await saveDietMapping({
         diet_rs_raw: item.diet_rs_raw,
         mode: mode,
-        status_mapping: mode === 'KATERING' ? 'KATERING' : undefined,
         bentuk_makanan: bentukMakanan || null,
         kategori_diet: hewani || null,
         nabati: nabati || null,
@@ -261,6 +251,7 @@ export default function MappingDietEditDialog({
   if (!item) return null;
 
   const isFormIncomplete = mode === 'STANDARD' && !hasFormFoodMapping({ bentukMakanan, hewani, nabati, sayur, buah, snack });
+  const isTugasKatering = isBentukTugasKatering(bentukMakanan, tugasKateringCodes);
 
   return (
     <>
@@ -290,7 +281,8 @@ export default function MappingDietEditDialog({
               Edit Mapping Diet Pasien
             </DialogTitle>
             <DialogDescription className='text-xs text-muted-foreground'>
-              Isi minimal satu kategori menu, pilih NPO, atau alihkan ke Live Katering.
+              Isi minimal satu kategori menu atau pilih NPO. Bentuk makanan
+              berflag tugas AG Katering otomatis masuk Live Katering.
             </DialogDescription>
           </DialogHeader>
 
@@ -325,12 +317,13 @@ export default function MappingDietEditDialog({
                 </div>
               )}
 
-              {mode === 'KATERING' && (
+              {isTugasKatering && (
                 <div className='flex items-start gap-2.5 p-3 rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-500/10 text-blue-900 dark:text-blue-200 text-xs'>
-                  <Info className='w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5' />
+                  <Send className='w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5' />
                   <p>
-                    <strong>Mode Alihkan ke AG Katering Aktif:</strong> Diet ini
-                    dialihkan langsung ke halaman <strong>Live Katering (/overview/katering)</strong>.
+                    <strong>Bentuk ini tugas AG Katering:</strong> diet akan
+                    otomatis masuk halaman <strong>Live Katering (/overview/katering)</strong>{' '}
+                    dan tidak diproduksi di dapur umum.
                   </p>
                 </div>
               )}
@@ -481,6 +474,7 @@ export default function MappingDietEditDialog({
           buah,
           snack,
         }}
+        isTugasKatering={isTugasKatering}
         jumlahPasien={item.jumlah_pasien}
         isSubmitting={isSubmitting}
         onConfirm={handleFinalSave}

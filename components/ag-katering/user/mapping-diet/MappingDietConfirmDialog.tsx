@@ -26,7 +26,7 @@ export interface MappingDietConfirmDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   diet_rs_raw: string;
-  mode: 'STANDARD' | 'NPO' | 'KATERING';
+  mode: 'STANDARD' | 'NPO';
   values?: {
     bentukMakanan: string;
     hewani: string;
@@ -35,10 +35,16 @@ export interface MappingDietConfirmDialogProps {
     buah: string;
     snack: string;
   };
+  /** True bila bentuk terpilih berflag tugas AG Katering (→ Live Katering). */
+  isTugasKatering?: boolean;
   items?: ReadyDietRow[];
   jumlahPasien?: number;
   isSubmitting: boolean;
   onConfirm: () => void;
+}
+
+function isLegacyKateringValue(value: string | undefined): boolean {
+  return (value || '').trim().toUpperCase() === 'KATERING';
 }
 
 export default function MappingDietConfirmDialog({
@@ -54,6 +60,7 @@ export default function MappingDietConfirmDialog({
     buah: '',
     snack: '',
   },
+  isTugasKatering = false,
   items,
   jumlahPasien = 0,
   isSubmitting,
@@ -80,9 +87,9 @@ export default function MappingDietConfirmDialog({
               <Badge className='bg-purple-600 hover:bg-purple-700 text-white text-[10px] font-bold'>
                 NPO / PUASA
               </Badge>
-            ) : mode === 'KATERING' ? (
+            ) : isTugasKatering ? (
               <Badge className='bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-bold'>
-                ALIHKAN KE AG KATERING
+                TUGAS AG KATERING
               </Badge>
             ) : (
               <Badge variant='secondary' className='text-[10px] font-bold'>
@@ -149,7 +156,7 @@ export default function MappingDietConfirmDialog({
                       <Badge className='text-[10px] bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300'>
                         NPO
                       </Badge>
-                    ) : it.mode === 'KATERING' || it.bentukMakanan === 'KATERING' ? (
+                    ) : it.isTugasKatering || isLegacyKateringValue(it.bentukMakanan) || isLegacyKateringValue(it.hewani) ? (
                       <Badge className='text-[10px] bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'>
                         AG KATERING
                       </Badge>
@@ -182,14 +189,16 @@ export default function MappingDietConfirmDialog({
             </div>
           )}
 
-          {!isMulti && mode === 'KATERING' && (
+          {!isMulti && mode === 'STANDARD' && isTugasKatering && (
             <div className='p-3.5 rounded-xl border border-blue-300 dark:border-blue-800 bg-blue-500/10 text-blue-950 dark:text-blue-200 space-y-1.5'>
               <div className='flex items-center gap-2 font-bold text-xs text-blue-800 dark:text-blue-300'>
                 <Send className='w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0' />
-                <span>Dialihkan ke AG Katering (Bukan Produksi Dapur Umum)</span>
+                <span>Otomatis masuk Live Katering (Tugas AG Katering)</span>
               </div>
               <p className='text-[11px] leading-relaxed text-blue-900/90 dark:text-blue-200/90'>
-                Diet ini (misal <em>Bubur Saring, Sonde, dll.</em>) tidak masuk ke alur masak produksi harian dapur umum, melainkan langsung diteruskan ke halaman <strong>Live Katering (/overview/katering)</strong> menggunakan raw text aslinya.
+                Bentuk makanan <strong className='font-mono'>{values.bentukMakanan}</strong> berflag
+                tugas AG Katering — diet ini tidak masuk dapur produksi umum, melainkan
+                diteruskan ke halaman <strong>Live Katering (/overview/katering)</strong>.
               </p>
             </div>
           )}

@@ -2,6 +2,7 @@
 
 import React from 'react';
 import type { RiwayatDietItem } from '@/servers/riwayat-diet.service';
+import { revisionTypeLabel } from '@/lib/revisi-etiket';
 import {
   Table,
   TableHeader,
@@ -113,6 +114,11 @@ export function RiwayatDietTable({ items, onSelectDetail }: RiwayatDietTableProp
                 jenisBadge = { label: 'Pasien Pulang', variant: 'destructive' };
               } else if (item.jenis_perubahan === 'ROOM_TRANSFER') {
                 jenisBadge = { label: 'Pindah Ruangan', variant: 'outline' };
+              } else if (item.jenis_perubahan.startsWith('KOREKSI_')) {
+                jenisBadge = {
+                  label: revisionTypeLabel(item.jenis_perubahan),
+                  variant: 'secondary',
+                };
               }
 
               return (

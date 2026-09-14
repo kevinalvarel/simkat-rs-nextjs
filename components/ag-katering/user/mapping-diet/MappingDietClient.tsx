@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { listenProductionUpdate } from '@/lib/realtime-sync';
+import { getTugasKateringCodes, isBentukTugasKatering, isLegacyKateringMapping } from '@/lib/mapping-diet-fields';
 import MappingDietStats from './MappingDietStats';
 import MappingDietFilterBar from './MappingDietFilterBar';
 import MappingDietTable from './MappingDietTable';
@@ -65,6 +66,12 @@ export default function MappingDietClient({
     [initialMappedItems],
   );
 
+  // Kode bentuk yang berflag tugas AG Katering → otomatis masuk Live Katering
+  const tugasKateringCodes = useMemo(
+    () => getTugasKateringCodes(options),
+    [options],
+  );
+
   function handleRefresh() {
     setIsRefreshing(true);
     router.refresh();
@@ -111,8 +118,7 @@ export default function MappingDietClient({
   const filteredItems = useMemo(() => {
     const sourceList = activeTab === 'UNMAPPED' ? unmappedList : mappedList;
 
-    return sourceList.filter((item) => {
-      // 1. Search Query Filter
+    return sourceList.filter((item) => {      // 1. Search Query Filter
       if (
         searchQuery.trim() !== '' &&
         !item.diet_rs_raw.toLowerCase().includes(searchQuery.toLowerCase())
@@ -134,9 +140,8 @@ export default function MappingDietClient({
             item.diet_rs_raw.trim().toUpperCase() === 'NPO';
 
           const isKatering =
-            item.status_mapping === 'KATERING' ||
-            item.bentuk_makanan === 'KATERING' ||
-            item.kategori_diet === 'KATERING';
+            isLegacyKateringMapping(item) ||
+            isBentukTugasKatering(item.bentuk_makanan, tugasKateringCodes);
 
           if (selectedStatus === 'NPO' && !isNpo) return false;
           if (selectedStatus === 'KATERING' && !isKatering) return false;
@@ -146,7 +151,7 @@ export default function MappingDietClient({
       }
       return true;
     });
-  }, [activeTab, unmappedList, mappedList, searchQuery, selectedStatus]);
+  }, [activeTab, unmappedList, mappedList, searchQuery, selectedStatus, tugasKateringCodes]);
 
   function handleToggleSelect(raw: string) {
     setSelectedRaws((prev) =>
@@ -180,8 +185,9 @@ export default function MappingDietClient({
             </span>
           </div>
           <p className='text-xs sm:text-sm text-muted-foreground'>
-            Petakan diet free-text dari RS ke standar kategori katering,
-            otomatisasi NPO, atau alihkan ke Live Katering.
+            Petakan diet free-text dari RS ke standar kategori katering atau
+            otomatisasi NPO. Bentuk makanan berflag tugas AG Katering otomatis
+            masuk Live Katering.
           </p>
         </div>
 
@@ -224,10 +230,10 @@ export default function MappingDietClient({
             Diet tulis bebas oleh dokter/perawat (<em>free-text RS</em>) perlu
             dipetakan agar etiket makanan dan porsi produksi tercetak akurat.
             Jika raw text berstatus <strong>NPO</strong>, seluruh kriteria
-            otomatis terisi NPO. Jika dipilih{' '}
-            <strong>Alihkan ke AG Katering</strong> (misal Bubur Saring, Sonde),
+            otomatis terisi NPO. Jika bentuk makanan yang dipilih berflag{' '}
+            <strong>tugas AG Katering</strong> (diatur di Konfigurasi Menu),
             diet tidak masuk ke dapur produksi umum, melainkan langsung
-            dialihkan ke halaman Live Katering.
+            diteruskan ke halaman Live Katering.
           </span>
         </div>
       </div>

@@ -7,6 +7,11 @@ test('only revisions with a replacement meal label are printable', () => {
   assert.equal(canPrintRevision('DIET_CHANGE'), true);
   assert.equal(canPrintRevision('ROOM_TRANSFER'), true);
   assert.equal(canPrintRevision('NEW_PATIENT'), true);
+  assert.equal(canPrintRevision('KOREKSI_NAMA'), true);
+  assert.equal(canPrintRevision('KOREKSI_NO_RM'), true);
+  assert.equal(canPrintRevision('KOREKSI_KELAS'), true);
+  assert.equal(canPrintRevision('KOREKSI_KAMAR'), true);
+  assert.equal(canPrintRevision('KOREKSI_BED'), true);
   assert.equal(canPrintRevision('NPO'), false);
   assert.equal(canPrintRevision('DISCHARGE'), false);
 });
@@ -17,6 +22,11 @@ test('revision labels use Indonesian without changing stored codes', () => {
   assert.equal(revisionTypeLabel('NEW_PATIENT'), 'Pasien Baru');
   assert.equal(revisionTypeLabel('DISCHARGE'), 'Pasien Pulang');
   assert.equal(revisionTypeLabel('NPO'), 'Puasa');
+  assert.equal(revisionTypeLabel('KOREKSI_NAMA'), 'Koreksi Nama');
+  assert.equal(revisionTypeLabel('KOREKSI_NO_RM'), 'Koreksi No RM');
+  assert.equal(revisionTypeLabel('KOREKSI_KELAS'), 'Koreksi Kelas');
+  assert.equal(revisionTypeLabel('KOREKSI_KAMAR'), 'Koreksi No Kamar');
+  assert.equal(revisionTypeLabel('KOREKSI_BED'), 'Koreksi Bed');
 });
 
 test('a later patient change gets a new print version even if diet returns to an earlier value', () => {
