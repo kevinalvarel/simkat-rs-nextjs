@@ -6,6 +6,7 @@ import type {
   KategoriMenuOption,
   MappingDietStats as MappingDietStatsType,
 } from '@/servers/mapping-diet.service';
+import type { SiklusDietOption } from '@/servers/siklus-menu.service';
 import { Button } from '@/components/ui/button';
 import {
   RefreshCw,
@@ -29,6 +30,7 @@ interface MappingDietClientProps {
   initialMappedItems?: UnmappedDietItem[];
   initialItems?: UnmappedDietItem[]; // fallback
   options: KategoriMenuOption[];
+  siklusDietOptions?: SiklusDietOption[];
   stats: MappingDietStatsType;
 }
 
@@ -37,6 +39,7 @@ export default function MappingDietClient({
   initialMappedItems = [],
   initialItems,
   options,
+  siklusDietOptions = [],
   stats,
 }: MappingDietClientProps) {
   const router = useRouter();
@@ -338,6 +341,7 @@ export default function MappingDietClient({
         items={filteredItems}
         allItems={activeTab === 'UNMAPPED' ? unmappedList : mappedList}
         options={options}
+        siklusDietOptions={siklusDietOptions}
         selectedRaws={selectedRaws}
         onToggleSelect={handleToggleSelect}
         onToggleSelectAll={handleToggleSelectAll}
@@ -352,6 +356,7 @@ export default function MappingDietClient({
         onOpenChange={setIsEditOpen}
         item={editingItem}
         options={options}
+        siklusDietOptions={siklusDietOptions}
         onSuccess={handleRefresh}
       />
 
@@ -359,6 +364,7 @@ export default function MappingDietClient({
       <MappingDietBulkDialog
         selectedRaws={selectedRaws}
         options={options}
+        siklusDietOptions={siklusDietOptions}
         open={isBulkOpen}
         onOpenChange={setIsBulkOpen}
         onSuccess={() => {

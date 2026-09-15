@@ -284,9 +284,12 @@ export default function KonfigurasiSiklusMenuClient({
         const matchKategori = (item.kategori_menu || '')
           .toLowerCase()
           .includes(q);
+        const matchGabungan = (item.nama_diet_gabungan || '')
+          .toLowerCase()
+          .includes(q);
         const matchKelas = item.kelas.toLowerCase().includes(q);
         const matchCatatan = (item.catatan || '').toLowerCase().includes(q);
-        return matchNama || matchKategori || matchKelas || matchCatatan;
+        return matchNama || matchKategori || matchGabungan || matchKelas || matchCatatan;
       }
 
       return true;
@@ -339,6 +342,7 @@ export default function KonfigurasiSiklusMenuClient({
         'Waktu Makan': item.waktu_makan,
         'Nama Hidangan': item.nama_makanan,
         'Kategori Menu / Diet': item.kategori_menu || '-',
+        'Nama Diet Gabungan': item.nama_diet_gabungan || '-',
         Catatan: item.catatan || '-',
         Urutan: item.urutan,
       }));

@@ -1,3 +1,6 @@
+import type { SiklusDietOption } from '@/servers/siklus-menu.service';
+import type { KategoriMenuOption } from '@/servers/mapping-diet.service';
+
 export const FOOD_FIELDS = [
   'bentuk_makanan',
   'kategori_diet',
@@ -107,4 +110,27 @@ export function isLegacyKateringMapping(item: {
     has(item.bentuk_makanan) ||
     has(item.kategori_diet)
   );
+}
+
+// ─── Opsi mapping diet dari data siklus menu ────────────────────────────────
+
+/**
+ * Ubah opsi diet siklus menjadi bentuk KategoriMenuOption untuk satu jenis
+ * makanan (HEWANI | NABATI | SAYUR | BUAH | SNACK) agar kompatibel dengan
+ * SelectField / CategorySelectCell yang sudah ada.
+ */
+export function siklusDietOptionsForKind(
+  siklusOptions: SiklusDietOption[],
+  kind: string,
+): KategoriMenuOption[] {
+  return siklusOptions
+    .filter((o) => o.jenisMakanan === kind)
+    .map((o, idx) => ({
+      id: 1_000_000 + idx,
+      namaKategori: o.jenisMakanan,
+      kodeItem: o.kode,
+      labelItem: o.label,
+      urutan: idx,
+      isTugasAgKatering: false,
+    }));
 }

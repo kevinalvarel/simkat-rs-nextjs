@@ -1,0 +1,1 @@
+ALTER TABLE "master_siklus_menu" ADD COLUMN IF NOT EXISTS "nama_diet_gabungan" text;

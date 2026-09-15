@@ -329,6 +329,8 @@ function resolveSupplementDishes(
       const matched = candidates.find((item) =>
         extractCodes(item.kategori_menu).some((tag) => tag.toUpperCase() === code),
       ) || candidates.find((item) =>
+        (item.nama_diet_gabungan || '').trim().toUpperCase() === code,
+      ) || candidates.find((item) =>
         extractCodes(item.kategori_menu).some((tag) =>
           dietCodes.some((dietCode) => dietCode.toUpperCase() === tag.toUpperCase()),
         ),
@@ -384,6 +386,13 @@ function resolvePatientMainDishes(
 
     if (candidates.length > 0) {
       const exactMatch = candidates.find((dish) => {
+        const combinedName = (dish.nama_diet_gabungan || '').trim();
+        if (
+          combinedName &&
+          targetCodes.some((kc) => kc.toUpperCase() === combinedName.toUpperCase())
+        ) {
+          return true;
+        }
         if (!dish.kategori_menu) return false;
         const dishTags = extractCodes(dish.kategori_menu);
         return targetCodes.some((kc) =>

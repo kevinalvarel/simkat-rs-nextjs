@@ -186,6 +186,7 @@ export interface ConsolidableMenuItem {
   waktu_makan: string;
   nama_makanan: string;
   kategori_menu?: string | null;
+  nama_diet_gabungan?: string | null;
   catatan?: string | null;
   urutan?: number | null;
   is_active?: boolean | null;

@@ -4,8 +4,9 @@ import React, { useState, useMemo } from 'react';
 import { useForm, Controller, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { mappingDietFormSchema, type MappingDietFormValues } from '@/lib/mapping-diet-schema';
-import { hasFormFoodMapping, selectBentukMakanan, getTugasKateringCodes, isBentukTugasKatering } from '@/lib/mapping-diet-fields';
+import { hasFormFoodMapping, selectBentukMakanan, getTugasKateringCodes, isBentukTugasKatering, siklusDietOptionsForKind } from '@/lib/mapping-diet-fields';
 import type { KategoriMenuOption } from '@/servers/mapping-diet.service';
+import type { SiklusDietOption } from '@/servers/siklus-menu.service';
 import {
   Dialog,
   DialogContent,
@@ -27,6 +28,7 @@ import MappingDietConfirmDialog from './MappingDietConfirmDialog';
 interface MappingDietBulkDialogProps {
   selectedRaws: string[];
   options: KategoriMenuOption[];
+  siklusDietOptions?: SiklusDietOption[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
@@ -37,6 +39,7 @@ type MappingBulkValues = MappingDietFormValues;
 export default function MappingDietBulkDialog({
   selectedRaws,
   options,
+  siklusDietOptions = [],
   open,
   onOpenChange,
   onSuccess,
@@ -45,6 +48,7 @@ export default function MappingDietBulkDialog({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Group options strictly from DB kategori_menu table
+  // Bentuk makanan tetap dari Konfigurasi Menu; hewani–snack dari siklus menu.
   const karboOptions = useMemo(
     () =>
       options.filter(
@@ -55,56 +59,28 @@ export default function MappingDietBulkDialog({
   );
 
   const hewaniOptions = useMemo(
-    () =>
-      options.filter(
-        (o) => o.namaKategori === 'HEWANI' || o.namaKategori === 'DIIT',
-      ),
-    [options],
+    () => siklusDietOptionsForKind(siklusDietOptions, 'HEWANI'),
+    [siklusDietOptions],
   );
 
-  const nabatiOptions = useMemo(() => {
-    const list = [
-      ...options.filter(
-        (o) =>
-          o.namaKategori === 'NABATI' ||
-          o.namaKategori === 'DIIT' ||
-          o.namaKategori === 'EXTRA' ||
-          o.kodeItem === 'B',
-      ),
-    ];
-    const seen = new Set<string>();
-    return list.filter((o) => {
-      if (seen.has(o.kodeItem)) return false;
-      seen.add(o.kodeItem);
-      return true;
-    });
-  }, [options]);
+  const nabatiOptions = useMemo(
+    () => siklusDietOptionsForKind(siklusDietOptions, 'NABATI'),
+    [siklusDietOptions],
+  );
 
-  const sayurOptions = useMemo(() => {
-    const list = [
-      ...options.filter(
-        (o) =>
-          o.namaKategori === 'SAYUR' ||
-          o.namaKategori === 'DIIT' ||
-          o.kodeItem === 'B',
-      ),
-    ];
-    const seen = new Set<string>();
-    return list.filter((o) => {
-      if (seen.has(o.kodeItem)) return false;
-      seen.add(o.kodeItem);
-      return true;
-    });
-  }, [options]);
+  const sayurOptions = useMemo(
+    () => siklusDietOptionsForKind(siklusDietOptions, 'SAYUR'),
+    [siklusDietOptions],
+  );
 
   const buahOptions = useMemo(
-    () => options.filter((o) => o.namaKategori === 'BUAH'),
-    [options],
+    () => siklusDietOptionsForKind(siklusDietOptions, 'BUAH'),
+    [siklusDietOptions],
   );
 
   const snackOptions = useMemo(
-    () => options.filter((o) => o.namaKategori === 'SNACK'),
-    [options],
+    () => siklusDietOptionsForKind(siklusDietOptions, 'SNACK'),
+    [siklusDietOptions],
   );
 
   // Kode bentuk yang berflag tugas AG Katering → otomatis masuk Live Katering

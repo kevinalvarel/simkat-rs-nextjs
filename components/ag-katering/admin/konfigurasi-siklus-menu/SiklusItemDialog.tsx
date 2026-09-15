@@ -28,6 +28,8 @@ import {
   getMenuTagOptions,
   normalizeMenuTags,
   parseMenuTags,
+  needsCombinedDietName,
+  COMBINED_DIET_NAME_REQUIRED_MESSAGE,
   type MenuTagOption,
 } from '@/lib/siklus-menu-tags';
 import type {
@@ -85,12 +87,24 @@ const ItemSchema = z.object({
   waktu_makan: z.string().min(1, 'Waktu makan wajib dipilih.'),
   nama_makanan: z.string().min(2, 'Nama makanan minimal 2 karakter.'),
   kategori_menu: z.string().optional().nullable(),
+  nama_diet_gabungan: z.string().optional().nullable(),
   catatan: z.string().optional().nullable(),
   urutan: z.number().min(0, 'Urutan minimal 0.'),
 }).refine(
   (value) => value.jenis_makanan !== 'BUAH' || ['PAGI', 'SIANG'].includes(value.waktu_makan),
   { path: ['waktu_makan'], message: 'Buah hanya tersedia untuk Pagi dan Siang.' },
-);
+).superRefine((value, ctx) => {
+  if (
+    needsCombinedDietName(value.kategori_menu) &&
+    !(value.nama_diet_gabungan || '').trim()
+  ) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['nama_diet_gabungan'],
+      message: COMBINED_DIET_NAME_REQUIRED_MESSAGE,
+    });
+  }
+});
 
 type ItemFormValues = z.infer<typeof ItemSchema>;
 
@@ -136,6 +150,7 @@ export default function SiklusItemDialog({
       waktu_makan: 'PAGI',
       nama_makanan: '',
       kategori_menu: '',
+      nama_diet_gabungan: '',
       catatan: '',
       urutan: 1,
     },
@@ -145,6 +160,7 @@ export default function SiklusItemDialog({
   const selectedJenis = useWatch({ control, name: 'jenis_makanan' });
   const selectedWaktu = useWatch({ control, name: 'waktu_makan' });
   const currentTags = parseMenuTags(selectedTagsString);
+  const showCombinedDietName = needsCombinedDietName(selectedTagsString);
   const availableTags = getMenuTagOptions(dietOptions, selectedJenis);
   const { invalid: invalidTags } = normalizeMenuTags(selectedTagsString, availableTags);
 
@@ -158,6 +174,7 @@ export default function SiklusItemDialog({
           waktu_makan: itemToEdit.waktu_makan,
           nama_makanan: itemToEdit.nama_makanan,
           kategori_menu: itemToEdit.kategori_menu || '',
+          nama_diet_gabungan: itemToEdit.nama_diet_gabungan || '',
           catatan: itemToEdit.catatan || '',
           urutan: itemToEdit.urutan,
         });
@@ -169,6 +186,7 @@ export default function SiklusItemDialog({
           waktu_makan: defaultSlot?.waktu_makan ?? 'PAGI',
           nama_makanan: '',
           kategori_menu: '',
+          nama_diet_gabungan: '',
           catatan: '',
           urutan: 1,
         });
@@ -183,14 +201,22 @@ export default function SiklusItemDialog({
     } else {
       nextTags = [...currentTags, tag];
     }
-    setValue('kategori_menu', nextTags.join(', '), { shouldDirty: true, shouldValidate: true });
+    const nextValue = nextTags.join(', ');
+    setValue('kategori_menu', nextValue, { shouldDirty: true, shouldValidate: true });
+    if (!needsCombinedDietName(nextValue)) {
+      setValue('nama_diet_gabungan', '', { shouldDirty: true, shouldValidate: true });
+    }
   }
 
   function handleRemoveTag(tag: string) {
-    setValue('kategori_menu', currentTags.filter((current) => current !== tag).join(', '), {
+    const nextValue = currentTags.filter((current) => current !== tag).join(', ');
+    setValue('kategori_menu', nextValue, {
       shouldDirty: true,
       shouldValidate: true,
     });
+    if (!needsCombinedDietName(nextValue)) {
+      setValue('nama_diet_gabungan', '', { shouldDirty: true, shouldValidate: true });
+    }
   }
 
   async function onSubmit(data: ItemFormValues) {
@@ -351,8 +377,12 @@ export default function SiklusItemDialog({
                       if (!val || val === field.value) return;
                       const nextOptions = getMenuTagOptions(dietOptions, val);
                       const retained = normalizeMenuTags(selectedTagsString, nextOptions).codes;
+                      const retainedValue = retained.join(', ');
                       field.onChange(val);
-                      setValue('kategori_menu', retained.join(', '), { shouldDirty: true, shouldValidate: true });
+                      setValue('kategori_menu', retainedValue, { shouldDirty: true, shouldValidate: true });
+                      if (!needsCombinedDietName(retainedValue)) {
+                        setValue('nama_diet_gabungan', '', { shouldDirty: true, shouldValidate: true });
+                      }
                       if (val === 'BUAH' && selectedWaktu !== 'PAGI' && selectedWaktu !== 'SIANG') {
                         setValue('waktu_makan', 'PAGI', { shouldDirty: true, shouldValidate: true });
                       }
@@ -448,6 +478,29 @@ export default function SiklusItemDialog({
               Kode tersimpan: {selectedTagsString || 'Tanpa tag'}
             </p>
           </div>
+
+          {/* Nama Diet Gabungan — wajib jika >1 tag */}
+          {showCombinedDietName && (
+            <div className='space-y-1.5 bg-primary/5 p-3 rounded-xl border border-primary/30'>
+              <Label className='text-xs font-semibold'>
+                Nama Diet Gabungan <span className='text-rose-500'>*</span>
+              </Label>
+              <Input
+                {...register('nama_diet_gabungan')}
+                placeholder='contoh: Diit DM + RG, Kombinasi Jantung + Rendah Garam'
+                className='h-9 text-xs bg-background'
+              />
+              {errors.nama_diet_gabungan ? (
+                <p className='text-[11px] text-destructive'>
+                  {errors.nama_diet_gabungan.message}
+                </p>
+              ) : (
+                <p className='text-[11px] text-muted-foreground'>
+                  Kamu memilih {currentTags.length} tag ({selectedTagsString}), berikan satu nama diet gabungan untuk hidangan ini.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Catatan Khusus & Urutan */}
           <div className='grid grid-cols-3 gap-3'>

@@ -972,12 +972,13 @@ function buildSupplementResult(
     for (const code of new Set(codes)) {
       const tagged = candidates.find((item) => (item.kategori_menu || '').toUpperCase()
         .split(/[,;/]+/).map((tag) => tag.trim()).includes(code));
+      const combinedMatched = candidates.find((item) => (item.nama_diet_gabungan || '').trim().toUpperCase() === code);
       const dietMatched = candidates.find((item) => (item.kategori_menu || '').toUpperCase()
         .split(/[,;/\s+]+/).some((tag) => tag !== 'B' && dietTokens.has(tag)));
       const generic = candidates.find((item) => !item.kategori_menu?.trim() ||
         (!/DM|RG|RP|RS|DJ|RL|TKTP/.test(patient.diet_rs_raw.toUpperCase()) &&
           item.kategori_menu.trim().toUpperCase() === 'B'));
-      const item = tagged || dietMatched || generic;
+      const item = tagged || combinedMatched || dietMatched || generic;
       const rowId = item ? `${kindLabel}-${item.id}-${code}` : `missing-${kindLabel}-${slot}-${code}`;
       const category = item ? `${kind} ${slot}` : `${kind} ${slot} - BELUM DIATUR`;
       const existing = rows.get(rowId) || {

@@ -48,3 +48,20 @@ export function normalizeMenuTags(
 
   return { codes, invalid };
 }
+
+export const COMBINED_DIET_NAME_REQUIRED_MESSAGE =
+  'Kamu memilih lebih dari 1 tag, maka berikan Nama Diet Gabungan';
+
+/**
+ * True jika nilai tag (CSV) memuat lebih dari 1 tag unik —
+ * dalam kondisi ini Nama Diet Gabungan wajib diisi.
+ */
+export function needsCombinedDietName(
+  value: string | null | undefined,
+): boolean {
+  const seen = new Set<string>();
+  for (const tag of parseMenuTags(value)) {
+    seen.add(tag.toUpperCase());
+  }
+  return seen.size > 1;
+}
