@@ -6,11 +6,11 @@ import type {
   RiwayatDietStats,
   GiziRsUser,
   SimplePatientOption,
-} from '@/servers/riwayat-diet.service';
+} from '@/servers/riwayat-history.service';
 import {
   getRiwayatDietPasienList,
   getRiwayatDietStats,
-} from '@/servers/riwayat-diet.service';
+} from '@/servers/riwayat-history.service';
 import { toast } from 'sonner';
 import { LayoutList, GitCommit, ShieldCheck } from 'lucide-react';
 
@@ -262,6 +262,9 @@ export default function RiwayatDietClient({
           <span>
             Menampilkan <strong className='text-foreground'>{filteredItems.length}</strong> dari{' '}
             {items.length} riwayat perubahan
+            <span className='ml-1.5 rounded-full bg-amber-500/10 px-2 py-0.5 font-medium text-amber-700 dark:text-amber-400'>
+              Auto-hapus setelah 2 snapshot
+            </span>
           </span>
         </div>
 

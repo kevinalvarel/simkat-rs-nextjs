@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import type { GiziRsUser } from '@/servers/riwayat-diet.service';
+import type { GiziRsUser } from '@/servers/riwayat-history.service';
 import { Input } from '@/components/ui/input';
 import {
   Select,

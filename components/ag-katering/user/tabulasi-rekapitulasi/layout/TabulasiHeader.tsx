@@ -18,7 +18,7 @@ import {
 import type { TabulasiHospitalData } from '@/types/tabulasitypes';
 
 interface TabulasiHeaderProps {
-  mode?: 'makan' | 'snack';
+  mode?: 'makan' | 'snack' | 'buah';
   hospitalData: TabulasiHospitalData;
   selectedDate: string;
   onDateChange: (date: string) => void;
@@ -49,7 +49,8 @@ export default function TabulasiHeader({
     { key: 'Siang', label: 'Siang', icon: Sun },
     { key: 'Malam', label: 'Malam', icon: Moon },
   ];
-  const visibleMeals = mode === 'snack' ? mealOptions.slice(0, 2) : mealOptions;
+  const visibleMeals = mode === 'snack' || mode === 'buah' ? mealOptions.slice(0, 2) : mealOptions;
+  const titleLabel = mode === 'snack' ? 'Snack & Buah' : mode === 'buah' ? 'Buah' : 'Makan';
 
   return (
     <div className='flex flex-col gap-4 bg-card border border-border/80 rounded-2xl p-4 sm:p-6 shadow-xs transition-all no-print'>
@@ -62,7 +63,7 @@ export default function TabulasiHeader({
               <Layers className='w-5 h-5' />
             </div>
             <h1 className='text-xl sm:text-2xl font-extrabold tracking-tight text-foreground font-sans'>
-              Tabulasi Rekapitulasi Porsi {mode === 'snack' ? 'Snack' : 'Makan'}
+              Tabulasi Rekapitulasi Porsi {titleLabel}
             </h1>
 
             <Badge
@@ -83,8 +84,8 @@ export default function TabulasiHeader({
             </span>
           </div>
           <p className='text-xs text-muted-foreground max-w-2xl leading-relaxed'>
-            Rekapitulasi porsi {mode === 'snack' ? 'snack dari mapping diet' : 'makanan pasien'} per gedung
-            berdasarkan siklus menu aktif dan jadwal {mode === 'snack' ? 'snack' : 'makan'} untuk{' '}
+            Rekapitulasi porsi {mode === 'snack' ? 'snack & buah dari mapping diet' : mode === 'buah' ? 'buah dari mapping diet' : 'makanan pasien'} per gedung
+            berdasarkan siklus menu aktif dan jadwal {mode === 'makan' ? 'makan' : mode === 'buah' ? 'buah' : 'snack & buah'} untuk{' '}
             <strong className='text-foreground'>
               {hospitalData.tanggalFormatted}
             </strong>
@@ -179,7 +180,7 @@ export default function TabulasiHeader({
         {/* Right: Meal Selector Chips */}
         <div className='flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 no-scrollbar'>
           <span className='text-xs font-medium text-muted-foreground mr-1 hidden lg:inline'>
-            {mode === 'snack' ? 'Waktu Snack:' : 'Waktu Makan:'}
+            {mode === 'snack' ? 'Waktu Snack / Buah:' : mode === 'buah' ? 'Waktu Buah:' : 'Waktu Makan:'}
           </span>
           {visibleMeals.map((opt) => {
             const Icon = opt.icon;

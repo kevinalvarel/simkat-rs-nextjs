@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import type { RiwayatDietItem } from '@/servers/riwayat-diet.service';
+import type { RiwayatDietItem } from '@/servers/riwayat-history.service';
 import { revisionTypeLabel } from '@/lib/revisi-etiket';
 import {
   Table,

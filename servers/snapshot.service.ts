@@ -377,9 +377,20 @@ export async function triggerManualSnapshot(
       await db.insert(snapshotDetailTable).values(snapshotDetails);
     }
 
+    // Retensi history: hapus permanen riwayat yang sudah melewati 2 snapshot global.
+    try {
+      const { pruneExpiredRiwayatHistory } = await import(
+        './riwayat-history.service'
+      );
+      await pruneExpiredRiwayatHistory();
+    } catch (pruneError) {
+      console.error('Error pruning riwayat history after snapshot:', pruneError);
+    }
+
     if (!skipRevalidate) {
       try {
         revalidatePath('/dashboard/ag-katering/admin/status-snapshot');
+        revalidatePath('/dashboard/ag-katering/admin/riwayat');
         revalidatePath('/dashboard/ag-rs');
         revalidatePath('/dashboard/ag-katering/overview');
         revalidatePath('/dashboard/ag-katering/overview/produksi');

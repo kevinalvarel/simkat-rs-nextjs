@@ -59,7 +59,7 @@ export const routeDataProduksi = {
           url: '/dashboard/ag-katering/tabulasi-makan',
         },
         {
-          title: 'Tabulasi Snack',
+          title: 'Tabulasi Snack & Buah',
           url: '/dashboard/ag-katering/tabulasi-snack',
         },
       ],
@@ -124,7 +124,7 @@ export const routeDataSupervisor = {
           url: '/dashboard/ag-katering/tabulasi-makan',
         },
         {
-          title: 'Tabulasi Snack',
+          title: 'Tabulasi Snack & Buah',
           url: '/dashboard/ag-katering/tabulasi-snack',
         },
       ],

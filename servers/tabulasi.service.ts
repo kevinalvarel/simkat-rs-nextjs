@@ -908,8 +908,138 @@ export async function getTabulasiDashboardData(
   }
 }
 
-/** Snack portions come from the patient's mapped snack field, not meal dish totals. */
-export async function getTabulasiSnackData(
+/** Supplement kind for snack/buah tabulation (sumber porsi dari field mapping, bukan total hidangan). */
+export type TabulasiSupplementKind = 'SNACK' | 'BUAH';
+
+function buildSupplementResult(
+  base: TabulasiDashboardData,
+  patientRecords: TabulasiPatientRecord[],
+  mappings: Array<typeof dietMappingTable.$inferSelect>,
+  cycleItems: Array<MasterMenuItemRow>,
+  roomBuildingMap: Map<string, 'GEDUNG LAMA' | 'GEDUNG BARU'>,
+  snapshotById: Map<number, string | null>,
+  kind: TabulasiSupplementKind,
+  slot: 'PAGI' | 'SIANG',
+): TabulasiDashboardData {
+  const mappingByDiet = new Map(mappings
+    .filter((mapping) => mapping.status_mapping === 'MAPPED')
+    .map((mapping) => [mapping.diet_rs_raw.trim().toLowerCase(), mapping]));
+  const supplementMenu = cycleItems.filter((item) =>
+    item.jenis_makanan.toUpperCase() === kind &&
+    item.waktu_makan.toUpperCase() === slot,
+  );
+  const rows = new Map<string, TabulasiHospitalItem>();
+  const servedPatients = new Set<string>();
+  let specialDietCount = 0;
+  const kindLabel = kind === 'SNACK' ? 'snack' : 'buah';
+
+  for (const patient of patientRecords) {
+    const mapping = mappingByDiet.get(patient.diet_rs_raw.trim().toLowerCase());
+    if (isNpoPatient({ ...patient, bentuk_makanan: patient.bentuk_makanan || mapping?.bentuk_makanan,
+      kategori_diet: patient.kategori_diet || mapping?.kategori_diet })) continue;
+    const rawSupplement = typeof patient.id === 'number' && snapshotById.has(patient.id)
+      ? snapshotById.get(patient.id)
+      : (kind === 'SNACK' ? mapping?.snack : mapping?.buah);
+    const codes = (rawSupplement || '').split(/[,;/]+/).map((code) => code.trim().toUpperCase())
+      .filter((code) => code && !['-', 'NON', 'TIDAK', 'NPO', 'PUASA'].includes(code))
+      .filter((code) => {
+        if (kind !== 'SNACK') return true;
+        if (code === 'SNACK_PAGI') return slot === 'PAGI';
+        if (code === 'SNACK_SIANG' || code === 'SNACK_SORE') return slot === 'SIANG';
+        return true;
+      });
+    if (codes.length === 0) continue;
+
+    const patientClass = normalizeKelas(patient.kelas);
+    const dietTokens = new Set((`${patient.diet_rs_raw},${mapping?.kategori_diet || patient.kategori_diet || ''}`)
+      .toUpperCase().split(/[,;/\s+]+/).filter(Boolean));
+    const candidates = supplementMenu.filter((item) => {
+      const itemClass = (item.kelas || '').toUpperCase();
+      if (itemClass.includes('VIP')) return patientClass === 'VIP';
+      if (itemClass.includes('SEMUA') || itemClass === 'ALL' || !itemClass) return true;
+      if (itemClass === 'I' || itemClass.includes('KELAS 1')) return patientClass === 'KELAS_1' || patientClass === 'VIP';
+      return patientClass === 'KELAS_2_3';
+    }).sort((a, b) => {
+      const score = (item: MasterMenuItemRow) => {
+        const itemClass = item.kelas.toUpperCase();
+        if (itemClass.includes('SEMUA') || itemClass === 'ALL') return 2;
+        if (patientClass === 'VIP' && !itemClass.includes('VIP')) return 1;
+        return 0;
+      };
+      return score(a) - score(b);
+    });
+
+    for (const code of new Set(codes)) {
+      const tagged = candidates.find((item) => (item.kategori_menu || '').toUpperCase()
+        .split(/[,;/]+/).map((tag) => tag.trim()).includes(code));
+      const dietMatched = candidates.find((item) => (item.kategori_menu || '').toUpperCase()
+        .split(/[,;/\s+]+/).some((tag) => tag !== 'B' && dietTokens.has(tag)));
+      const generic = candidates.find((item) => !item.kategori_menu?.trim() ||
+        (!/DM|RG|RP|RS|DJ|RL|TKTP/.test(patient.diet_rs_raw.toUpperCase()) &&
+          item.kategori_menu.trim().toUpperCase() === 'B'));
+      const item = tagged || dietMatched || generic;
+      const rowId = item ? `${kindLabel}-${item.id}-${code}` : `missing-${kindLabel}-${slot}-${code}`;
+      const category = item ? `${kind} ${slot}` : `${kind} ${slot} - BELUM DIATUR`;
+      const existing = rows.get(rowId) || {
+        id: rowId,
+        kategori: category,
+        nama_menu: item?.nama_makanan?.trim() || (cycleItems.length === 0
+          ? `Siklus menu belum diatur; nama hidangan ${kindLabel} belum tersedia`
+          : `Hidangan ${kindLabel} belum diatur pada ${base.hospitalData.siklusNama} (${slot.toLowerCase()})`),
+        kode_diet: code,
+        porsi_gedung_lama: 0,
+        porsi_gedung_baru: 0,
+        total_porsi: 0,
+        catatan: item?.catatan || undefined,
+      };
+      if (resolvePatientBuilding(patient, roomBuildingMap) === 'GEDUNG BARU') existing.porsi_gedung_baru++;
+      else existing.porsi_gedung_lama++;
+      existing.total_porsi++;
+      rows.set(rowId, existing);
+    }
+    servedPatients.add(String(patient.id));
+    if (patient.diet_rs_raw.toUpperCase().match(/DM|RG|RP|RS|DJ|RL|TKTP/)) specialDietCount++;
+  }
+
+  const groupsMap = new Map<string, TabulasiHospitalItem[]>();
+  for (const row of rows.values()) {
+    const group = groupsMap.get(row.kategori) || [];
+    group.push(row);
+    groupsMap.set(row.kategori, group);
+  }
+  const categoryGroups: TabulasiHospitalCategoryGroup[] = [...groupsMap].map(([kategori, items]) => ({
+    kategori,
+    items,
+    subtotalGedungLama: items.reduce((sum, item) => sum + item.porsi_gedung_lama, 0),
+    subtotalGedungBaru: items.reduce((sum, item) => sum + item.porsi_gedung_baru, 0),
+    subtotalSemua: items.reduce((sum, item) => sum + item.total_porsi, 0),
+  }));
+  const allItems = categoryGroups.flatMap((group) => group.items);
+  const totalGedungLama = allItems.reduce((sum, item) => sum + item.porsi_gedung_lama, 0);
+  const totalGedungBaru = allItems.reduce((sum, item) => sum + item.porsi_gedung_baru, 0);
+  const totalPortions = totalGedungLama + totalGedungBaru;
+
+  return {
+    ...base,
+    summary: { ...base.summary, patientsEating: servedPatients.size, specialDiet: specialDietCount, totalPortions },
+    snackSummary: {
+      categories: categoryGroups.map((group) => ({ category: group.kategori, portions: group.subtotalSemua,
+        percentage: totalPortions ? Math.round(group.subtotalSemua / totalPortions * 100) : 0,
+        diets: [...new Set(group.items.map((item) => item.kode_diet))] })),
+      items: allItems.map((item) => ({ name: item.nama_menu, diet: item.kode_diet, count: item.total_porsi })),
+      gedungLamaCount: totalGedungLama,
+      gedungBaruCount: totalGedungBaru,
+      totalPortions,
+    },
+    hospitalData: { ...base.hospitalData, waktuMakan: slot, grandTotalPorsi: totalPortions,
+      totalGedungLama, totalGedungBaru, totalPasienMakan: servedPatients.size,
+      totalDietKhusus: specialDietCount, categoryGroups, allItems },
+  };
+}
+
+/** Supplement portions come from the patient's mapped snack/buah field, not meal dish totals. */
+export async function getTabulasiSupplementData(
+  kind: TabulasiSupplementKind,
   selectedDate?: string,
   slot: 'PAGI' | 'SIANG' = 'PAGI',
 ): Promise<TabulasiDashboardData> {
@@ -926,126 +1056,73 @@ export async function getTabulasiSnackData(
         eq(masterSiklusMenuTable.is_active, true),
       )).orderBy(asc(masterSiklusMenuTable.urutan)),
       buildRoomBuildingMap(),
-      base.batch ? db.select({ id: snapshotDetailTable.id, snack: snapshotDetailTable.snack })
+      base.batch ? db.select({ id: snapshotDetailTable.id, snack: snapshotDetailTable.snack, buah: snapshotDetailTable.buah })
         .from(snapshotDetailTable).where(eq(snapshotDetailTable.batch_id, base.batch.id)) : Promise.resolve([]),
     ]);
-    const snapshotSnackById = new Map(snapshotDetails.map((detail) => [detail.id, detail.snack]));
+    const snapshotById = new Map(snapshotDetails.map((detail) => [detail.id,
+      kind === 'SNACK' ? detail.snack : detail.buah]));
+    return buildSupplementResult(base, patientRecords, mappings, cycleItems,
+      roomBuildingMap, snapshotById, kind, slot);
+  } catch (error) {
+    console.error(`Error in getTabulasiSupplementData (${kind}):`, error);
+    return { ...base, success: false, hospitalData: { ...base.hospitalData, categoryGroups: [], allItems: [] } };
+  }
+}
 
-    const mappingByDiet = new Map(mappings
-      .filter((mapping) => mapping.status_mapping === 'MAPPED')
-      .map((mapping) => [mapping.diet_rs_raw.trim().toLowerCase(), mapping]));
-    const snackMenu = cycleItems.filter((item) =>
-      item.jenis_makanan.toUpperCase() === 'SNACK' &&
-      item.waktu_makan.toUpperCase() === slot,
-    );
-    const rows = new Map<string, TabulasiHospitalItem>();
-    const servedPatients = new Set<string>();
-    let specialDietCount = 0;
+/** Snack portions come from the patient's mapped snack field, not meal dish totals. */
+export async function getTabulasiSnackData(
+  selectedDate?: string,
+  slot: 'PAGI' | 'SIANG' = 'PAGI',
+): Promise<TabulasiDashboardData> {
+  return getTabulasiSupplementData('SNACK', selectedDate, slot);
+}
 
-    for (const patient of patientRecords) {
-      const mapping = mappingByDiet.get(patient.diet_rs_raw.trim().toLowerCase());
-      if (isNpoPatient({ ...patient, bentuk_makanan: patient.bentuk_makanan || mapping?.bentuk_makanan,
-        kategori_diet: patient.kategori_diet || mapping?.kategori_diet })) continue;
-      const rawSnack = typeof patient.id === 'number' && snapshotSnackById.has(patient.id)
-        ? snapshotSnackById.get(patient.id)
-        : mapping?.snack;
-      const codes = (rawSnack || '').split(/[,;/]+/).map((code) => code.trim().toUpperCase())
-        .filter((code) => code && !['-', 'NON', 'TIDAK', 'NPO', 'PUASA'].includes(code))
-        .filter((code) => {
-          if (code === 'SNACK_PAGI') return slot === 'PAGI';
-          if (code === 'SNACK_SIANG' || code === 'SNACK_SORE') return slot === 'SIANG';
-          return true;
-        });
-      if (codes.length === 0) continue;
+/** Buah portions come from the patient's mapped buah field, not meal dish totals. */
+export async function getTabulasiBuahData(
+  selectedDate?: string,
+  slot: 'PAGI' | 'SIANG' = 'PAGI',
+): Promise<TabulasiDashboardData> {
+  return getTabulasiSupplementData('BUAH', selectedDate, slot);
+}
 
-      const patientClass = normalizeKelas(patient.kelas);
-      const dietTokens = new Set((`${patient.diet_rs_raw},${mapping?.kategori_diet || patient.kategori_diet || ''}`)
-        .toUpperCase().split(/[,;/\s+]+/).filter(Boolean));
-      const candidates = snackMenu.filter((item) => {
-        const itemClass = (item.kelas || '').toUpperCase();
-        if (itemClass.includes('VIP')) return patientClass === 'VIP';
-        if (itemClass.includes('SEMUA') || itemClass === 'ALL' || !itemClass) return true;
-        if (itemClass === 'I' || itemClass.includes('KELAS 1')) return patientClass === 'KELAS_1' || patientClass === 'VIP';
-        return patientClass === 'KELAS_2_3';
-      }).sort((a, b) => {
-        const score = (item: MasterMenuItemRow) => {
-          const itemClass = item.kelas.toUpperCase();
-          if (itemClass.includes('SEMUA') || itemClass === 'ALL') return 2;
-          if (patientClass === 'VIP' && !itemClass.includes('VIP')) return 1;
-          return 0;
-        };
-        return score(a) - score(b);
-      });
+/**
+ * Fetch snack & buah tabulation in one round-trip (shared base query).
+ * Filter tanggal & slot PAGI/SIANG berlaku untuk keduanya.
+ */
+export async function getTabulasiSnackBuahData(
+  selectedDate?: string,
+  slot: 'PAGI' | 'SIANG' = 'PAGI',
+): Promise<{ snack: TabulasiDashboardData; buah: TabulasiDashboardData }> {
+  const targetDate = selectedDate || new Date().toISOString().slice(0, 10);
+  const base = await getTabulasiDashboardData(undefined, targetDate, slot);
+  if (!base.success) {
+    const empty = { ...base, hospitalData: { ...base.hospitalData, waktuMakan: slot } };
+    return { snack: empty, buah: empty };
+  }
 
-      for (const code of new Set(codes)) {
-        const tagged = candidates.find((item) => (item.kategori_menu || '').toUpperCase()
-          .split(/[,;/]+/).map((tag) => tag.trim()).includes(code));
-        const dietMatched = candidates.find((item) => (item.kategori_menu || '').toUpperCase()
-          .split(/[,;/\s+]+/).some((tag) => tag !== 'B' && dietTokens.has(tag)));
-        const generic = candidates.find((item) => !item.kategori_menu?.trim() ||
-          (!/DM|RG|RP|RS|DJ|RL|TKTP/.test(patient.diet_rs_raw.toUpperCase()) &&
-            item.kategori_menu.trim().toUpperCase() === 'B'));
-        const item = tagged || dietMatched || generic;
-        const rowId = item ? `snack-${item.id}-${code}` : `missing-${slot}-${code}`;
-        const category = item ? `SNACK ${slot}` : `SNACK ${slot} - BELUM DIATUR`;
-        const existing = rows.get(rowId) || {
-          id: rowId,
-          kategori: category,
-          nama_menu: item?.nama_makanan?.trim() || (cycleItems.length === 0
-            ? 'Siklus menu belum diatur; nama hidangan snack belum tersedia'
-            : `Hidangan snack belum diatur pada ${base.hospitalData.siklusNama} (${slot.toLowerCase()})`),
-          kode_diet: code,
-          porsi_gedung_lama: 0,
-          porsi_gedung_baru: 0,
-          total_porsi: 0,
-          catatan: item?.catatan || undefined,
-        };
-        if (resolvePatientBuilding(patient, roomBuildingMap) === 'GEDUNG BARU') existing.porsi_gedung_baru++;
-        else existing.porsi_gedung_lama++;
-        existing.total_porsi++;
-        rows.set(rowId, existing);
-      }
-      servedPatients.add(String(patient.id));
-      if (patient.diet_rs_raw.toUpperCase().match(/DM|RG|RP|RS|DJ|RL|TKTP/)) specialDietCount++;
-    }
-
-    const groupsMap = new Map<string, TabulasiHospitalItem[]>();
-    for (const row of rows.values()) {
-      const group = groupsMap.get(row.kategori) || [];
-      group.push(row);
-      groupsMap.set(row.kategori, group);
-    }
-    const categoryGroups: TabulasiHospitalCategoryGroup[] = [...groupsMap].map(([kategori, items]) => ({
-      kategori,
-      items,
-      subtotalGedungLama: items.reduce((sum, item) => sum + item.porsi_gedung_lama, 0),
-      subtotalGedungBaru: items.reduce((sum, item) => sum + item.porsi_gedung_baru, 0),
-      subtotalSemua: items.reduce((sum, item) => sum + item.total_porsi, 0),
-    }));
-    const allItems = categoryGroups.flatMap((group) => group.items);
-    const totalGedungLama = allItems.reduce((sum, item) => sum + item.porsi_gedung_lama, 0);
-    const totalGedungBaru = allItems.reduce((sum, item) => sum + item.porsi_gedung_baru, 0);
-    const totalPortions = totalGedungLama + totalGedungBaru;
-
+  try {
+    const { patientRecords } = await resolveTabulasiPatients(base.batch, targetDate, slot);
+    const [mappings, cycleItems, roomBuildingMap, snapshotDetails] = await Promise.all([
+      db.select().from(dietMappingTable).where(eq(dietMappingTable.is_active, true)),
+      db.select().from(masterSiklusMenuTable).where(and(
+        eq(masterSiklusMenuTable.siklus_ke, base.hospitalData.siklusNomor),
+        eq(masterSiklusMenuTable.is_active, true),
+      )).orderBy(asc(masterSiklusMenuTable.urutan)),
+      buildRoomBuildingMap(),
+      base.batch ? db.select({ id: snapshotDetailTable.id, snack: snapshotDetailTable.snack, buah: snapshotDetailTable.buah })
+        .from(snapshotDetailTable).where(eq(snapshotDetailTable.batch_id, base.batch.id)) : Promise.resolve([]),
+    ]);
+    const snackById = new Map(snapshotDetails.map((detail) => [detail.id, detail.snack]));
+    const buahById = new Map(snapshotDetails.map((detail) => [detail.id, detail.buah]));
     return {
-      ...base,
-      summary: { ...base.summary, patientsEating: servedPatients.size, specialDiet: specialDietCount, totalPortions },
-      snackSummary: {
-        categories: categoryGroups.map((group) => ({ category: group.kategori, portions: group.subtotalSemua,
-          percentage: totalPortions ? Math.round(group.subtotalSemua / totalPortions * 100) : 0,
-          diets: [...new Set(group.items.map((item) => item.kode_diet))] })),
-        items: allItems.map((item) => ({ name: item.nama_menu, diet: item.kode_diet, count: item.total_porsi })),
-        gedungLamaCount: totalGedungLama,
-        gedungBaruCount: totalGedungBaru,
-        totalPortions,
-      },
-      hospitalData: { ...base.hospitalData, waktuMakan: slot, grandTotalPorsi: totalPortions,
-        totalGedungLama, totalGedungBaru, totalPasienMakan: servedPatients.size,
-        totalDietKhusus: specialDietCount, categoryGroups, allItems },
+      snack: buildSupplementResult(base, patientRecords, mappings, cycleItems, roomBuildingMap, snackById, 'SNACK', slot),
+      buah: buildSupplementResult(base, patientRecords, mappings, cycleItems, roomBuildingMap, buahById, 'BUAH', slot),
     };
   } catch (error) {
-    console.error('Error in getTabulasiSnackData:', error);
-    return { ...base, success: false, hospitalData: { ...base.hospitalData, categoryGroups: [], allItems: [] } };
+    console.error('Error in getTabulasiSnackBuahData:', error);
+    const failed = { ...base, success: false,
+      hospitalData: { ...base.hospitalData, categoryGroups: [], allItems: [] } };
+    return { snack: failed, buah: failed };
   }
 }
 

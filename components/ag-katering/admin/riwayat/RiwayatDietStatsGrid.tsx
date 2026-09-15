@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import type { RiwayatDietStats } from '@/servers/riwayat-diet.service';
+import type { RiwayatDietStats } from '@/servers/riwayat-history.service';
 import { Card, CardContent } from '@/components/ui/card';
 import { History, Users, Utensils, AlertTriangle } from 'lucide-react';
 

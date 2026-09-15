@@ -5,7 +5,7 @@ import {
   getRiwayatDietStats,
   getGiziRsUsers,
   getActivePatientsForRiwayat,
-} from '@/servers/riwayat-diet.service';
+} from '@/servers/riwayat-history.service';
 import RiwayatDietClient from '@/components/ag-katering/admin/riwayat/RiwayatDietClient';
 
 export const metadata: Metadata = {

@@ -434,12 +434,12 @@ export default function PindahRuanganDialog({
                 {bedOptions.map((b) => {
                   const occupant = occupiedBedLabels.has(normLoc(b))
                     ? getBedOccupantName(
-                        patients,
-                        targetRuangan,
-                        targetKamar,
-                        b,
-                        movingId,
-                      )
+                      patients,
+                      targetRuangan,
+                      targetKamar,
+                      b,
+                      movingId,
+                    )
                     : null;
                   return (
                     <SelectItem key={b} value={b} disabled={Boolean(occupant)}>

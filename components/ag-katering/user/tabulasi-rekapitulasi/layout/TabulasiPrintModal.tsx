@@ -18,7 +18,7 @@ interface TabulasiPrintModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   hospitalData: TabulasiHospitalData;
-  mode?: 'makan' | 'snack';
+  mode?: 'makan' | 'snack' | 'buah';
 }
 
 export default function TabulasiPrintModal({
@@ -31,7 +31,7 @@ export default function TabulasiPrintModal({
 
   const handlePrint = useReactToPrint({
     contentRef: printRef,
-    documentTitle: `Tabulasi_Kebutuhan_${mode === 'snack' ? 'Snack' : 'Makanan'}_RS_${hospitalData.waktuMakan}_${hospitalData.tanggal}`,
+    documentTitle: `Tabulasi_Kebutuhan_${mode === 'snack' ? 'Snack' : mode === 'buah' ? 'Buah' : 'Makanan'}_RS_${hospitalData.waktuMakan}_${hospitalData.tanggal}`,
     pageStyle: `
       @page {
         size: A4 landscape;
@@ -69,7 +69,7 @@ export default function TabulasiPrintModal({
             <div className='space-y-1 text-left'>
               <DialogTitle className='text-base sm:text-lg font-bold text-foreground flex items-center gap-2'>
                 <Printer className='w-5 h-5 text-primary' />
-                Cetak Lembar Tabulasi Porsi {mode === 'snack' ? 'Snack' : 'Makanan'} Pasien (Gedung Lama & Gedung
+                Cetak Lembar Tabulasi Porsi {mode === 'snack' ? 'Snack' : mode === 'buah' ? 'Buah' : 'Makanan'} Pasien (Gedung Lama & Gedung
                 Baru)
               </DialogTitle>
               <DialogDescription className='text-xs text-muted-foreground'>
@@ -124,14 +124,14 @@ export default function TabulasiPrintModal({
             {/* Document Title & Meta */}
             <div className='text-center space-y-1'>
               <h1 className='text-sm font-extrabold underline uppercase tracking-wide'>
-                TABULASI KEBUTUHAN {mode === 'snack' ? 'SNACK' : 'MAKANAN'} PASIEN
+                TABULASI KEBUTUHAN {mode === 'snack' ? 'SNACK' : mode === 'buah' ? 'BUAH' : 'MAKANAN'} PASIEN
               </h1>
               <div className='flex justify-between items-center text-[11px] font-bold px-2 pt-1'>
                 <span>
                   HARI / TANGGAL: {hospitalData.tanggalFormatted.toUpperCase()}
                 </span>
                 <span>
-                  WAKTU {mode === 'snack' ? 'SNACK' : 'MAKAN'}: {hospitalData.waktuMakan.toUpperCase()}
+                  WAKTU {mode === 'snack' ? 'SNACK' : mode === 'buah' ? 'BUAH' : 'MAKAN'}: {hospitalData.waktuMakan.toUpperCase()}
                 </span>
                 <span>
                   SIKLUS MENU: {hospitalData.siklusNama.toUpperCase()}
@@ -271,7 +271,7 @@ export default function TabulasiPrintModal({
             {/* Grand Total Highlight */}
             <div className='flex justify-between items-center bg-gray-100 border border-black p-2 text-xs font-bold'>
               <span>
-                REKAPITULASI: {hospitalData.totalPasienMakan} Pasien {mode === 'snack' ? 'Terlayani' : 'Makan'} •{' '}
+                REKAPITULASI: {hospitalData.totalPasienMakan} Pasien {mode === 'makan' ? 'Makan' : 'Terlayani'} •{' '}
                 {hospitalData.totalDietKhusus} Diet Khusus / TKTP
               </span>
               <span className='font-extrabold text-sm'>

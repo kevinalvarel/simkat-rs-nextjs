@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import type { GiziRsUser, SimplePatientOption } from '@/servers/riwayat-diet.service';
-import { createRiwayatDietLog } from '@/servers/riwayat-diet.service';
+import type { GiziRsUser, SimplePatientOption } from '@/servers/riwayat-history.service';
+import { createRiwayatDietLog } from '@/servers/riwayat-history.service';
 import type { WaktuMakanType, JenisPerubahanType } from '@/servers/revisi-snapshot.service';
 import {
   Dialog,
@@ -92,9 +92,20 @@ export function LogDietChangeModal({
 
     setIsSubmitting(true);
     try {
-      const pId = selectedPatientId ? parseInt(selectedPatientId, 10) : Math.floor(Math.random() * 100) + 1;
+      // pasien_id boleh NULL untuk input manual — disimpan sebagai snapshot
+      // denormalisasi di tabel history khusus (tidak lagi pakai id acak).
+      const selectedPatient = selectedPatientId
+        ? patients.find((pat) => pat.id.toString() === selectedPatientId)
+        : undefined;
+      const pId = selectedPatient ? selectedPatient.id : null;
       const res = await createRiwayatDietLog({
         pasien_id: pId,
+        nama_pasien: namaPasien.trim(),
+        no_rm: noRm.trim() || undefined,
+        gedung: selectedPatient?.gedung,
+        ruangan,
+        bed,
+        kelas,
         waktu_makan: waktuMakan,
         jenis_perubahan: jenisPerubahan,
         data_lama: { diet: dietLama, ruangan, bed, kelas, nama_pasien: namaPasien, no_rm: noRm },

@@ -112,7 +112,7 @@ export default function TabulasiExportModal({
                   Spreadsheet Excel Standar (.xlsx)
                 </h4>
                 <p className="text-[11px] text-muted-foreground">
-                  Format matriks tabel lengkap sesuai lembar fisik: Rekap Pasien, Menu Gedung Lama/Baru, dan Tabulasi Snack.
+                  Format matriks tabel lengkap sesuai lembar fisik: Rekap Pasien, Menu Gedung Lama/Baru, dan Tabulasi Snack & Buah.
                 </p>
               </div>
             </div>
