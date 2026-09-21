@@ -16,10 +16,11 @@ import {
 // INTERNAL HELPERS (not exported — avoids 'use server' restriction)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/** Normalize kelas name for price lookup: returns '1', '2', or '3' */
+/** Normalisasi kanonis untuk lookup harga: '1' | '2' | '3' (legacy VIP -> '1') */
 function normalizeKelasForPrice(kelas: string): '1' | '2' | '3' {
   const u = (kelas || '').trim().toUpperCase();
-  if (u.includes('VIP') || u.includes('1') || u === 'I') return '1';
+  if (u.includes('2') && u.includes('3')) return '2';
+  if (u.includes('1') || u === 'I' || u.includes('VIP')) return '1';
   if (u.includes('2') || u === 'II') return '2';
   return '3';
 }
@@ -42,14 +43,13 @@ function getHargaSatuan(
   return config.makanPasienKelas3;
 }
 
-/** Map kelas name to display type for Faktur Penjualan */
+/** Map ke label faktur kanonis KELAS I/II/III */
 function formatKelasType(kelas: string): string {
   const u = (kelas || '').trim().toUpperCase();
-  if (u.includes('VIP')) return 'Kelas I';
-  if (u.includes('1') || u === 'I') return 'Kelas I';
-  if (u.includes('2') && u.includes('3')) return 'Kelas II';
-  if (u.includes('2') || u === 'II') return 'Kelas II';
-  return 'Kelas III';
+  if (u.includes('2') && u.includes('3')) return 'KELAS II';
+  if (u.includes('1') || u === 'I' || u.includes('VIP')) return 'KELAS I';
+  if (u.includes('2') || u === 'II') return 'KELAS II';
+  return 'KELAS III';
 }
 
 /**
@@ -66,13 +66,10 @@ function buildLineItems(
   const items: SalesInvoiceLineItem[] = [];
   let no = 1;
 
-  const classOrder = ['Kelas 1', 'VIP', 'Kelas 2', 'Kelas 3', 'Kelas 2 - 3'];
-
-  const sortedClasses = [...summary.classes].sort((a, b) => {
-    const idxA = classOrder.indexOf(a.kelas);
-    const idxB = classOrder.indexOf(b.kelas);
-    return (idxA === -1 ? 99 : idxA) - (idxB === -1 ? 99 : idxB);
-  });
+  // Urutan mengikuti kelas sistem (summary.classes sudah terurut dari invoice.service)
+  const sortedClasses = [...summary.classes].sort((a, b) =>
+    a.kelas.localeCompare(b.kelas),
+  );
 
   for (const cls of sortedClasses) {
     let tktpCount = 0;

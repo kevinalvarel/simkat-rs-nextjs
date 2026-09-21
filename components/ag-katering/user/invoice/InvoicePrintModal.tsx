@@ -34,35 +34,11 @@ interface InvoicePrintModalProps {
   data: InvoiceDailySummary;
 }
 
-// Order priority for standard room classes in RSUD dr. Slamet Garut
-const KELAS_SORT_ORDER: Record<string, number> = {
-  VIP: 1,
-  I: 2,
-  'KELAS 1': 2,
-  'KELAS I': 2,
-  II: 3,
-  'KELAS 2': 3,
-  'KELAS II': 3,
-  III: 4,
-  'KELAS 3': 4,
-  'KELAS III': 4,
-};
+import { getKelasSortWeight, normalizeKelasName } from '@/lib/kelas-utils';
 
-/**
- * Normalizes class room label:
- * - VIP stays VIP
- * - Kelas 1 / Kelas I -> I
- * - Kelas 2 / Kelas II -> II
- * - Kelas 3 / Kelas III -> III
- */
+/** Label tampil apa adanya dari sistem (kanonis KELAS I/II/III) */
 function formatKelasDisplay(rawKelas: string): string {
-  const k = (rawKelas || '').trim();
-  const u = k.toUpperCase();
-  if (u === 'KELAS 1' || u === 'KELAS I' || u === '1') return 'I';
-  if (u === 'KELAS 2' || u === 'KELAS II' || u === '2') return 'II';
-  if (u === 'KELAS 3' || u === 'KELAS III' || u === '3') return 'III';
-  if (u === 'VIP') return 'VIP';
-  return k;
+  return normalizeKelasName(rawKelas, (rawKelas || '').trim());
 }
 
 function formatTanggalIndo(dateStr?: string): string {
@@ -293,12 +269,13 @@ export default function InvoicePrintModal({
     const isPerSnap = Boolean(summary.isPerSnapshot);
     const dateFormatted = formatTanggalIndo(summary.tanggal);
 
-    // Dynamic classes from database: exclude any duplicate TKTP class, preserve VIP and others
+    // Kelas murni dari sistem (DB): urutan mengikuti daftar kelas summary
+    const kelasOrder = summary.classes.map((c) => c.kelas);
     const dynamicClasses = summary.classes
       .filter((c) => !c.kelas.toUpperCase().includes('TKTP'))
       .sort((a, b) => {
-        const orderA = KELAS_SORT_ORDER[formatKelasDisplay(a.kelas)] || 99;
-        const orderB = KELAS_SORT_ORDER[formatKelasDisplay(b.kelas)] || 99;
+        const orderA = getKelasSortWeight(a.kelas, kelasOrder);
+        const orderB = getKelasSortWeight(b.kelas, kelasOrder);
         if (orderA !== orderB) return orderA - orderB;
         return a.kelas.localeCompare(b.kelas);
       });
@@ -471,7 +448,7 @@ export default function InvoicePrintModal({
                     <td className='border border-black px-2 py-1'></td>
                   </tr>
 
-                  {/* Dynamic Class Rows (VIP, I, II, III, etc.) */}
+                  {/* Dynamic Class Rows dari sistem */}
                   {mg.classRows.map((cr) => (
                     <tr key={cr.rawKelas}>
                       <td className='border border-black px-2 py-1'></td>

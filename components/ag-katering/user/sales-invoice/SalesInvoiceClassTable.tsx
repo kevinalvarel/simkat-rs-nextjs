@@ -21,24 +21,10 @@ interface SalesInvoiceClassTableProps {
   data: SalesInvoiceSummary;
 }
 
-const KELAS_BADGE_STYLE: Record<string, string> = {
-  'KELAS I':
-    'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/30',
-  'KELAS II':
-    'bg-teal-500/10 text-teal-700 dark:text-teal-300 border-teal-500/30',
-  'KELAS III':
-    'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30',
-};
+import { getKelasBadgeStyle } from '@/lib/kelas-utils';
 
 function formatCurrency(n: number): string {
   return 'Rp ' + n.toLocaleString('id-ID');
-}
-
-function getKelasBadgeStyle(type: string): string {
-  return (
-    KELAS_BADGE_STYLE[type.toUpperCase()] ||
-    'bg-gray-500/10 text-gray-700 dark:text-gray-300 border-gray-500/30'
-  );
 }
 
 export default function SalesInvoiceClassTable({
@@ -268,10 +254,7 @@ export default function SalesInvoiceClassTable({
                     <TableCell className='text-xs'>
                       <Badge
                         variant='outline'
-                        className={`text-[10px] font-bold ${
-                          KELAS_BADGE_STYLE[cls.kelas.toUpperCase()] ||
-                          'bg-gray-500/10 text-gray-700 dark:text-gray-300 border-gray-500/30'
-                        }`}
+                        className={`text-[10px] font-bold ${getKelasBadgeStyle(cls.kelas, data.classes.map((c) => c.kelas))}`}
                       >
                         {cls.kelas}
                       </Badge>

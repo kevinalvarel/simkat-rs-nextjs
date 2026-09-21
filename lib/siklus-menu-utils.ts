@@ -258,3 +258,58 @@ export function consolidateSlotMenuItems<T extends ConsolidableMenuItem>(items: 
 
   return mergedItems;
 }
+
+/**
+ * Formats a Date into local YYYY-MM-DD key (used for calendar badge lookup).
+ * Uses local time (not UTC) so it matches what the user sees in the calendar.
+ */
+export function toISODateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Returns the active cycle number for a given date, or null if it cannot
+ * be resolved (e.g. empty master list). Safe wrapper around
+ * resolveActiveCycleForDate for calendar badge usage.
+ */
+export function getCycleNumForDate(
+  date: Date,
+  allMasterCycles: SimplifiedMasterSiklus[],
+): number | null {
+  if (!allMasterCycles || allMasterCycles.length === 0) return null;
+  try {
+    return resolveActiveCycleForDate(date, allMasterCycles).activeCycleNum;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolves which cycle number "today" maps to, following the customizable
+ * Cycle-1 anchor (tanggal Siklus 1). Falls back to `fallback` when the
+ * resolved number is not present in the master list.
+ */
+export function resolveTodayCycleNum(
+  allMasterCycles: SimplifiedMasterSiklus[],
+  fallback?: number,
+  now: Date = new Date(),
+): number {
+  const fallbackNum =
+    fallback ??
+    allMasterCycles.find((c) => c.nomor_siklus === 1)?.nomor_siklus ??
+    allMasterCycles[0]?.nomor_siklus ??
+    1;
+  if (!allMasterCycles || allMasterCycles.length === 0) return fallbackNum;
+  try {
+    const resolved = resolveActiveCycleForDate(now, allMasterCycles);
+    const exists = allMasterCycles.some(
+      (c) => c.nomor_siklus === resolved.activeCycleNum,
+    );
+    return exists ? resolved.activeCycleNum : fallbackNum;
+  } catch {
+    return fallbackNum;
+  }
+}

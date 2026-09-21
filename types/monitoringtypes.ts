@@ -17,7 +17,7 @@ export interface MonitoringCardData {
   code: string; // Unique dish key or identifier
   name: string; // Display name (e.g. "Ayam Bumbu Kecap", "Nasi Putih", "Sayur Bayam")
   category?: MenuCategoryGroup | string; // e.g. "HEWANI", "NABATI", "SAYUR", "POKOK", "EXTRA", "BUAH", "SNACK", "NPO"
-  kelas?: string; // e.g. "Semua Kelas", "VIP", "Kelas 1", "Kelas 2 - 3"
+  kelas?: string; // e.g. "Semua Kelas", "KELAS I", "KELAS II", "KELAS III"
   dietTag?: string; // e.g. "Biasa", "RG", "DM", "TKTP"
   catatan?: string;
   baseline: number; // Count before revision

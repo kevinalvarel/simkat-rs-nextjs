@@ -117,7 +117,7 @@ export interface TabulasiFilterState {
  */
 export interface TabulasiHospitalItem {
   id: string;
-  kategori: string; // e.g. "HEWANI KELAS 1", "HEWANI KELAS 2 DAN 3", "NABATI", "SAYUR", "TKTP", "EXTRA"
+  kategori: string; // e.g. "HEWANI KELAS I", "HEWANI KELAS II", "NABATI", "SAYUR", "TKTP", "EXTRA"
   nama_menu: string;
   kode_diet: string;
   porsi_gedung_lama: number;

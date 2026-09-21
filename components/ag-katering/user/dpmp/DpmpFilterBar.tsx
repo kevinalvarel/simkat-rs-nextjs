@@ -20,6 +20,7 @@ interface DpmpFilterBarProps {
   ruanganOptions: string[];
   kamarOptions: string[];
   dietOptions: string[];
+  kelasOptions?: string[];
   totalFiltered: number;
   totalAll: number;
 }
@@ -30,6 +31,7 @@ export default function DpmpFilterBar({
   onResetFilter,
   ruanganOptions,
   kamarOptions,
+  kelasOptions = [],
   totalFiltered,
   totalAll,
 }: DpmpFilterBarProps) {
@@ -113,18 +115,11 @@ export default function DpmpFilterBar({
               <SelectItem value='ALL' className='text-xs'>
                 Semua Kelas
               </SelectItem>
-              <SelectItem value='VIP' className='text-xs'>
-                VIP
-              </SelectItem>
-              <SelectItem value='Kelas 1' className='text-xs'>
-                Kelas 1
-              </SelectItem>
-              <SelectItem value='Kelas 2' className='text-xs'>
-                Kelas 2
-              </SelectItem>
-              <SelectItem value='Kelas 3' className='text-xs'>
-                Kelas 3
-              </SelectItem>
+              {kelasOptions.map((k) => (
+                <SelectItem key={k} value={k} className='text-xs'>
+                  {k}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

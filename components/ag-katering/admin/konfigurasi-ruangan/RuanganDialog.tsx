@@ -209,7 +209,7 @@ export function RuanganDialog({
                 <Select
                   value={ruanganKelasInput}
                   onValueChange={(val) => {
-                    const nextKelas = val || 'Kelas 1';
+                    const nextKelas = val || kelasList[0] || 'KELAS I';
                     onKelasChange(nextKelas);
                     onKamarListChange(
                       kamarListInput.map((k) => ({
@@ -298,9 +298,9 @@ export function RuanganDialog({
                   variant='outline'
                   size='sm'
                   className='h-6 text-[10px] px-2.5 bg-background hover:bg-purple-500/10 hover:text-purple-700 cursor-pointer'
-                  onClick={() => applyPreset(1, 1, 'VIP')}
+                  onClick={() => applyPreset(1, 1)}
                 >
-                  1 VIP @ 1 Bed
+                  1 Kamar @ 1 Bed
                 </Button>
               </div>
 

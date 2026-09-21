@@ -197,7 +197,9 @@ function isKateringBentuk(
 }
 
 /**
- * Check if a dish's assigned kelas matches a patient's kelas
+ * Check if a dish's assigned kelas matches a patient's kelas.
+ * Kanonis KELAS I/II/III + wildcard "Semua Kelas".
+ * Legacy "Kelas 1/2/3", "KELAS 2 - 3", dan "VIP/VVIP" tetap dibaca agar data lama cocok.
  */
 function matchesKelas(dishKelas: string | null | undefined, patientKelas: string | null | undefined): boolean {
   if (!dishKelas || dishKelas === 'Semua Kelas' || dishKelas.toUpperCase() === 'ALL') {
@@ -210,26 +212,21 @@ function matchesKelas(dishKelas: string | null | undefined, patientKelas: string
 
   if (dK === pK) return true;
 
-  // Handle "Kelas 2 - 3" or "Kelas 2-3" or "Kelas II-III"
-  if (dK.includes('2') || dK.includes('3') || dK.includes('ii') || dK.includes('iii')) {
-    if (pK.includes('2') || pK.includes('3') || pK.includes('ii') || pK.includes('iii')) {
-      return true;
-    }
+  const norm = (s: string): string => {
+    if (s.includes('vip')) return 'kelas i';
+    if (s === '1' || s === 'i' || s === 'kelas 1' || s === 'kelas i') return 'kelas i';
+    if (s === '2' || s === 'ii' || s === 'kelas 2' || s === 'kelas ii') return 'kelas ii';
+    if (s === '3' || s === 'iii' || s === 'kelas 3' || s === 'kelas iii') return 'kelas iii';
+    return s;
+  };
+
+  // Legacy gabungan "kelas 2 - 3" cocok untuk KELAS II dan KELAS III
+  if (dK.includes('2') && dK.includes('3')) {
+    const pn = norm(pK);
+    return pn === 'kelas ii' || pn === 'kelas iii' || pK.includes('2') || pK.includes('3');
   }
 
-  // Handle "Kelas 1" or "Kelas I"
-  if (dK.includes('1') || dK.includes('kelas i') || dK === 'i') {
-    if (pK.includes('1') || pK.includes('kelas i') || pK === 'i') {
-      return true;
-    }
-  }
-
-  // Handle "VIP" / "VVIP"
-  if (dK.includes('vip') && pK.includes('vip')) {
-    return true;
-  }
-
-  return false;
+  return norm(dK) === norm(pK);
 }
 
 /**
@@ -789,7 +786,7 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
         continue;
       }
 
-      const pKelas = p.kelas || 'Kelas 1';
+      const pKelas = p.kelas || 'KELAS I';
 
       const bentukCodes = extractCodes(mapped.bentuk_makanan);
       const hewaniCodes = extractCodes(mapped.kategori_diet);
@@ -959,7 +956,7 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
         }
 
         const rawDiet = (sd.diet_rs_raw || '').trim();
-        const pKelas = sd.kelas || 'Kelas 1';
+        const pKelas = sd.kelas || 'KELAS I';
         let bentukCodes = extractCodes(sd.bentuk_makanan);
         let hewaniCodes = extractCodes(sd.kategori_diet);
         let nabatiCodes = extractCodes(sd.nabati);
@@ -1319,7 +1316,7 @@ export async function getLiveKateringData(): Promise<LiveKateringSummary> {
           gedung: p.gedung,
           ruangan: p.ruangan,
           bed: p.bed,
-          kelas: p.kelas || 'Kelas 1',
+          kelas: p.kelas || 'KELAS I',
           status_mapping: mapped?.status_mapping || 'UNMAPPED (RAW)',
           is_tugas_ag_katering: isTugasKatering,
         });

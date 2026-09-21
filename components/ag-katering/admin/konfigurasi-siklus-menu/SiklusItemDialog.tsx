@@ -54,15 +54,12 @@ interface SiklusItemDialogProps {
   } | null;
   dietOptions?: MenuTagOption[];
   availableCycles?: MasterSiklusItem[] | number[];
+  kelasOptions?: string[];
   onSuccess: () => void;
 }
 
-const KELAS_OPTIONS = [
-  { value: 'Semua Kelas', label: 'Semua Kelas' },
-  { value: 'I', label: 'Kelas I' },
-  { value: 'II-III', label: 'Kelas II - III' },
-  { value: 'VIP', label: 'Kelas VIP' },
-];
+/** Opsi kanonis — "Semua Kelas" wildcard + kelas dari sistem (DB). */
+const KELAS_FALLBACK_LIST = ['KELAS I', 'KELAS II', 'KELAS III'];
 
 const JENIS_MAKANAN_OPTIONS = [
   { value: 'HEWANI', label: 'HEWANI (Lauk Hewani)' },
@@ -115,8 +112,21 @@ export default function SiklusItemDialog({
   defaultSlot,
   dietOptions = [],
   availableCycles = [],
+  kelasOptions = [],
   onSuccess,
 }: SiklusItemDialogProps) {
+  const kelasSelectOptions = useMemo(() => {
+    const fromSystem =
+      kelasOptions.length > 0 ? kelasOptions : KELAS_FALLBACK_LIST;
+    const set = new Set<string>(['Semua Kelas', ...fromSystem]);
+    if (itemToEdit?.kelas) set.add(itemToEdit.kelas);
+    if (defaultSlot?.kelas) set.add(defaultSlot.kelas);
+    return Array.from(set).map((v) => ({
+      value: v,
+      label: v === 'Semua Kelas' ? 'Semua Kelas (semua kelas)' : v,
+    }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kelasOptions, itemToEdit, defaultSlot]);
   const isEdit = Boolean(itemToEdit);
 
   const cycleOptions = useMemo<{ value: number; label: string }[]>(() => {
@@ -352,7 +362,7 @@ export default function SiklusItemDialog({
                       <SelectValue placeholder='Pilih kelas...' />
                     </SelectTrigger>
                     <SelectContent>
-                      {KELAS_OPTIONS.map((opt) => (
+                      {kelasSelectOptions.map((opt) => (
                         <SelectItem key={opt.value} value={opt.value}>
                           {opt.label}
                         </SelectItem>

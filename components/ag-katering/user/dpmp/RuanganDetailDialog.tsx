@@ -46,25 +46,7 @@ interface RuanganDetailDialogProps {
   ) => void;
 }
 
-const KELAS_BADGE_STYLE: Record<string, string> = {
-  VIP: 'bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/30 font-bold',
-  'KELAS 1':
-    'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/30 font-semibold',
-  'KELAS I':
-    'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/30 font-semibold',
-  'KELAS 2':
-    'bg-teal-500/10 text-teal-700 dark:text-teal-300 border-teal-500/30 font-semibold',
-  'KELAS II':
-    'bg-teal-500/10 text-teal-700 dark:text-teal-300 border-teal-500/30 font-semibold',
-  'KELAS 2 - 3':
-    'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30 font-semibold',
-  'KELAS 2-3':
-    'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30 font-semibold',
-  'KELAS 3':
-    'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 font-semibold',
-  'KELAS III':
-    'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 font-semibold',
-};
+
 
 function PatientStatusBadge({ status }: { status: string }) {
   const upper = status.toUpperCase();

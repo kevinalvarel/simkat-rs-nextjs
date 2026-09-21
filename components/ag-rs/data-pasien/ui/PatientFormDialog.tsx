@@ -41,7 +41,7 @@ const STATUS_OPTIONS = [
   'PULANG',
 ];
 
-const DEFAULT_KELAS_FALLBACK = ['Kelas 1', 'Kelas 2', 'Kelas 3', 'VIP'];
+import { KELAS_FALLBACK } from '@/lib/kelas-utils';
 
 export default function PatientFormDialog({
   isOpen,
@@ -76,12 +76,12 @@ export default function PatientFormDialog({
   const selectedGedungName = form.watch('gedung');
   const selectedRuanganName = form.watch('ruangan') || defaultRuangan;
 
-  // Compute available Kelas options
+  // Opsi Kelas murni dari sistem (DB) + nilai legacy pasien agar data lama tetap tampil
   const availableKelasOptions = useMemo(() => {
     const set = new Set<string>();
     kelasList.forEach((k) => set.add(k.namaKelas));
-    DEFAULT_KELAS_FALLBACK.forEach((k) => set.add(k));
     if (patient?.kelas) set.add(patient.kelas);
+    if (set.size === 0) set.add(KELAS_FALLBACK);
     return Array.from(set);
   }, [kelasList, patient?.kelas]);
 
@@ -158,7 +158,7 @@ export default function PatientFormDialog({
       matchedKamar?.kelas ||
       matchedRuangan?.kelas ||
       availableKelasOptions[0] ||
-      'Kelas 1'
+      KELAS_FALLBACK
     );
   }, [
     gedungList,

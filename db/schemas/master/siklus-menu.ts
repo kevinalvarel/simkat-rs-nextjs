@@ -44,7 +44,7 @@ export const masterSiklusMenuTable = pgTable('master_siklus_menu', {
     .default(1)
     .references(() => masterSiklusTable.nomor_siklus, { onDelete: 'cascade' }),
 
-  /** Kategori kelas: "Kelas 1", "Kelas 2 - 3", "VIP", "Semua Kelas" */
+  /** Kelas dari sistem (tabel kelas, kanonis "KELAS I/II/III") atau wildcard "Semua Kelas" */
   kelas: text('kelas').notNull().default('Semua Kelas'),
 
   /** Jenis makanan: "HEWANI" | "NABATI" | "SAYUR" | "SARING" | "BUAH" | "SNACK" | "EXTRA" */

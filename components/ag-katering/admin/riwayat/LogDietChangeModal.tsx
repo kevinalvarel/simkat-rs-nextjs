@@ -54,7 +54,7 @@ export function LogDietChangeModal({
   const [noRm, setNoRm] = useState('');
   const [ruangan, setRuangan] = useState('Melati 1');
   const [bed, setBed] = useState('Bed 01');
-  const [kelas, setKelas] = useState('Kelas 1');
+  const [kelas, setKelas] = useState('KELAS I');
   const [waktuMakan, setWaktuMakan] = useState<WaktuMakanType>('PAGI');
   const [jenisPerubahan, setJenisPerubahan] = useState<JenisPerubahanType>('DIET_CHANGE');
   const [dietLama, setDietLama] = useState('Diet Biasa');

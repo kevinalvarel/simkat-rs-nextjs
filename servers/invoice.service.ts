@@ -7,6 +7,11 @@ import { snapshotDetailTable } from '@/db/schemas/snapshot/snapshot-detail';
 import { pasienTable } from '@/db/schemas/patient/pasien';
 import { otorisasiPerubahanDietTable } from '@/db/schemas/snapshot/perizinan-revisi';
 import { isNpoPatient } from '@/lib/npo-utils';
+import {
+  getKelasSortWeight,
+  normalizeKelasName as normalizeKelasKanonis,
+} from '@/lib/kelas-utils';
+import { kelasTable } from '@/db/schemas/master/kelas';
 import type {
   InvoiceDailySummary,
   InvoiceClassConsumption,
@@ -20,28 +25,21 @@ import type {
 } from '@/types/invoicetypes';
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// CONSTANTS
+// KELAS DINAMIS — daftar kelas diambil dari sistem (tabel kelas), bukan hardcoded
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/** Standard class ordering priority */
-const KELAS_ORDER: Record<string, number> = {
-  VIP: 1,
-  'KELAS 1': 2,
-  'KELAS I': 2,
-  'KELAS 2': 3,
-  'KELAS II': 3,
-  'KELAS 3': 4,
-  'KELAS III': 4,
-  'KELAS 2 - 3': 3.5,
-  'KELAS 2-3': 3.5,
-  ICU: 5,
-  HCU: 5,
-  NICU: 5,
-  PICU: 5,
-};
-
-/** Standard classes that always appear in the output for visual consistency */
-const STANDARD_CLASSES = ['VIP', 'Kelas 1', 'Kelas 2', 'Kelas 3'] as const;
+/** Ambil daftar kelas sistem untuk ordering & pemastian baris */
+async function getSystemKelasList(): Promise<string[]> {
+  try {
+    const rows = await db
+      .select({ namaKelas: kelasTable.nama_kelas })
+      .from(kelasTable);
+    if (rows.length > 0) return rows.map((r) => r.namaKelas);
+  } catch (error) {
+    console.error('Error fetching system kelas for invoice:', error);
+  }
+  return ['KELAS I', 'KELAS II', 'KELAS III'];
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // INTERNAL TYPES
@@ -55,18 +53,8 @@ const STANDARD_CLASSES = ['VIP', 'Kelas 1', 'Kelas 2', 'Kelas 3'] as const;
 // ═══════════════════════════════════════════════════════════════════════════════
 
 function normalizeKelasName(rawKelas: string | null | undefined): string {
-  if (!rawKelas || !rawKelas.trim()) return 'Kelas 3';
-  const k = rawKelas.trim();
-  const upper = k.toUpperCase();
-  if (upper === '1' || upper === 'I') return 'Kelas 1';
-  if (upper === '2' || upper === 'II') return 'Kelas 2';
-  if (upper === '3' || upper === 'III') return 'Kelas 3';
-  if (upper.includes('VIP')) return 'VIP';
-  if (upper.includes('1') || upper.includes('I')) return 'Kelas 1';
-  if (upper.includes('2') && upper.includes('3')) return 'Kelas 2 - 3';
-  if (upper.includes('2')) return 'Kelas 2';
-  if (upper.includes('3')) return 'Kelas 3';
-  return k;
+  // Kanonis KELAS I/II/III; legacy VIP/VVIP dipetakan ke KELAS I; kosong -> KELAS III (bucket lama)
+  return normalizeKelasKanonis(rawKelas, 'KELAS III');
 }
 
 /**
@@ -176,9 +164,12 @@ function hasExtras(d: { extra?: string | null; buah?: string | null; snack?: str
   return !!(d.extra?.trim() || d.buah?.trim() || d.snack?.trim());
 }
 
-/** Ensure all standard classes exist in the class map for visual consistency */
-function ensureStandardClasses(classMap: Map<string, ClassEntry>): void {
-  for (const stdClass of STANDARD_CLASSES) {
+/** Pastikan semua kelas dari sistem muncul di peta (agar konsisten walau 0 porsi) */
+function ensureStandardClasses(
+  classMap: Map<string, ClassEntry>,
+  systemKelas: string[],
+): void {
+  for (const stdClass of systemKelas) {
     if (!classMap.has(stdClass)) {
       classMap.set(stdClass, createEmptyClassEntry());
     }
@@ -189,6 +180,7 @@ function ensureStandardClasses(classMap: Map<string, ClassEntry>): void {
 function classMapToSortedArray(
   classMap: Map<string, ClassEntry>,
   isPerSnapshot: boolean = false,
+  systemKelas: string[] = [],
 ): InvoiceClassConsumption[] {
   const classes: InvoiceClassConsumption[] = Array.from(
     classMap.entries(),
@@ -226,8 +218,8 @@ function classMapToSortedArray(
   });
 
   classes.sort((a, b) => {
-    const orderA = KELAS_ORDER[a.kelas.toUpperCase()] || 99;
-    const orderB = KELAS_ORDER[b.kelas.toUpperCase()] || 99;
+    const orderA = getKelasSortWeight(a.kelas, systemKelas);
+    const orderB = getKelasSortWeight(b.kelas, systemKelas);
     if (orderA !== orderB) return orderA - orderB;
     return a.kelas.localeCompare(b.kelas);
   });
@@ -373,7 +365,7 @@ function buildEmptyFallbackSummary(): InvoiceDailySummary {
     grandTotalExtra: 0,
     grandTotalPorsi: 0,
     grandTotalPasien: 0,
-    classes: STANDARD_CLASSES.map((k) => emptyClass(k)),
+    classes: ['KELAS I', 'KELAS II', 'KELAS III'].map((k) => emptyClass(k)),
     tktpCounts: { pagi: 0, siang: 0, malam: 0, total: 0 },
     lastUpdated: new Date().toLocaleTimeString('id-ID'),
   };
@@ -497,7 +489,7 @@ async function processSnapshotMode(
         continue;
       }
 
-      const targetKelas = rev.kelas || dataBaruObj.kelas || 'Kelas 3';
+      const targetKelas = rev.kelas || dataBaruObj.kelas || 'KELAS III';
       const normKelas = normalizeKelasName(targetKelas);
       const entry = getOrCreateClassEntry(ctx.classMap, targetKelas);
 
@@ -567,6 +559,7 @@ async function processRangeMode(
   dailySummaries?: InvoiceDailySummary[];
   snapshotSummaries?: InvoiceDailySummary[];
 }> {
+  const systemKelas = await getSystemKelasList();
   const batchConditions = [
     gte(snapshotBatchTable.tanggal_produksi, start),
     lte(snapshotBatchTable.tanggal_produksi, end),
@@ -750,7 +743,7 @@ async function processRangeMode(
     if (!rev.batch_id || !batchIds.includes(rev.batch_id)) continue;
 
     const matchingBatch = rangeBatches.find((b) => b.id === rev.batch_id);
-    const targetKelas = rev.kelas || 'Kelas 3';
+    const targetKelas = rev.kelas || 'KELAS III';
     const normKelas = normalizeKelasName(targetKelas);
     const waktu = (rev.waktu_makan || 'PAGI').toUpperCase();
 
@@ -795,9 +788,9 @@ async function processRangeMode(
   const snapshotSummaries: InvoiceDailySummary[] = [];
   for (const [, bData] of batchMap.entries()) {
     const b = bData.batch;
-    ensureStandardClasses(bData.classMap);
+    ensureStandardClasses(bData.classMap, systemKelas);
 
-    const bClasses = classMapToSortedArray(bData.classMap, true);
+    const bClasses = classMapToSortedArray(bData.classMap, true, systemKelas);
     const bTotals = computeGrandTotals(bClasses);
 
     snapshotSummaries.push({
@@ -829,9 +822,9 @@ async function processRangeMode(
 
     for (const dayStr of sortedDates) {
       const dayClassMap = dailyMap.get(dayStr)!;
-      ensureStandardClasses(dayClassMap);
+      ensureStandardClasses(dayClassMap, systemKelas);
 
-      const dayClasses = classMapToSortedArray(dayClassMap, false);
+      const dayClasses = classMapToSortedArray(dayClassMap, false, systemKelas);
       const dayTotals = computeGrandTotals(dayClasses);
 
       dailySummaries.push({
@@ -925,7 +918,7 @@ async function processAllMealtimesMode(
       );
 
     for (const rev of batchRevisions) {
-      const entry = getOrCreateClassEntry(ctx.classMap, rev.kelas || 'Kelas 3');
+      const entry = getOrCreateClassEntry(ctx.classMap, rev.kelas || 'KELAS III');
       entry.revisiTambahPorsi++;
       incrementMealCount(entry, waktu);
 
@@ -1073,11 +1066,12 @@ export async function getInvoiceDailyData(
       await processAllMealtimesMode(ctx, selectedDate);
     }
 
-    // Ensure standard classes exist for visual consistency
-    ensureStandardClasses(ctx.classMap);
+    // Pastikan semua kelas sistem muncul (data dari DB, bukan hardcoded)
+    const systemKelas = await getSystemKelasList();
+    ensureStandardClasses(ctx.classMap, systemKelas);
 
     // Convert to sorted array and compute totals
-    const classes = classMapToSortedArray(ctx.classMap, isPerSnapshot);
+    const classes = classMapToSortedArray(ctx.classMap, isPerSnapshot, systemKelas);
     const totals = computeGrandTotals(classes);
 
     // Generate invoice number

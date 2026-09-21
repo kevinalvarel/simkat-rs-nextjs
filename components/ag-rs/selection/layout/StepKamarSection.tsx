@@ -37,7 +37,7 @@ export default function StepKamarSection({
             idKamar: `kamar-${selectedRuangan.idRuangan}-1`,
             nomorKamar: 'Kamar 1',
             jumlahBed: selectedRuangan.jumlahBed || 6,
-            kelas: selectedRuangan.kelas || 'Kelas 1',
+            kelas: selectedRuangan.kelas || 'KELAS I',
           },
         ];
 

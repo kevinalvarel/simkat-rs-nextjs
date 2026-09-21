@@ -4,6 +4,8 @@ import {
   getMasterSiklusList,
   getKategoriMenuDietList,
 } from '@/servers/siklus-menu.service';
+import { getKelasList } from '@/servers/kelas.service';
+import { resolveTodayCycleNum } from '@/lib/siklus-menu-utils';
 import KonfigurasiSiklusMenuClient from '@/components/ag-katering/admin/konfigurasi-siklus-menu/KonfigurasiSiklusMenuClient';
 
 export const metadata: Metadata = {
@@ -13,13 +15,21 @@ export const metadata: Metadata = {
 };
 
 export default async function KonfigurasiSiklusMenuAdminPage() {
-  const [masterSiklusList, dietOptions] = await Promise.all([
+  const [masterSiklusList, dietOptions, kelasList] = await Promise.all([
     getMasterSiklusList(),
     getKategoriMenuDietList(),
+    getKelasList(),
   ]);
 
+  // Default tab mengikuti siklus hari ini (anchor Siklus 1 yang customizable).
   const defaultCycle =
-    masterSiklusList.length > 0 ? masterSiklusList[0].nomor_siklus : 1;
+    masterSiklusList.length > 0
+      ? resolveTodayCycleNum(
+          masterSiklusList,
+          masterSiklusList[0].nomor_siklus,
+          new Date(),
+        )
+      : 1;
   const initialItems = await getSiklusMenuList(defaultCycle);
 
   return (
@@ -27,6 +37,7 @@ export default async function KonfigurasiSiklusMenuAdminPage() {
       initialItems={initialItems}
       initialMasterSiklus={masterSiklusList}
       dietOptions={dietOptions}
+      kelasOptions={kelasList.map((k) => k.namaKelas)}
     />
   );
 }

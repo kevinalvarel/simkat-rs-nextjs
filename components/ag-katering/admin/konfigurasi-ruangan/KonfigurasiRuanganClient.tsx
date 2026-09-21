@@ -75,7 +75,7 @@ export default function KonfigurasiRuanganClient({
     null,
   );
   const [ruanganNameInput, setRuanganNameInput] = useState('');
-  const [ruanganKelasInput, setRuanganKelasInput] = useState('Kelas 1');
+  const [ruanganKelasInput, setRuanganKelasInput] = useState(kelasList[0] || 'KELAS I');
   const [ruanganKamarListInput, setRuanganKamarListInput] = useState<
     KamarDetail[]
   >([]);
@@ -382,19 +382,19 @@ export default function KonfigurasiRuanganClient({
     setTargetGedungId(gedungId);
     setEditingRuangan(null);
     setRuanganNameInput('');
-    setRuanganKelasInput(kelasList[0] || 'Kelas 1');
+    setRuanganKelasInput(kelasList[0] || 'KELAS I');
     setRuanganKamarListInput([
       {
         idKamar: `kamar-${Date.now()}-1`,
         nomorKamar: 'Kamar 1',
         jumlahBed: 2,
-        kelas: kelasList[0] || 'Kelas 1',
+        kelas: kelasList[0] || 'KELAS I',
       },
       {
         idKamar: `kamar-${Date.now()}-2`,
         nomorKamar: 'Kamar 2',
         jumlahBed: 2,
-        kelas: kelasList[0] || 'Kelas 1',
+        kelas: kelasList[0] || 'KELAS I',
       },
     ]);
     setIsRuanganDialogOpen(true);

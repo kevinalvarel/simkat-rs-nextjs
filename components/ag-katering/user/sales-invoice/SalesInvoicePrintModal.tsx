@@ -300,11 +300,10 @@ export default function SalesInvoicePrintModal({
 
   function formatKelasTypeDisplay(kelas: string): string {
     const u = (kelas || '').trim().toUpperCase();
-    if (u.includes('VIP')) return 'Kelas I';
-    if (u.includes('1') || u === 'I') return 'Kelas I';
-    if (u.includes('2') && u.includes('3')) return 'Kelas II';
-    if (u.includes('2') || u === 'II') return 'Kelas II';
-    return 'Kelas III';
+    if (u.includes('2') && u.includes('3')) return 'KELAS II';
+    if (u.includes('1') || u === 'I' || u.includes('VIP')) return 'KELAS I';
+    if (u.includes('2') || u === 'II') return 'KELAS II';
+    return 'KELAS III';
   }
 
   const documentTitle = isMonthly

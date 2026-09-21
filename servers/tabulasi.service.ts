@@ -69,7 +69,7 @@ interface ParsedPatientRevisionPayload {
 interface AnalyzedPatient {
   patient: TabulasiPatientRecord;
   gedungType: 'GEDUNG LAMA' | 'GEDUNG BARU';
-  kelasType: 'VIP' | 'KELAS_1' | 'KELAS_2_3';
+  kelasType: 'KELAS_1' | 'KELAS_2' | 'KELAS_3';
   isNpo: boolean;
   isDm: boolean;
   isRg: boolean;
@@ -96,14 +96,15 @@ function getDefaultMealtime(): 'PAGI' | 'SIANG' | 'MALAM' {
 }
 
 /**
- * Standardize hospital room class to three clinical meal groupings
+ * Standardisasi ke kanonis KELAS I/II/III (legacy VIP/VVIP -> KELAS_1).
+ * Kategori hidangan siklus-menu tetap memakai nilai sistem + "Semua Kelas".
  */
-function normalizeKelas(rawKelas: string | null | undefined): 'VIP' | 'KELAS_1' | 'KELAS_2_3' {
-  if (!rawKelas) return 'KELAS_2_3';
+function normalizeKelas(rawKelas: string | null | undefined): 'KELAS_1' | 'KELAS_2' | 'KELAS_3' {
+  if (!rawKelas) return 'KELAS_3';
   const u = rawKelas.toUpperCase();
-  if (u.includes('VIP')) return 'VIP';
-  if (u.includes('1') || u === 'I') return 'KELAS_1';
-  return 'KELAS_2_3';
+  if (u.includes('1') || u === 'I' || u.includes('VIP')) return 'KELAS_1';
+  if (u.includes('2') || u === 'II') return 'KELAS_2';
+  return 'KELAS_3';
 }
 
 /**
@@ -261,7 +262,7 @@ async function resolveTabulasiPatients(
         nama_pasien: dataBaruObj.nama_pasien || 'Pasien Susulan',
         gedung: dataBaruObj.gedung || 'Gedung Lama',
         ruangan: dataBaruObj.ruangan || '-',
-        kelas: dataBaruObj.kelas || 'Kelas 3',
+        kelas: dataBaruObj.kelas || 'KELAS III',
         diet_rs_raw: dataBaruObj.diet || 'Standar',
         bentuk_makanan: dataBaruObj.bentuk_makanan || null,
         kategori_diet: dataBaruObj.kategori_diet || null,
@@ -295,7 +296,7 @@ async function resolveTabulasiPatients(
       nama_pasien: p.nama_pasien,
       gedung: p.gedung || 'Gedung Lama',
       ruangan: p.ruangan || '-',
-      kelas: p.kelas || 'Kelas 3',
+      kelas: p.kelas || 'KELAS III',
       diet_rs_raw: p.diet || 'Standar',
       bentuk_makanan: null,
       kategori_diet: null,
@@ -316,30 +317,31 @@ function matchPatientToDish(
 ): boolean {
   if (patient.isNpo) return false;
 
-  // 1. Class Matching
+  // 1. Class Matching — kanonis KELAS I/II/III + wildcard "Semua Kelas".
+  // Legacy "KELAS 1/2/3" dan "KELAS 2 - 3" tetap dibaca agar data lama tidak hilang.
   const iKelas = (item.kelas || '').toUpperCase();
   const isSemuaKelas = iKelas.includes('SEMUA') || !iKelas;
-  const isKelas1OrVip =
-    iKelas === 'I' || iKelas.includes('KELAS 1') || iKelas.includes('VIP');
-  const isKelas23 =
-    iKelas.includes('II') ||
-    iKelas.includes('III') ||
-    iKelas.includes('2') ||
-    iKelas.includes('3');
+  const isKelas1 =
+    iKelas === 'I' ||
+    iKelas === 'KELAS I' ||
+    iKelas === 'KELAS 1' ||
+    iKelas.includes('VIP');
+  const isKelas2 =
+    iKelas === 'II' || iKelas === 'KELAS II' || iKelas === 'KELAS 2';
+  const isKelas3 =
+    iKelas === 'III' || iKelas === 'KELAS III' || iKelas === 'KELAS 3';
+  const isLegacyGabungan23 =
+    (iKelas.includes('2') && iKelas.includes('3')) ||
+    iKelas.includes('II-III') ||
+    iKelas.includes('II - III');
 
   if (!isSemuaKelas) {
-    if (patient.kelasType === 'VIP') {
-      if (iKelas.includes('VIP')) {
-        // VIP exact match
-      } else if (isKelas1OrVip) {
-        // VIP fallback to Kelas 1
-      } else {
-        return false;
-      }
-    } else if (patient.kelasType === 'KELAS_1') {
-      if (!isKelas1OrVip) return false;
-    } else if (patient.kelasType === 'KELAS_2_3') {
-      if (!isKelas23) return false;
+    if (patient.kelasType === 'KELAS_1') {
+      if (!isKelas1 && !isLegacyGabungan23) return false;
+    } else if (patient.kelasType === 'KELAS_2') {
+      if (!isKelas2 && !isLegacyGabungan23) return false;
+    } else if (patient.kelasType === 'KELAS_3') {
+      if (!isKelas3 && !isLegacyGabungan23) return false;
     }
   }
 
@@ -570,12 +572,14 @@ export async function getTabulasiDashboardData(
       const jm = (m.jenis_makanan || 'MENU').toUpperCase();
       const kl = (m.kelas || '').toUpperCase();
       let groupTitle = `${jm}`;
-      if (kl === 'I' || kl.includes('1')) {
-        groupTitle = `${jm} KELAS 1`;
-      } else if (kl.includes('II') || kl.includes('2') || kl.includes('3')) {
-        groupTitle = `${jm} KELAS 2 DAN 3`;
-      } else if (kl.includes('VIP')) {
-        groupTitle = `${jm} VIP`;
+      if (kl === 'I' || kl === 'KELAS I' || kl === 'KELAS 1' || kl.includes('VIP')) {
+        groupTitle = `${jm} KELAS I`;
+      } else if (kl === 'II' || kl === 'KELAS II' || kl === 'KELAS 2') {
+        groupTitle = `${jm} KELAS II`;
+      } else if (kl === 'III' || kl === 'KELAS III' || kl === 'KELAS 3') {
+        groupTitle = `${jm} KELAS III`;
+      } else if (kl.includes('2') && kl.includes('3')) {
+        groupTitle = `${jm} KELAS II-III (LEGACY)`;
       } else {
         groupTitle = `${jm} SEMUA KELAS`;
       }
@@ -955,15 +959,17 @@ function buildSupplementResult(
       .toUpperCase().split(/[,;/\s+]+/).filter(Boolean));
     const candidates = supplementMenu.filter((item) => {
       const itemClass = (item.kelas || '').toUpperCase();
-      if (itemClass.includes('VIP')) return patientClass === 'VIP';
       if (itemClass.includes('SEMUA') || itemClass === 'ALL' || !itemClass) return true;
-      if (itemClass === 'I' || itemClass.includes('KELAS 1')) return patientClass === 'KELAS_1' || patientClass === 'VIP';
-      return patientClass === 'KELAS_2_3';
+      if (itemClass.includes('2') && itemClass.includes('3')) return true;
+      if (patientClass === 'KELAS_1')
+        return itemClass === 'I' || itemClass === 'KELAS I' || itemClass.includes('VIP');
+      if (patientClass === 'KELAS_2')
+        return itemClass === 'II' || itemClass === 'KELAS II';
+      return itemClass === 'III' || itemClass === 'KELAS III';
     }).sort((a, b) => {
       const score = (item: MasterMenuItemRow) => {
         const itemClass = item.kelas.toUpperCase();
         if (itemClass.includes('SEMUA') || itemClass === 'ALL') return 2;
-        if (patientClass === 'VIP' && !itemClass.includes('VIP')) return 1;
         return 0;
       };
       return score(a) - score(b);

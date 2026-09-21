@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Metadata } from 'next';
-import { getGedungHierarkis, getKelasOptions } from '@/servers/tempat.service';
+import { getGedungHierarkis } from '@/servers/tempat.service';
+import { getKelasOptions } from '@/servers/kelas.service';
 import KonfigurasiRuanganClient from '@/components/ag-katering/admin/konfigurasi-ruangan/KonfigurasiRuanganClient';
 
 export const metadata: Metadata = {

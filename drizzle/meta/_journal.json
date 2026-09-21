@@ -71,6 +71,13 @@
       "when": 1789468186991,
       "tag": "0009_skinny_vargas",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789978268795,
+      "tag": "0010_orange_nick_fury",
+      "breakpoints": true
     }
   ]
 }

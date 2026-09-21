@@ -3,7 +3,6 @@
 import React from 'react';
 import type { KamarDetail, RuanganDetail } from '@/servers/tempat.service';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import {
   DoorClosed,
   Bed,
@@ -13,6 +12,7 @@ import {
   Trash2,
   Sparkles,
 } from 'lucide-react';
+import { renderKelasBadge } from './RuanganCard';
 
 interface KamarCardProps {
   kamar: KamarDetail;
@@ -25,59 +25,6 @@ interface KamarCardProps {
   ) => void;
   onEditKamar: (ruangan: RuanganDetail, kamar: KamarDetail) => void;
   onDeleteKamar: (ruangan: RuanganDetail, kamar: KamarDetail) => void;
-}
-
-export function renderKelasBadge(kelas: string) {
-  const normalized = (kelas || '').toUpperCase();
-  if (normalized.includes('VIP')) {
-    return (
-      <Badge className='bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30 font-bold text-[10px] py-0 px-1.5 shadow-2xs'>
-        {kelas || 'VIP'}
-      </Badge>
-    );
-  }
-  if (normalized.includes('KELAS 1') || normalized.includes('1')) {
-    return (
-      <Badge className='bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30 font-semibold text-[10px] py-0 px-1.5 shadow-2xs'>
-        {kelas || 'Kelas 1'}
-      </Badge>
-    );
-  }
-  if (normalized.includes('KELAS 2') || normalized.includes('2')) {
-    return (
-      <Badge className='bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 font-semibold text-[10px] py-0 px-1.5 shadow-2xs'>
-        {kelas || 'Kelas 2'}
-      </Badge>
-    );
-  }
-  if (normalized.includes('KELAS 3') || normalized.includes('3')) {
-    return (
-      <Badge className='bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30 font-semibold text-[10px] py-0 px-1.5 shadow-2xs'>
-        {kelas || 'Kelas 3'}
-      </Badge>
-    );
-  }
-  if (
-    normalized.includes('ICU') ||
-    normalized.includes('HCU') ||
-    normalized.includes('NICU') ||
-    normalized.includes('PICU') ||
-    normalized.includes('ISOLASI')
-  ) {
-    return (
-      <Badge className='bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-500/30 font-bold text-[10px] py-0 px-1.5 shadow-2xs'>
-        {kelas}
-      </Badge>
-    );
-  }
-  return (
-    <Badge
-      variant='outline'
-      className='bg-sky-500/10 text-sky-700 dark:text-sky-300 border-sky-500/30 font-medium text-[10px] py-0 px-1.5 shadow-2xs'
-    >
-      {kelas || 'Kelas 1'}
-    </Badge>
-  );
 }
 
 export function KamarCard({

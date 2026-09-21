@@ -5,7 +5,7 @@ export interface DietBreakdownItem {
 }
 
 export interface InvoiceClassConsumption {
-  kelas: string; // "VIP", "Kelas 1", "Kelas 2", "Kelas 3", etc.
+  kelas: string; // Nilai dari sistem (tabel kelas, kanonis "KELAS I/II/III")
   pagiCount: number; // Porsi Makan Pagi
   siangCount: number; // Porsi Makan Siang
   malamCount: number; // Porsi Makan Malam
@@ -157,7 +157,7 @@ export interface GrandTotals {
 export interface SalesInvoiceLineItem {
   no: number;
   namaBarang: string; // "TKTP" or "Makan Pasien"
-  type: string; // "Kelas I", "Kelas II", "Kelas III", etc.
+  type: string; // "KELAS I", "KELAS II", "KELAS III" (dari sistem)
   banyaknya: number; // jumlah porsi
   satuan: string; // "Porsi"
   hargaSatuan: number; // harga per porsi (Rp)

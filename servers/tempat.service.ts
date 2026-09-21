@@ -6,7 +6,7 @@ import { db } from '@/drizzle';
 import { gedungTable } from '@/db/schemas/master/gedung';
 import { ruanganTable } from '@/db/schemas/master/ruangan';
 import { kamarTable } from '@/db/schemas/master/kamar';
-import { kelasTable } from '@/db/schemas/master/kelas';
+import { KELAS_FALLBACK } from '@/lib/kelas-utils';
 
 export type KamarDetail = {
   idKamar: string;
@@ -51,9 +51,6 @@ export type MutationResult = {
   success: boolean;
   message: string;
 };
-
-// Standard fallback default kelas options
-const DEFAULT_KELAS_LIST = ['Kelas 1', 'Kelas 2', 'Kelas 3', 'VIP'];
 
 /**
  * Helper to normalize raw JSON kamar list or produce safe fallback
@@ -133,7 +130,7 @@ export async function getGedungHierarkis(): Promise<GedungHierarkis[]> {
             const ruanganObj: RuanganDetail = {
               idRuangan: row.idRuangan,
               namaRuangan: row.namaRuangan,
-              kelas: row.ruanganKelas || 'Kelas 1',
+              kelas: row.ruanganKelas || KELAS_FALLBACK,
               jumlahBed: 0,
               gedungId: row.idGedung,
               kamarList: [],
@@ -206,22 +203,14 @@ export async function getGedungWithRuangan(): Promise<GedungWithRuangan[]> {
 }
 
 /**
- * Fetch available Kelas options from DB or fallback
+ * Opsi kelas dari sistem — delegasi ke kelas.service agar satu sumber kebenaran.
+ * Dipertahankan di sini untuk kompatibilitas impor lama.
  */
 export async function getKelasOptions(): Promise<string[]> {
-  try {
-    const list = await db
-      .select({ namaKelas: kelasTable.nama_kelas })
-      .from(kelasTable);
-
-    if (list && list.length > 0) {
-      return list.map((k) => k.namaKelas);
-    }
-  } catch (error) {
-    console.error('Error fetching kelas options:', error);
-  }
-
-  return DEFAULT_KELAS_LIST;
+  const { getKelasOptions: getKelasOptionsSistem } = await import(
+    '@/servers/kelas.service'
+  );
+  return getKelasOptionsSistem();
 }
 
 // -----------------------------------------------------------------------------
@@ -327,7 +316,7 @@ export async function createRuangan(
     finalKamarList = kamarListOrBedCount.map((k) => ({
       nomorKamar: k.nomorKamar.trim(),
       jumlahBed: k.jumlahBed > 0 ? k.jumlahBed : 2,
-      kelas: k.kelas || kelas || 'Kelas 1',
+      kelas: k.kelas || kelas || KELAS_FALLBACK,
     }));
     totalBed = finalKamarList.reduce((acc, k) => acc + k.jumlahBed, 0);
   } else {
@@ -339,7 +328,7 @@ export async function createRuangan(
       {
         nomorKamar: 'Kamar 1',
         jumlahBed: bed,
-        kelas: kelas || 'Kelas 1',
+        kelas: kelas || KELAS_FALLBACK,
       },
     ];
     totalBed = bed;
@@ -351,7 +340,7 @@ export async function createRuangan(
       .values({
         nama_ruangan: namaRuangan.trim(),
         gedung_id: gedungId,
-        kelas: kelas || 'Kelas 1',
+        kelas: kelas || KELAS_FALLBACK,
         jumlah_bed: totalBed,
       })
       .returning({ id: ruanganTable.id });
@@ -404,7 +393,7 @@ export async function updateRuangan(
       .update(ruanganTable)
       .set({
         nama_ruangan: namaRuangan.trim(),
-        kelas: kelas || 'Kelas 1',
+        kelas: kelas || KELAS_FALLBACK,
         jumlah_bed: totalBed,
       })
       .where(eq(ruanganTable.id, idRuangan));
@@ -416,7 +405,7 @@ export async function updateRuangan(
           nomor_kamar: k.nomorKamar.trim(),
           ruangan_id: idRuangan,
           jumlah_bed: k.jumlahBed > 0 ? k.jumlahBed : 2,
-          kelas: k.kelas || kelas || 'Kelas 1',
+          kelas: k.kelas || kelas || KELAS_FALLBACK,
         })),
       );
     }
@@ -468,7 +457,7 @@ export async function updateBedCount(
           nomor_kamar: k.nomorKamar.trim(),
           ruangan_id: idRuangan,
           jumlah_bed: k.jumlahBed > 0 ? k.jumlahBed : 2,
-          kelas: k.kelas || 'Kelas 1',
+          kelas: k.kelas || KELAS_FALLBACK,
         })),
       );
     }
@@ -513,7 +502,7 @@ export async function updateRuanganKamarList(
         nomor_kamar: k.nomorKamar.trim(),
         ruangan_id: idRuangan,
         jumlah_bed: k.jumlahBed > 0 ? k.jumlahBed : 2,
-        kelas: k.kelas || 'Kelas 1',
+        kelas: k.kelas || KELAS_FALLBACK,
       })),
     );
 

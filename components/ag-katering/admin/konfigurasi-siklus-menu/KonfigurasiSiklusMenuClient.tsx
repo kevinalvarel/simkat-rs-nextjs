@@ -1,6 +1,12 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, {
+  useState,
+  useMemo,
+  useEffect,
+  useRef,
+  useCallback,
+} from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -37,6 +43,10 @@ import { Calendar } from '@/components/ui/calendar';
 import { format, parseISO, isValid } from 'date-fns';
 import { id } from 'date-fns/locale';
 import type { MenuTagOption } from '@/lib/siklus-menu-tags';
+import {
+  getCycleNumForDate,
+  resolveTodayCycleNum,
+} from '@/lib/siklus-menu-utils';
 import type {
   SiklusMenuItem,
   MasterSiklusItem,
@@ -105,20 +115,63 @@ interface KonfigurasiSiklusMenuClientProps {
   initialItems: SiklusMenuItem[];
   initialMasterSiklus: MasterSiklusItem[];
   dietOptions: MenuTagOption[];
+  kelasOptions?: string[];
 }
 
 export default function KonfigurasiSiklusMenuClient({
   initialItems,
   initialMasterSiklus,
   dietOptions,
+  kelasOptions = [],
 }: KonfigurasiSiklusMenuClientProps) {
   const [masterSiklusList, setMasterSiklusList] =
     useState<MasterSiklusItem[]>(initialMasterSiklus);
 
-  const initialCycleNum =
-    initialMasterSiklus.length > 0 ? initialMasterSiklus[0].nomor_siklus : 1;
-  const [activeSiklus, setActiveSiklus] = useState<number>(initialCycleNum);
+  // Default tab mengikuti siklus hari ini (anchor Siklus 1 customizable).
+  const [activeSiklus, setActiveSiklus] = useState<number>(() =>
+    resolveTodayCycleNum(
+      initialMasterSiklus,
+      initialMasterSiklus.length > 0
+        ? initialMasterSiklus[0].nomor_siklus
+        : 1,
+      new Date(),
+    ),
+  );
   const [items, setItems] = useState<SiklusMenuItem[]>(initialItems);
+  const userHasManuallySelected = useRef(false);
+
+  // Nomor siklus untuk hari ini berdasarkan anchor terkini.
+  const todayCycleNum = useMemo(
+    () =>
+      resolveTodayCycleNum(
+        masterSiklusList,
+        masterSiklusList.length > 0
+          ? masterSiklusList[0].nomor_siklus
+          : activeSiklus,
+        new Date(),
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [masterSiklusList],
+  );
+
+  // Sinkronisasi awal client (koreksi drift tanggal server vs browser).
+  useEffect(() => {
+    if (!userHasManuallySelected.current && activeSiklus !== todayCycleNum) {
+      setActiveSiklus(todayCycleNum);
+      getSiklusMenuList(todayCycleNum)
+        .then(setItems)
+        .catch((err) =>
+          console.error('Gagal sinkron siklus hari ini:', err),
+        );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Resolver badge kalender: tanggal → nomor siklus (mengikuti anchor terkini).
+  const getCycleForDate = useCallback(
+    (date: Date) => getCycleNumForDate(date, masterSiklusList),
+    [masterSiklusList],
+  );
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedJenisFilter, setSelectedJenisFilter] = useState<string>('ALL');
@@ -196,8 +249,10 @@ export default function KonfigurasiSiklusMenuClient({
         setActiveSiklus(nextCycle);
         await refreshData(nextCycle);
       }
+      return freshCycles;
     } catch (err) {
       console.error('Gagal mengambil daftar master siklus:', err);
+      return null;
     }
   }
 
@@ -213,7 +268,18 @@ export default function KonfigurasiSiklusMenuClient({
       const res = await applyStartDateRotation(isoDate);
       if (res.success) {
         toast.success(res.message);
-        await refreshMasterCycles();
+        const freshCycles = await refreshMasterCycles();
+        // Anchor berubah → auto-loncat ke tab siklus hari ini yang baru.
+        if (freshCycles && freshCycles.length > 0) {
+          const todayNum = resolveTodayCycleNum(
+            freshCycles,
+            freshCycles[0].nomor_siklus,
+            new Date(),
+          );
+          userHasManuallySelected.current = false;
+          setActiveSiklus(todayNum);
+          await refreshData(todayNum);
+        }
       } else {
         toast.error(res.message);
       }
@@ -241,6 +307,7 @@ export default function KonfigurasiSiklusMenuClient({
 
   // Change active cycle
   async function handleSelectCycle(siklusNumber: number) {
+    userHasManuallySelected.current = true;
     setActiveSiklus(siklusNumber);
     await refreshData(siklusNumber);
   }
@@ -505,6 +572,8 @@ export default function KonfigurasiSiklusMenuClient({
                   <Calendar
                     mode='single'
                     selected={currentStartDate}
+                    showCycleBadges
+                    getCycleForDate={getCycleForDate}
                     onSelect={(d) => {
                       if (d) {
                         handleApplyStartDate(d);
@@ -544,15 +613,23 @@ export default function KonfigurasiSiklusMenuClient({
           {masterSiklusList.map((cycle) => {
             const num = cycle.nomor_siklus;
             const isActive = activeSiklus === num;
+            const isToday = todayCycleNum === num;
             return (
               <button
                 key={num}
                 type='button'
                 onClick={() => handleSelectCycle(num)}
+                title={
+                  isToday
+                    ? `${cycle.nama_siklus} — siklus hari ini`
+                    : cycle.nama_siklus
+                }
                 className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer border ${
                   isActive
                     ? 'bg-primary text-primary-foreground border-primary shadow-xs scale-102'
-                    : 'bg-muted/40 text-muted-foreground border-border hover:bg-muted hover:text-foreground'
+                    : isToday
+                      ? 'bg-primary/10 text-primary border-primary/40 hover:bg-primary/15'
+                      : 'bg-muted/40 text-muted-foreground border-border hover:bg-muted hover:text-foreground'
                 }`}
               >
                 <span>{cycle.nama_siklus}</span>
@@ -565,6 +642,11 @@ export default function KonfigurasiSiklusMenuClient({
                 >
                   {formatShortTanggal(cycle.tanggal, cycle.nomor_siklus)}
                 </span>
+                {isToday && !isActive && (
+                  <span className='text-[9px] font-extrabold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground'>
+                    Hari ini
+                  </span>
+                )}
                 {isActive && (
                   <span className='w-1.5 h-1.5 rounded-full bg-primary-foreground animate-pulse' />
                 )}
@@ -694,6 +776,7 @@ export default function KonfigurasiSiklusMenuClient({
         defaultSlot={defaultSlotForAdd}
         dietOptions={dietOptions}
         availableCycles={masterSiklusList}
+        kelasOptions={kelasOptions}
         onSuccess={() => refreshData(activeSiklus)}
       />
 

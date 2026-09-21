@@ -12,6 +12,15 @@ import { cn } from "@/lib/utils"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon } from "lucide-react"
 
+export type CycleBadgeMap = Record<string, number | string>
+
+function toLocalDateKey(date: Date): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, "0")
+  const d = String(date.getDate()).padStart(2, "0")
+  return `${y}-${m}-${d}`
+}
+
 function Calendar({
   className,
   classNames,
@@ -21,9 +30,21 @@ function Calendar({
   locale,
   formatters,
   components,
+  showCycleBadges = false,
+  getCycleForDate,
+  cycleBadgeMap,
+  cycleBadgeClassName,
   ...props
 }: React.ComponentProps<typeof DayPicker> & {
   buttonVariant?: React.ComponentProps<typeof Button>["variant"]
+  /** Tampilkan nomor siklus kecil di setiap tanggal (mis. tgl 21 → badge "10"). */
+  showCycleBadges?: boolean
+  /** Resolver dinamis tgl → nomor siklus (mengikuti anchor Siklus 1 yang customizable). */
+  getCycleForDate?: (date: Date) => number | string | null | undefined
+  /** Alternatif precomputed map dengan key YYYY-MM-DD lokal. Diprioritaskan di atas resolver. */
+  cycleBadgeMap?: CycleBadgeMap
+  /** Override class badge bila perlu. */
+  cycleBadgeClassName?: string
 }) {
   const defaultClassNames = getDefaultClassNames()
 
@@ -162,7 +183,14 @@ function Calendar({
           )
         },
         DayButton: ({ ...props }) => (
-          <CalendarDayButton locale={locale} {...props} />
+          <CalendarDayButton
+            locale={locale}
+            showCycleBadges={showCycleBadges}
+            getCycleForDate={getCycleForDate}
+            cycleBadgeMap={cycleBadgeMap}
+            cycleBadgeClassName={cycleBadgeClassName}
+            {...props}
+          />
         ),
         WeekNumber: ({ children, ...props }) => {
           return (
@@ -185,8 +213,19 @@ function CalendarDayButton({
   day,
   modifiers,
   locale,
+  children,
+  showCycleBadges = false,
+  getCycleForDate,
+  cycleBadgeMap,
+  cycleBadgeClassName,
   ...props
-}: React.ComponentProps<typeof DayButton> & { locale?: Partial<Locale> }) {
+}: React.ComponentProps<typeof DayButton> & {
+  locale?: Partial<Locale>
+  showCycleBadges?: boolean
+  getCycleForDate?: (date: Date) => number | string | null | undefined
+  cycleBadgeMap?: CycleBadgeMap
+  cycleBadgeClassName?: string
+}) {
   const defaultClassNames = getDefaultClassNames()
 
   const ref = React.useRef<HTMLButtonElement>(null)
@@ -194,11 +233,25 @@ function CalendarDayButton({
     if (modifiers.focused) ref.current?.focus()
   }, [modifiers.focused])
 
+  const cycleNum =
+    showCycleBadges && day?.date
+      ? (cycleBadgeMap?.[toLocalDateKey(day.date)] ??
+        getCycleForDate?.(day.date) ??
+        null)
+      : null
+
+  const isSelected =
+    modifiers.selected ||
+    modifiers.range_start ||
+    modifiers.range_end
+
   return (
     <Button
+      ref={ref}
       variant="ghost"
       size="icon"
       data-day={day.date.toLocaleDateString(locale?.code)}
+      data-cycle={cycleNum ?? undefined}
       data-selected-single={
         modifiers.selected &&
         !modifiers.range_start &&
@@ -210,11 +263,35 @@ function CalendarDayButton({
       data-range-middle={modifiers.range_middle}
       className={cn(
         "relative isolate z-10 flex aspect-square size-auto w-full min-w-(--cell-size) flex-col gap-1 border-0 leading-none font-normal group-data-[focused=true]/day:relative group-data-[focused=true]/day:z-10 group-data-[focused=true]/day:border-ring group-data-[focused=true]/day:ring-[3px] group-data-[focused=true]/day:ring-ring/50 data-[range-end=true]:rounded-(--cell-radius) data-[range-end=true]:rounded-r-(--cell-radius) data-[range-end=true]:bg-primary data-[range-end=true]:text-primary-foreground data-[range-middle=true]:rounded-none data-[range-middle=true]:bg-muted data-[range-middle=true]:text-foreground data-[range-start=true]:rounded-(--cell-radius) data-[range-start=true]:rounded-l-(--cell-radius) data-[range-start=true]:bg-primary data-[range-start=true]:text-primary-foreground data-[selected-single=true]:bg-primary data-[selected-single=true]:text-primary-foreground dark:hover:text-foreground [&>span]:text-xs [&>span]:opacity-70",
+        showCycleBadges && cycleNum != null && "pb-3.5",
         defaultClassNames.day,
         className
       )}
       {...props}
-    />
+    >
+      {children}
+      {showCycleBadges && cycleNum != null && (
+        <span
+          data-cycle-badge
+          title={`Siklus ${cycleNum}`}
+          aria-label={`Siklus ${cycleNum}`}
+          style={{
+            fontSize: 8,
+            lineHeight: 1.3,
+            opacity: modifiers.outside ? 0.5 : 1,
+          }}
+          className={cn(
+            "pointer-events-none absolute bottom-[3px] left-1/2 -translate-x-1/2 rounded border px-1 font-bold tabular-nums",
+            isSelected
+              ? "border-primary-foreground/40 bg-primary-foreground/25 text-primary-foreground"
+              : "border-primary/25 bg-primary/12 text-primary",
+            cycleBadgeClassName
+          )}
+        >
+          {cycleNum}
+        </span>
+      )}
+    </Button>
   )
 }
 

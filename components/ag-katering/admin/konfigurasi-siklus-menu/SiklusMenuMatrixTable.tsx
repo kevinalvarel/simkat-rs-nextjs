@@ -79,11 +79,11 @@ interface MatrixRowDefinition {
   hanyaPagiSiang?: boolean;
 }
 
-// Preset standard hospital rows layout (matching reference image)
+// Baris matriks kanonis KELAS I/II/III (tanpa VIP; legacy II-III tetap dibaca di matcher)
 const STANDARD_ROWS: MatrixRowDefinition[] = [
-  { id: 'VIP-HEWANI', kelas: 'VIP', jenis_makanan: 'HEWANI' },
-  { id: 'I-HEWANI', kelas: 'I', jenis_makanan: 'HEWANI' },
-  { id: 'II-III-HEWANI', kelas: 'II-III', jenis_makanan: 'HEWANI' },
+  { id: 'KELAS-I-HEWANI', kelas: 'KELAS I', jenis_makanan: 'HEWANI' },
+  { id: 'KELAS-II-HEWANI', kelas: 'KELAS II', jenis_makanan: 'HEWANI' },
+  { id: 'KELAS-III-HEWANI', kelas: 'KELAS III', jenis_makanan: 'HEWANI' },
   { id: 'SEMUA-NABATI', kelas: 'Semua Kelas', jenis_makanan: 'NABATI' },
   { id: 'SEMUA-SAYUR', kelas: 'Semua Kelas', jenis_makanan: 'SAYUR' },
   {
@@ -199,7 +199,10 @@ export default function SiklusMenuMatrixTable({
           i.kelas === 'ALL' ||
           i.kelas === 'Umum' ||
           i.kelas === 'I' ||
-          i.kelas === 'II-III'
+          i.kelas === 'II-III' ||
+          i.kelas === 'KELAS I' ||
+          i.kelas === 'KELAS II' ||
+          i.kelas === 'KELAS III'
         );
       }
 
@@ -403,8 +406,9 @@ export default function SiklusMenuMatrixTable({
                         variant='secondary'
                         className='text-xs font-bold px-2.5 py-1 uppercase tracking-wide'
                       >
-                        {row.kelas === 'Semua Kelas'
-                          ? 'Semua Kelas'
+                        {row.kelas.toUpperCase().startsWith('KELAS') ||
+                        row.kelas === 'Semua Kelas'
+                          ? row.kelas
                           : `Kelas ${row.kelas}`}
                       </Badge>
                     </TableCell>

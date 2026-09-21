@@ -22,6 +22,7 @@ import {
   Clock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useCycleBadges } from '@/hooks/use-cycle-badges';
 
 export type WaktuMakanType = 'PAGI' | 'SIANG' | 'MALAM';
 
@@ -63,6 +64,7 @@ export default function DpmpDateWaktuPicker({
 }: DpmpDateWaktuPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const currentDateObj = parseSafe(selectedDate);
+  const { getCycleForDate } = useCycleBadges();
 
   function handleSelectDate(d?: Date) {
     if (!d) return;
@@ -150,6 +152,8 @@ export default function DpmpDateWaktuPicker({
               selected={currentDateObj}
               onSelect={handleSelectDate}
               locale={id}
+              showCycleBadges
+              getCycleForDate={getCycleForDate}
               className='rounded-xl border-none p-2'
             />
           </div>

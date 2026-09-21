@@ -101,8 +101,8 @@ export type SlotItemInput = {
 };
 
 export interface SiklusMatrixRow {
-  id: string; // Unique key e.g. "I-HEWANI" or "II-III-HEWANI" or "ALL-NABATI"
-  kelas: string; // "I", "II-III", "VIP", "Semua Kelas"
+  id: string; // Unique key e.g. "KELAS-I-HEWANI" atau "ALL-NABATI"
+  kelas: string; // "KELAS I" | "KELAS II" | "KELAS III" | "Semua Kelas" (nilai dari sistem)
   jenis_makanan: string; // "HEWANI" | "NABATI" | "SAYUR" | "SARING"
   label: string;
   pagi: SiklusMenuItem[];

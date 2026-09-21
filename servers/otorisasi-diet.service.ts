@@ -253,7 +253,7 @@ async function applyApprovedRevisionToSnapshot(
             gedung: dataBaru.gedung || patient?.gedung || '',
             ruangan: dataBaru.ruangan || patient?.ruangan || '',
             no_bed: dataBaru.bed || patient?.bed || '-',
-            kelas: dataBaru.kelas || patient?.kelas || 'Kelas 1',
+            kelas: dataBaru.kelas || patient?.kelas || 'KELAS I',
             diet_rs_raw: dataBaru.diet || patient?.diet || 'Diet Biasa',
             status_saat_snapshot: dataBaru.status_pasien || 'AKTIF',
             is_emergent: true,

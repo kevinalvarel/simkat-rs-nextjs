@@ -27,6 +27,7 @@ import {
 import { Calendar } from '@/components/ui/calendar';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/lib/utils';
+import { useCycleBadges } from '@/hooks/use-cycle-badges';
 import type { PemorsianBatchOption } from '@/types/cetaketikettypes';
 
 export type WaktuMakanType = 'PAGI' | 'SIANG' | 'MALAM';
@@ -79,6 +80,7 @@ export default function CetakEtiketHeader({
 }: CetakEtiketHeaderProps) {
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const currentDateObj = parseSafe(selectedDate);
+  const { getCycleForDate } = useCycleBadges();
 
   // Check which mealtimes have locked batches for the selected date
   const existingWaktuForDate = useMemo(() => {
@@ -238,6 +240,8 @@ export default function CetakEtiketHeader({
                 selected={currentDateObj}
                 onSelect={handleSelectDate}
                 locale={id}
+                showCycleBadges
+                getCycleForDate={getCycleForDate}
                 className='rounded-xl border-none p-2'
               />
             </div>

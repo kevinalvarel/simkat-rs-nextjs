@@ -31,7 +31,7 @@ const STATUS_OPTIONS = [
   'PULANG',
 ];
 
-const DEFAULT_KELAS_OPTIONS = ['Kelas 1', 'Kelas 2', 'Kelas 3', 'VIP'];
+import { KELAS_FALLBACK } from '@/lib/kelas-utils';
 
 export default function PatientTable({
   patients,
@@ -74,12 +74,10 @@ export default function PatientTable({
     useState<PatientFormValues | null>(null);
   const [isSavingInline, setIsSavingInline] = useState(false);
 
-  const kelasOptions = [
-    ...new Set([
-      ...kelasList.map((k) => k.namaKelas),
-      ...DEFAULT_KELAS_OPTIONS,
-    ]),
-  ];
+  const kelasOptions =
+    kelasList.length > 0
+      ? [...new Set(kelasList.map((k) => k.namaKelas))]
+      : [KELAS_FALLBACK];
 
   const gedungOptions = gedungList.map((g) => g.namaGedung);
 
@@ -103,7 +101,7 @@ export default function PatientTable({
     currentKamarObj?.kelas ||
     kelasList[0]?.namaKelas ||
     kelasOptions[0] ||
-    'Kelas 1';
+    KELAS_FALLBACK;
 
   const isSemuaKamar =
     !kamar ||

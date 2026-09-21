@@ -32,26 +32,7 @@ interface InvoiceClassTableProps {
   data: InvoiceDailySummary;
 }
 
-const KELAS_BADGE_STYLE: Record<string, string> = {
-  VIP: 'bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/30',
-  VVIP: 'bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/30',
-  'KELAS 1':
-    'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/30',
-  'KELAS I':
-    'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/30',
-  'KELAS 2':
-    'bg-teal-500/10 text-teal-700 dark:text-teal-300 border-teal-500/30',
-  'KELAS II':
-    'bg-teal-500/10 text-teal-700 dark:text-teal-300 border-teal-500/30',
-  'KELAS 2 - 3':
-    'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30',
-  'KELAS 2-3':
-    'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30',
-  'KELAS 3':
-    'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30',
-  'KELAS III':
-    'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30',
-};
+import { getKelasBadgeStyle } from '@/lib/kelas-utils';
 
 export default function InvoiceClassTable({ data }: InvoiceClassTableProps) {
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
@@ -203,9 +184,8 @@ export default function InvoiceClassTable({ data }: InvoiceClassTableProps) {
             <TableBody>
               {data.classes.map((row, idx) => {
                 const isExpanded = Boolean(expandedRows[row.kelas]);
-                const badgeStyle =
-                  KELAS_BADGE_STYLE[row.kelas.toUpperCase()] ||
-                  'bg-secondary text-secondary-foreground border-border';
+                const kelasOrder = data.classes.map((c) => c.kelas);
+                const badgeStyle = getKelasBadgeStyle(row.kelas, kelasOrder);
 
                 return (
                   <React.Fragment key={row.kelas}>
