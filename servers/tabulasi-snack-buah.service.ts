@@ -6,6 +6,7 @@ import { snapshotDetailTable } from '@/db/schemas/snapshot/snapshot-detail';
 import { masterSiklusMenuTable } from '@/db/schemas/master/siklus-menu';
 import { dietMappingTable } from '@/db/schemas/master/mapping-diet';
 import type { TabulasiDashboardData } from '@/types/tabulasitypes';
+import { getWibTodayKey } from '@/lib/wib';
 import {
   buildRoomBuildingMap,
   resolveTabulasiPatients,
@@ -28,7 +29,7 @@ export async function getTabulasiSupplementData(
   selectedDate?: string,
   slot: 'PAGI' | 'SIANG' = 'PAGI',
 ): Promise<TabulasiDashboardData> {
-  const targetDate = selectedDate || new Date().toISOString().slice(0, 10);
+  const targetDate = selectedDate || getWibTodayKey();
   const base = await getTabulasiDashboardData(undefined, targetDate, slot);
   if (!base.success)
     return { ...base, hospitalData: { ...base.hospitalData, waktuMakan: slot } };
@@ -127,7 +128,7 @@ export async function getTabulasiSnackBuahData(
   selectedDate?: string,
   slot: 'PAGI' | 'SIANG' = 'PAGI',
 ): Promise<{ snack: TabulasiDashboardData; buah: TabulasiDashboardData }> {
-  const targetDate = selectedDate || new Date().toISOString().slice(0, 10);
+  const targetDate = selectedDate || getWibTodayKey();
   const base = await getTabulasiDashboardData(undefined, targetDate, slot);
   if (!base.success) {
     const empty = {

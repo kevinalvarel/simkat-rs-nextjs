@@ -40,8 +40,9 @@ import {
   PopoverContent,
 } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
-import { format, parseISO, isValid } from 'date-fns';
+import { format, isValid } from 'date-fns';
 import { id } from 'date-fns/locale';
+import { getWibTodayKey, parseCalendarDate, wibKeyToSafeDate } from '@/lib/wib';
 import type { MenuTagOption } from '@/lib/siklus-menu-tags';
 import {
   getCycleNumForDate,
@@ -72,8 +73,11 @@ import * as XLSX from 'xlsx';
 function parseCycleDate(dateStr?: string | null): Date | null {
   if (!dateStr) return null;
   if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-    const d = parseISO(dateStr);
-    return isValid(d) ? d : null;
+    // WIB sentral: bangun instant 12:00 WIB agar tidak geser hari di UTC.
+    const parsed = parseCalendarDate(dateStr);
+    if (!parsed) return null;
+    const key = `${parsed.year}-${String(parsed.month).padStart(2, '0')}-${String(parsed.day).padStart(2, '0')}`;
+    return wibKeyToSafeDate(key);
   }
   const parsed = new Date(dateStr);
   return isValid(parsed) ? parsed : null;
@@ -286,14 +290,11 @@ export default function KonfigurasiSiklusMenuClient({
     }
   }
 
-  // Handle setting the starting date for Cycle 1
+  // Handle setting the starting date for Cycle 1 (WIB sentral)
   async function handleApplyStartDate(newStartDate: Date) {
     setIsApplyingRotation(true);
     try {
-      const yyyy = newStartDate.getFullYear();
-      const mm = String(newStartDate.getMonth() + 1).padStart(2, '0');
-      const dd = String(newStartDate.getDate()).padStart(2, '0');
-      const isoDate = `${yyyy}-${mm}-${dd}`;
+      const isoDate = getWibTodayKey(newStartDate);
 
       const res = await applyStartDateRotation(isoDate);
       if (res.success) {

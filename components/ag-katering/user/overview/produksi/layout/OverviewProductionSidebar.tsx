@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import OverviewClockCard from '@/components/ag-katering/user/overview/produksi/ui/OverviewClockCard';
 import OverviewNextSnapshotCard from '@/components/ag-katering/user/overview/produksi/ui/OverviewNextSnapshotCard';
+import { formatIndoFull } from '@/lib/wib';
 
 interface OverviewProductionSidebarProps {
   waktuMakan: string;
@@ -39,15 +40,7 @@ export default function OverviewProductionSidebar({
   totalPasien = 0,
 }: OverviewProductionSidebarProps) {
   const displayDate =
-    tanggalFormatted ||
-    (tanggalProduksi
-      ? new Date(tanggalProduksi).toLocaleDateString('id-ID', {
-          weekday: 'long',
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric',
-        })
-      : '-');
+    tanggalFormatted || (tanggalProduksi ? formatIndoFull(tanggalProduksi) : '-');
 
   return (
     <Card className='lg:col-span-1 border border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-950/20 shadow-xs rounded-2xl flex flex-col justify-between p-5 text-center'>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { WIB_TIMEZONE } from '@/lib/wib';
 
 interface OverviewClockCardProps {
   currentTime: string;
@@ -20,6 +21,7 @@ export default function OverviewClockCard({
           day: 'numeric',
           month: 'long',
           year: 'numeric',
+          timeZone: WIB_TIMEZONE,
         })}
       </div>
     </div>

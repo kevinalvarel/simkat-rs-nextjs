@@ -21,6 +21,7 @@ import {
 import { Calendar } from '@/components/ui/calendar';
 import { format, parseISO, isValid } from 'date-fns';
 import { id } from 'date-fns/locale';
+import { getWibHari, getWibTodayKey } from '@/lib/wib';
 import {
   Settings2,
   Loader2,
@@ -91,17 +92,8 @@ export default function KelolaSiklusDialog({
 
     setIsUpdating(true);
     try {
-      const isoDate = tanggal ? format(tanggal, 'yyyy-MM-dd') : null;
-      const dayNames = [
-        'MINGGU',
-        'SENIN',
-        'SELASA',
-        'RABU',
-        'KAMIS',
-        'JUMAT',
-        'SABTU',
-      ];
-      const assignedDay = tanggal ? dayNames[tanggal.getDay()] : null;
+      const isoDate = tanggal ? getWibTodayKey(tanggal) : null;
+      const assignedDay = isoDate ? getWibHari(isoDate) : null;
 
       const res = await updateMasterSiklus(cycle.nomor_siklus, {
         nama_siklus: namaSiklus.trim(),

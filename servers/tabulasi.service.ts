@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { getWibTodayKey } from '@/lib/wib';
 import { snapshotBatchTable } from '@/db/schemas/snapshot/snapshot-batch';
 import { snapshotDetailTable } from '@/db/schemas/snapshot/snapshot-detail';
 import {
@@ -78,7 +79,7 @@ export async function generateTabulasiAction(
   try {
     const cleanDate = tanggal
       ? tanggal.replace(/-/g, '')
-      : new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      : getWibTodayKey().replace(/-/g, '');
     const cleanWaktu = (waktuMakan || 'PAGI').toUpperCase();
     const batchCode = `BATCH-${cleanDate}-${cleanWaktu}`;
 

@@ -7,6 +7,7 @@ import { snapshotDetailTable } from '@/db/schemas/snapshot/snapshot-detail';
 import { pasienTable } from '@/db/schemas/patient/pasien';
 import { ruanganTable } from '@/db/schemas/master/ruangan';
 import { isNpoPatient } from '@/lib/npo-utils';
+import { formatIndoFull, getWibTodayKey, WIB_TIMEZONE } from '@/lib/wib';
 import type {
   DpmpSummaryData,
   DpmpBatchOption,
@@ -58,7 +59,7 @@ export async function getAvailableDpmpBatches(): Promise<DpmpBatchOption[]> {
 export async function getLiveWaktuMakan(
   targetDateStr?: string,
 ): Promise<'PAGI' | 'SIANG' | 'MALAM'> {
-  const targetDate = targetDateStr || new Date().toISOString().slice(0, 10);
+  const targetDate = targetDateStr || getWibTodayKey();
   try {
     const lockedBatches = await db
       .select({ waktu_makan: snapshotBatchTable.waktu_makan })
@@ -100,7 +101,7 @@ export async function getDpmpData(
   targetWaktuMakan?: string,
 ): Promise<DpmpSummaryData> {
   try {
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = getWibTodayKey();
     const currentLiveWaktu = await getLiveWaktuMakan(todayStr);
 
     const availableBatches = await getAvailableDpmpBatches();
@@ -283,15 +284,7 @@ export async function getDpmpData(
       (p) => (p.is_emergent || p.status === 'EMERGENT') && !isNpoPatient(p),
     ).length;
 
-    const dateObj = new Date(selectedDate);
-    const tanggalFormatted = !isNaN(dateObj.getTime())
-      ? dateObj.toLocaleDateString('id-ID', {
-          weekday: 'long',
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric',
-        })
-      : selectedDate;
+    const tanggalFormatted = formatIndoFull(selectedDate);
 
     const waktuMakanFormatted = formatWaktuTitle(selectedWaktu);
     const dateClean = selectedDate.replace(/-/g, '');
@@ -325,7 +318,7 @@ export async function getDpmpData(
       kwitansiNumber: dpmpNumber,
       tanggalFormatted,
       waktuMakanFormatted,
-      lastUpdated: new Date().toLocaleTimeString('id-ID'),
+      lastUpdated: new Date().toLocaleTimeString('id-ID', { timeZone: WIB_TIMEZONE }),
       selectedDate,
       selectedWaktu,
       availableDates,
@@ -334,7 +327,7 @@ export async function getDpmpData(
     };
   } catch (error) {
     console.error('Error in getDpmpData:', error);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getWibTodayKey();
     const fallbackNumber = `DPMP/GZ-RS/${today.replace(/-/g, '')}/PAGI-001`;
     return {
       success: false,
@@ -349,7 +342,7 @@ export async function getDpmpData(
       kwitansiNumber: fallbackNumber,
       tanggalFormatted: 'Hari Ini',
       waktuMakanFormatted: 'Pagi',
-      lastUpdated: new Date().toLocaleTimeString('id-ID'),
+      lastUpdated: new Date().toLocaleTimeString('id-ID', { timeZone: WIB_TIMEZONE }),
       selectedDate: today,
       selectedWaktu: 'PAGI',
       availableDates: [today],

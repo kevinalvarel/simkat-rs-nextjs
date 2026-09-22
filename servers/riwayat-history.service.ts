@@ -4,6 +4,7 @@ import { eq, desc, asc, ne, lt, and, or, isNull, isNotNull } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { db } from '@/drizzle';
 import { user } from '@/db/auth-schema';
+import { getWibTodayKey } from '@/lib/wib';
 import { riwayatDietHistoryTable } from '@/db/schemas/snapshot/riwayat-history';
 import { pasienTable } from '@/db/schemas/patient/pasien';
 import { snapshotBatchTable } from '@/db/schemas/snapshot/snapshot-batch';
@@ -383,7 +384,7 @@ export async function getRiwayatDietStats(
   const data = items || (await getRiwayatDietPasienList());
   const giziRsUsers = await getGiziRsUsers();
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = getWibTodayKey();
   const totalRiwayat = data.length;
   const hariIniCount = data.filter(
     (i) => i.requested_at.slice(0, 10) === todayStr,

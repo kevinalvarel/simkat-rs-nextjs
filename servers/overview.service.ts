@@ -15,6 +15,13 @@ import {
 import { otorisasiPerubahanDietTable } from '@/db/schemas/snapshot/perizinan-revisi';
 import { isNpoPatient } from '@/lib/npo-utils';
 import {
+  addCalendarDays,
+  formatIndoFull,
+  getWibHari,
+  getWibMinutes,
+  getWibTodayKey,
+} from '@/lib/wib';
+import {
   resolveActiveCycleForDate,
   normalizeDishName,
 } from '@/lib/siklus-menu-utils';
@@ -39,15 +46,7 @@ interface WaktuMakanConfig {
   waktu: string;
 }
 
-const HARI_INDONESIA = [
-  'MINGGU',
-  'SENIN',
-  'SELASA',
-  'RABU',
-  'KAMIS',
-  'JUMAT',
-  'SABTU',
-] as const;
+const WIB_TZ = 'Asia/Jakarta';
 
 function getNextCycle(
   configs: WaktuMakanConfig[],
@@ -71,7 +70,9 @@ function getNextCycle(
     return h * 60 + m;
   };
 
-  const currentMinutes = date.getHours() * 60 + date.getMinutes();
+  // WIB sentral: jam server UTC tidak boleh dipakai langsung.
+  const currentMinutes = getWibMinutes(date);
+  const todayKey = getWibTodayKey(date);
 
   const pagiMin = getMinutes(pagiTime);
   const siangMin = getMinutes(siangTime);
@@ -96,14 +97,9 @@ function getNextCycle(
     dateOffset = 1; // PAGI of tomorrow
   }
 
-  const targetDate = new Date(date);
-  if (dateOffset > 0) {
-    targetDate.setDate(targetDate.getDate() + dateOffset);
-  }
-
   return {
     waktuMakan,
-    tanggalProduksi: targetDate.toISOString().slice(0, 10),
+    tanggalProduksi: dateOffset > 0 ? addCalendarDays(todayKey, dateOffset) : todayKey,
     cutoffTime: cutoffTime.slice(0, 5),
   };
 }
@@ -123,10 +119,10 @@ function getNextCycleAfter(
   const nextIndex = (currentIndex + 1) % 3;
   const nextWaktuMakan = order[nextIndex];
 
-  const nextDate = new Date(current.tanggalProduksi);
-  if (currentIndex === 2) {
-    nextDate.setDate(nextDate.getDate() + 1);
-  }
+  const nextDateKey =
+    currentIndex === 2
+      ? addCalendarDays(current.tanggalProduksi, 1)
+      : current.tanggalProduksi;
 
   const nextCutoff =
     configs.find((c) => c.jenis_makan === nextWaktuMakan)?.waktu ||
@@ -134,7 +130,7 @@ function getNextCycleAfter(
 
   return {
     waktuMakan: nextWaktuMakan,
-    tanggalProduksi: nextDate.toISOString().slice(0, 10),
+    tanggalProduksi: nextDateKey,
     cutoffTime: nextCutoff.slice(0, 5),
   };
 }
@@ -550,19 +546,10 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
       nextCycle = getNextCycleAfter(nextCycle, timeConfigs);
     }
 
-    // 3. Compute Target Production Date & Day Info
-    const targetDateObj = new Date(nextCycle.tanggalProduksi);
-    const dayIndex = isNaN(targetDateObj.getDay()) ? 1 : targetDateObj.getDay();
-    const currentHari = HARI_INDONESIA[dayIndex] || 'SENIN';
+    // 3. Compute Target Production Date & Day Info (WIB sentral)
+    const currentHari = getWibHari(nextCycle.tanggalProduksi);
 
-    const tanggalFormatted = !isNaN(targetDateObj.getTime())
-      ? targetDateObj.toLocaleDateString('id-ID', {
-          weekday: 'long',
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric',
-        })
-      : nextCycle.tanggalProduksi;
+    const tanggalFormatted = formatIndoFull(nextCycle.tanggalProduksi);
 
     // 4. Resolve Active Master Siklus for the target date
     const allMasterCycles = await db
@@ -1180,7 +1167,7 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
       totalPorsi,
 
       cards,
-      lastUpdated: new Date().toLocaleTimeString('id-ID'),
+      lastUpdated: new Date().toLocaleTimeString('id-ID', { timeZone: WIB_TZ }),
     };
   } catch (error) {
     console.error('Error fetching live overview data:', error);
@@ -1201,7 +1188,7 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
       totalPorsi: 0,
 
       cards: [],
-      lastUpdated: new Date().toLocaleTimeString('id-ID'),
+      lastUpdated: new Date().toLocaleTimeString('id-ID', { timeZone: WIB_TZ }),
     };
   }
 }
@@ -1328,7 +1315,7 @@ export async function getLiveKateringData(): Promise<LiveKateringSummary> {
       totalPasien: kateringPatients.length,
       dietRawList,
       patients: kateringPatients,
-      lastUpdated: new Date().toLocaleTimeString('id-ID'),
+      lastUpdated: new Date().toLocaleTimeString('id-ID', { timeZone: WIB_TZ }),
     };
   } catch (err) {
     console.error('Error fetching live katering data:', err);
@@ -1337,7 +1324,7 @@ export async function getLiveKateringData(): Promise<LiveKateringSummary> {
       totalPasien: 0,
       dietRawList: [],
       patients: [],
-      lastUpdated: new Date().toLocaleTimeString('id-ID'),
+      lastUpdated: new Date().toLocaleTimeString('id-ID', { timeZone: WIB_TZ }),
     };
   }
 }

@@ -1,4 +1,10 @@
 import type { masterSiklusTable } from '@/db/schemas/master/siklus-menu';
+import {
+  getWibParts,
+  getWibTodayKey,
+  parseCalendarDate,
+  wibKeyToSafeDate,
+} from '@/lib/wib';
 
 export type MasterSiklusRow = typeof masterSiklusTable.$inferSelect;
 
@@ -33,7 +39,9 @@ export function normalizeDishName(name: string | null | undefined): string {
 }
 
 /**
- * Parses YYYY-MM-DD date string or Date object into year, month (1-12), and day (1-31) in local time.
+ * Parses YYYY-MM-DD date string or Date object into year, month (1-12), and day (1-31) in WIB.
+ * Date object selalu diinterpretasi sebagai instant lalu diambil parts WIB-nya,
+ * sehingga server UTC dan browser WIB menghasilkan tanggal yang sama.
  */
 function extractYearMonthDay(dateInput: Date | string): {
   year: number;
@@ -41,28 +49,19 @@ function extractYearMonthDay(dateInput: Date | string): {
   day: number; // 1-31
 } {
   if (typeof dateInput === 'string') {
-    const parts = dateInput.split('T')[0].split('-');
-    if (parts.length === 3) {
-      const y = parseInt(parts[0], 10);
-      const m = parseInt(parts[1], 10);
-      const d = parseInt(parts[2], 10);
-      if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
-        return { year: y, month: m, day: d };
-      }
-    }
+    const parsed = parseCalendarDate(dateInput);
+    if (parsed) return parsed;
     const dObj = new Date(dateInput);
-    return {
-      year: dObj.getFullYear(),
-      month: dObj.getMonth() + 1,
-      day: dObj.getDate(),
-    };
+    if (!isNaN(dObj.getTime())) {
+      const p = getWibParts(dObj);
+      return { year: p.year, month: p.month, day: p.day };
+    }
+    const fallback = getWibParts(new Date());
+    return { year: fallback.year, month: fallback.month, day: fallback.day };
   }
 
-  return {
-    year: dateInput.getFullYear(),
-    month: dateInput.getMonth() + 1,
-    day: dateInput.getDate(),
-  };
+  const p = getWibParts(dateInput);
+  return { year: p.year, month: p.month, day: p.day };
 }
 
 /**
@@ -258,14 +257,11 @@ export function consolidateSlotMenuItems<T extends ConsolidableMenuItem>(items: 
 }
 
 /**
- * Formats a Date into local YYYY-MM-DD key (used for calendar badge lookup).
- * Uses local time (not UTC) so it matches what the user sees in the calendar.
+ * Formats a Date into WIB YYYY-MM-DD key (used for calendar badge lookup).
+ * Selalu pakai parts WIB agar server UTC dan browser WIB sama.
  */
 export function toISODateKey(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+  return getWibTodayKey(date);
 }
 
 /**
@@ -359,6 +355,7 @@ export function getRollingCycleDates(
   // menghitung diff dari anchor, tapi tidak mengeksposnya — hitung ulang
   // secara konsisten di sini dengan basis UTC kalender.
   const cycle1 = regularCycles.find((c) => c.nomor_siklus === 1);
+  const nowWib = getWibParts(now);
   let anchorUtc: number | null = null;
   if (cycle1?.tanggal) {
     const p = extractYearMonthDay(cycle1.tanggal);
@@ -375,26 +372,21 @@ export function getRollingCycleDates(
       ref.setUTCDate(ref.getUTCDate() - (idx >= 0 ? idx : 0));
       anchorUtc = ref.getTime();
     } else {
-      anchorUtc = Date.UTC(
-        now.getFullYear(),
-        now.getMonth(),
-        1,
-      );
+      // Fallback WIB: tanggal 1 bulan berjalan dalam WIB (bukan lokal server).
+      anchorUtc = Date.UTC(nowWib.year, nowWib.month - 1, 1);
     }
   }
 
   const N = regularCycles.length;
   // Awal jendela periode berjalan = anchor + (iteration - 1) * N hari.
   // `cycleIteration` dihitung sebagai floor(diffDays / N) + 1.
-  const windowStartUtc = (anchorUtc ?? Date.UTC(now.getFullYear(), now.getMonth(), 1)) + (iteration - 1) * N * 86400000;
+  const windowStartUtc = (anchorUtc ?? Date.UTC(nowWib.year, nowWib.month - 1, 1)) + (iteration - 1) * N * 86400000;
 
   regularCycles.forEach((cycle, index) => {
     const d = new Date(windowStartUtc + index * 86400000);
-    // Bangun Date lokal tengah hari agar aman dari geser zona waktu.
-    result.set(
-      cycle.nomor_siklus,
-      new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 12, 0, 0),
-    );
+    // Instant aman 12:00 WIB (=05:00 UTC) agar tidak geser hari di UTC/WIB.
+    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+    result.set(cycle.nomor_siklus, wibKeyToSafeDate(key));
   });
 
   return result;

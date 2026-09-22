@@ -2,12 +2,13 @@
  * Pure normalization utilities for tabulasi.
  * No side effects, no DB access — safe to import anywhere.
  */
+import { getWibParts } from '@/lib/wib';
 
 /**
- * Determine default mealtime based on current local hour.
+ * Determine default mealtime based on current WIB hour (sentral).
  */
-export function getDefaultMealtime(): 'PAGI' | 'SIANG' | 'MALAM' {
-  const hour = new Date().getHours();
+export function getDefaultMealtime(now: Date = new Date()): 'PAGI' | 'SIANG' | 'MALAM' {
+  const hour = getWibParts(now).hour;
   if (hour < 10) return 'PAGI';
   if (hour < 15) return 'SIANG';
   return 'MALAM';

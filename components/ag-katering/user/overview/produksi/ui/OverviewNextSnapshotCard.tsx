@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatIndo } from '@/lib/wib';
 
 interface OverviewNextSnapshotCardProps {
   cutoffTime: string;
@@ -11,12 +12,7 @@ export default function OverviewNextSnapshotCard({
   waktuMakan,
   tanggalProduksi,
 }: OverviewNextSnapshotCardProps) {
-  const formattedDate = tanggalProduksi
-    ? new Date(tanggalProduksi).toLocaleDateString('id-ID', {
-        day: 'numeric',
-        month: 'long',
-      })
-    : '-';
+  const formattedDate = tanggalProduksi ? formatIndo(tanggalProduksi).replace(/ \d{4}$/, '') : '-';
 
   return (
     <div className='space-y-1 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-2.5'>

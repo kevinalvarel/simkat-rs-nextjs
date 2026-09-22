@@ -3,6 +3,7 @@
 import React from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Clock, Lock, Soup, Users } from 'lucide-react';
+import { formatIndoFull } from '@/lib/wib';
 
 interface OverviewProductionHeaderProps {
   waktuMakan: string;
@@ -30,15 +31,7 @@ export default function OverviewProductionHeader({
   totalPorsi = 0,
 }: OverviewProductionHeaderProps) {
   const displayDate =
-    tanggalFormatted ||
-    (tanggalProduksi
-      ? new Date(tanggalProduksi).toLocaleDateString('id-ID', {
-          weekday: 'long',
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric',
-        })
-      : '-');
+    tanggalFormatted || (tanggalProduksi ? formatIndoFull(tanggalProduksi) : '-');
 
   return (
     <div className='bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-5 sm:p-6 rounded-2xl border border-primary/20 shadow-xs'>

@@ -1,4 +1,11 @@
 import type { snapshotBatchTable } from '@/db/schemas/snapshot/snapshot-batch';
+import {
+  addCalendarDays as addCalendarDaysWib,
+  formatIndoShort,
+  getWibMinutes as getWibMinutesCentral,
+  getWibTodayKey,
+  wibCutoffToDate,
+} from '@/lib/wib';
 
 export type SnapshotBatch = typeof snapshotBatchTable.$inferSelect;
 export type MealName = 'PAGI' | 'SIANG' | 'MALAM';
@@ -19,26 +26,16 @@ export type MealCycleStatus = {
 const MEALS: MealName[] = ['PAGI', 'SIANG', 'MALAM'];
 const DEFAULT_TIMES: Record<MealName, string> = { PAGI: '05:30', SIANG: '10:30', MALAM: '16:00' };
 
-export function getWibDate(now: Date): string {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit',
-  }).formatToParts(now);
-  const part = (type: string) => parts.find((item) => item.type === type)?.value || '';
-  return `${part('year')}-${part('month')}-${part('day')}`;
+export function getWibDate(now: Date = new Date()): string {
+  return getWibTodayKey(now);
 }
 
-export function getWibMinutes(now: Date): number {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
-  }).formatToParts(now);
-  const part = (type: string) => Number(parts.find((item) => item.type === type)?.value || 0);
-  return part('hour') * 60 + part('minute');
+export function getWibMinutes(now: Date = new Date()): number {
+  return getWibMinutesCentral(now);
 }
 
 export function addCalendarDays(date: string, days: number): string {
-  const result = new Date(`${date}T00:00:00Z`);
-  result.setUTCDate(result.getUTCDate() + days);
-  return result.toISOString().slice(0, 10);
+  return addCalendarDaysWib(date, days);
 }
 
 export function getNextMealSlot(date: string, meal: MealName): { date: string; meal: MealName } {
@@ -96,13 +93,13 @@ export function computeMealCycleStatuses(
       : meal === 'PAGI' && isMalamLocked ? tomorrow : today;
     const batch = lockedBatch(date, meal);
     const isAvailable = !batch && active.date === date && active.meal === meal;
-    const cutoff = new Date(`${date}T${timeFor(meal).slice(0, 5)}:00+07:00`);
+    const cutoff = wibCutoffToDate(date, timeFor(meal));
     const remainingSeconds = isAvailable ? Math.max(0, Math.floor((cutoff.getTime() - now.getTime()) / 1000)) : 0;
     return {
       id: configs.find((config) => config.jenis_makan === meal)?.id || 0,
       jenis_makan: meal, waktu: timeFor(meal), isLocked: Boolean(batch), isAvailable,
       isTomorrow: date > today, targetDate: date,
-      targetDateDisplay: new Date(`${date}T00:00:00+07:00`).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Jakarta' }),
+      targetDateDisplay: formatIndoShort(date),
       remainingSeconds, batch,
     };
   });

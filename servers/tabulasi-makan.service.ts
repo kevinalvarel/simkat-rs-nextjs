@@ -32,6 +32,7 @@ import {
   matchPatientToDish,
 } from '@/helper/tabulasi';
 import type { AnalyzedPatient } from '@/helper/tabulasi';
+import { formatIndoFull, getWibTodayKey, WIB_TIMEZONE } from '@/lib/wib';
 
 export type SnapshotBatch = typeof snapshotBatchTable.$inferSelect;
 export type SnapshotDetail = typeof snapshotDetailTable.$inferSelect;
@@ -64,7 +65,7 @@ export async function getTabulasiDashboardData(
   mealTime?: string,
 ): Promise<TabulasiDashboardData> {
   try {
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = getWibTodayKey();
     const targetDate = selectedDate || todayStr;
     const currentMeal = (mealTime || getDefaultMealtime()).toUpperCase();
 
@@ -452,16 +453,7 @@ export async function getTabulasiDashboardData(
       },
     ];
 
-    let formattedDate = targetDate;
-    try {
-      const d = new Date(targetDate);
-      formattedDate = d.toLocaleDateString('id-ID', {
-        weekday: 'long',
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-      });
-    } catch {}
+    const formattedDate = formatIndoFull(targetDate);
 
     const hospitalData: TabulasiHospitalData = {
       tanggal: targetDate,
@@ -472,10 +464,7 @@ export async function getTabulasiDashboardData(
       availableSiklus,
       statusBatch: isOfficialLocked ? 'OFFICIAL_LOCKED' : 'LIVE_ACTIVE',
       batchCode: resolvedBatchCode,
-      lastUpdated: new Date().toLocaleTimeString('id-ID', {
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
+      lastUpdated: new Date().toLocaleTimeString('id-ID', { timeZone: WIB_TIMEZONE, hour: '2-digit', minute: '2-digit' }),
       grandTotalPasien: totalPatients,
       grandTotalPorsi,
       totalGedungLama: totalPortionsLama,
@@ -506,11 +495,11 @@ export async function getTabulasiDashboardData(
       snackSummary,
       schedule,
       hospitalData,
-      lastUpdated: new Date().toLocaleTimeString('id-ID'),
+      lastUpdated: new Date().toLocaleTimeString('id-ID', { timeZone: WIB_TIMEZONE }),
     };
   } catch (error) {
     console.error('Error in getTabulasiDashboardData:', error);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getWibTodayKey();
     const emptyHospitalData: TabulasiHospitalData = {
       tanggal: today,
       tanggalFormatted: 'Hari Ini',
@@ -555,7 +544,7 @@ export async function getTabulasiDashboardData(
       },
       schedule: [],
       hospitalData: emptyHospitalData,
-      lastUpdated: new Date().toLocaleTimeString('id-ID'),
+      lastUpdated: new Date().toLocaleTimeString('id-ID', { timeZone: WIB_TIMEZONE }),
     };
   }
 }

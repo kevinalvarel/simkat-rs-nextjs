@@ -14,6 +14,13 @@ import { otorisasiPerubahanDietTable } from '@/db/schemas/snapshot/perizinan-rev
 import { revisiEtiketPrintTable } from '@/db/schemas/snapshot/revisi-etiket-print';
 import { canPrintRevision, revisionSignature } from '@/lib/revisi-etiket';
 import { isNpoPatient } from '@/lib/npo-utils';
+import {
+  addCalendarDays,
+  formatIndoFull,
+  getWibHari,
+  getWibMinutes,
+  getWibTodayKey,
+} from '@/lib/wib';
 import { resolveActiveCycleForDate } from '@/lib/siklus-menu-utils';
 import {
   checkAndAutoLockSnapshots,
@@ -39,15 +46,7 @@ interface WaktuMakanConfig {
   waktu: string;
 }
 
-const HARI_INDONESIA = [
-  'MINGGU',
-  'SENIN',
-  'SELASA',
-  'RABU',
-  'KAMIS',
-  'JUMAT',
-  'SABTU',
-] as const;
+const WIB_TZ = 'Asia/Jakarta';
 
 function getNextCycle(
   configs: WaktuMakanConfig[],
@@ -71,7 +70,9 @@ function getNextCycle(
     return h * 60 + m;
   };
 
-  const currentMinutes = date.getHours() * 60 + date.getMinutes();
+  // WIB sentral: jangan pakai jam lokal server (UTC).
+  const currentMinutes = getWibMinutes(date);
+  const todayKey = getWibTodayKey(date);
   const pagiMin = getMinutes(pagiTime);
   const siangMin = getMinutes(siangTime);
   const malamMin = getMinutes(malamTime);
@@ -95,14 +96,9 @@ function getNextCycle(
     dateOffset = 1; // PAGI of tomorrow
   }
 
-  const targetDate = new Date(date);
-  if (dateOffset > 0) {
-    targetDate.setDate(targetDate.getDate() + dateOffset);
-  }
-
   return {
     waktuMakan,
-    tanggalProduksi: targetDate.toISOString().slice(0, 10),
+    tanggalProduksi: dateOffset > 0 ? addCalendarDays(todayKey, dateOffset) : todayKey,
     cutoffTime: cutoffTime.slice(0, 5),
   };
 }
@@ -198,23 +194,14 @@ export async function getLivePemorsianData(
       }
     }
 
-    // 4. Resolve Active Master Siklus for the target date
+    // 4. Resolve Active Master Siklus for the target date (WIB sentral)
     const targetDateStr =
       selectedBatch?.tanggal_produksi || filterDate || nextCycle.tanggalProduksi;
     const targetWaktuMakan =
       selectedBatch?.waktu_makan || filterWaktuMakan || nextCycle.waktuMakan;
-    const targetDateObj = new Date(targetDateStr);
-    const dayIndex = isNaN(targetDateObj.getDay()) ? 1 : targetDateObj.getDay();
-    const currentHari = HARI_INDONESIA[dayIndex] || 'SENIN';
+    const currentHari = getWibHari(targetDateStr);
 
-    const tanggalFormatted = !isNaN(targetDateObj.getTime())
-      ? targetDateObj.toLocaleDateString('id-ID', {
-          weekday: 'long',
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric',
-        })
-      : targetDateStr;
+    const tanggalFormatted = formatIndoFull(targetDateStr);
 
     const allMasterCycles = await db
       .select()
@@ -402,7 +389,7 @@ export async function getLivePemorsianData(
                 ? `Koreksi No RM: ${liveP?.no_rm || '-'}`
                 : 'Pasien Pulang (-1)',
             requested_by: liveP?.updated_by || 'AG RS',
-            requested_at: new Date().toLocaleTimeString('id-ID'),
+            requested_at: new Date().toLocaleTimeString('id-ID', { timeZone: WIB_TZ }),
             batch_id: selectedBatch.id,
             batch_code: selectedBatch.batch_code,
             revision_signature: signature,
@@ -496,7 +483,7 @@ export async function getLivePemorsianData(
               ? 'Pasien Baru Susulan (Puasa / NPO)'
               : `Pasien Baru Susulan (+1 Porsi: ${p.diet})`,
             requested_by: p.updated_by || 'AG RS',
-            requested_at: new Date().toLocaleTimeString('id-ID'),
+            requested_at: new Date().toLocaleTimeString('id-ID', { timeZone: WIB_TZ }),
             batch_id: selectedBatch.id,
             batch_code: selectedBatch.batch_code,
             revision_signature: signature,
@@ -628,7 +615,7 @@ export async function getLivePemorsianData(
       sudahDicetakCount,
       butuhRevisiCount,
 
-      lastUpdated: new Date().toLocaleTimeString('id-ID'),
+      lastUpdated: new Date().toLocaleTimeString('id-ID', { timeZone: WIB_TZ }),
     };
   } catch (error) {
     console.error('Error fetching live pemorsian data:', error);
@@ -663,7 +650,7 @@ export async function getLivePemorsianData(
       sudahDicetakCount: 0,
       butuhRevisiCount: 0,
 
-      lastUpdated: new Date().toLocaleTimeString('id-ID'),
+      lastUpdated: new Date().toLocaleTimeString('id-ID', { timeZone: WIB_TZ }),
     };
   }
 }
@@ -705,8 +692,7 @@ export async function updateEtiketPrintStatus(
     let resolvedBatchId = batchId && batchId > 0 ? batchId : null;
 
     // If no batchId provided or currently in Live Preview, resolve or create the snapshot batch
-    const prodDate =
-      targetDate || new Date().toISOString().slice(0, 10);
+    const prodDate = targetDate || getWibTodayKey();
     const prodWaktu = (targetWaktu || 'SIANG').toUpperCase();
 
     if (!resolvedBatchId) {

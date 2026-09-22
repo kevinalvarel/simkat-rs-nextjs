@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
+import { formatIndoFull } from '@/lib/wib';
 import { Badge } from '@/components/ui/badge';
 import {
   Printer,
@@ -46,15 +47,7 @@ export default function PemorsianSidebar({
   activeStatusFilter = 'ALL',
 }: PemorsianSidebarProps) {
   const displayDate =
-    tanggalFormatted ||
-    (tanggalProduksi
-      ? new Date(tanggalProduksi).toLocaleDateString('id-ID', {
-          weekday: 'long',
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric',
-        })
-      : '-');
+    tanggalFormatted || (tanggalProduksi ? formatIndoFull(tanggalProduksi) : '-');
 
   return (
     <Card className='lg:col-span-1 border border-primary/30 bg-primary/5 dark:bg-primary/10 shadow-xs rounded-2xl flex flex-col justify-between p-4 sm:p-5 text-center'>

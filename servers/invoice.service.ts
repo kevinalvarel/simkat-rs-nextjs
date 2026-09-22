@@ -7,6 +7,7 @@ import { snapshotDetailTable } from '@/db/schemas/snapshot/snapshot-detail';
 import { pasienTable } from '@/db/schemas/patient/pasien';
 import { otorisasiPerubahanDietTable } from '@/db/schemas/snapshot/perizinan-revisi';
 import { isNpoPatient } from '@/lib/npo-utils';
+import { formatIndo, formatIndoFull, getWibMinutes, getWibTodayKey, WIB_TIMEZONE } from '@/lib/wib';
 import {
   getKelasSortWeight,
   normalizeKelasName as normalizeKelasKanonis,
@@ -88,9 +89,9 @@ function isTktpDiet(
 }
 
 function getDefaultMealtime(): 'PAGI' | 'SIANG' | 'MALAM' {
-  const hour = new Date().getHours();
-  if (hour < 10) return 'PAGI';
-  if (hour < 15) return 'SIANG';
+  const minutes = getWibMinutes(new Date());
+  if (minutes < 10 * 60) return 'PAGI';
+  if (minutes < 15 * 60) return 'SIANG';
   return 'MALAM';
 }
 
@@ -263,27 +264,12 @@ function computeGrandTotals(classes: InvoiceClassConsumption[]): GrandTotals {
 
 /** Format a date string to Indonesian locale (e.g. "6 Agustus 2026") */
 function formatDateIndo(dStr: string): string {
-  const d = new Date(dStr);
-  return !isNaN(d.getTime())
-    ? d.toLocaleDateString('id-ID', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-      })
-    : dStr;
+  return formatIndo(dStr);
 }
 
 /** Format a date string to Indonesian locale with weekday (e.g. "Sabtu, 29 Agustus 2026") */
 function formatDateIndoFull(dStr: string): string {
-  const d = new Date(dStr);
-  return !isNaN(d.getTime())
-    ? d.toLocaleDateString('id-ID', {
-        weekday: 'long',
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-      })
-    : dStr;
+  return formatIndoFull(dStr);
 }
 
 /** Build a revision patient record from a revision row and parsed data */
@@ -320,18 +306,18 @@ function buildRevisionPatient(
     alasan: rev.alasan || 'Pasien baru pasca-snapshot (Susulan)',
     requested_by: rev.requested_by || 'Ahli Gizi RS',
     requested_at: rev.requested_at
-      ? new Date(rev.requested_at).toLocaleTimeString('id-ID')
+      ? new Date(rev.requested_at).toLocaleTimeString('id-ID', { timeZone: WIB_TIMEZONE })
       : undefined,
     reviewed_by: rev.reviewed_by || 'Supervisor Gizi',
     reviewed_at: rev.reviewed_at
-      ? new Date(rev.reviewed_at).toLocaleTimeString('id-ID')
+      ? new Date(rev.reviewed_at).toLocaleTimeString('id-ID', { timeZone: WIB_TIMEZONE })
       : undefined,
   };
 }
 
 /** Build a default empty InvoiceDailySummary for error fallback */
 function buildEmptyFallbackSummary(): InvoiceDailySummary {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getWibTodayKey();
   const emptyClass = (kelas: string): InvoiceClassConsumption => ({
     kelas,
     pagiCount: 0,
@@ -367,7 +353,7 @@ function buildEmptyFallbackSummary(): InvoiceDailySummary {
     grandTotalPasien: 0,
     classes: ['KELAS I', 'KELAS II', 'KELAS III'].map((k) => emptyClass(k)),
     tktpCounts: { pagi: 0, siang: 0, malam: 0, total: 0 },
-    lastUpdated: new Date().toLocaleTimeString('id-ID'),
+    lastUpdated: new Date().toLocaleTimeString('id-ID', { timeZone: WIB_TIMEZONE }),
   };
 }
 
@@ -809,7 +795,7 @@ async function processRangeMode(
       ...bTotals,
       revisiPatients: bData.revisiPatients,
       classes: bClasses,
-      lastUpdated: new Date().toLocaleTimeString('id-ID'),
+      lastUpdated: new Date().toLocaleTimeString('id-ID', { timeZone: WIB_TIMEZONE }),
       isRange: false,
     });
   }
@@ -837,7 +823,7 @@ async function processRangeMode(
         availableDates,
         ...dayTotals,
         classes: dayClasses,
-        lastUpdated: new Date().toLocaleTimeString('id-ID'),
+        lastUpdated: new Date().toLocaleTimeString('id-ID', { timeZone: WIB_TIMEZONE }),
         isRange: false,
       });
     }
@@ -945,7 +931,7 @@ export async function getAvailableInvoiceDates(): Promise<string[]> {
       .from(snapshotBatchTable)
       .orderBy(desc(snapshotBatchTable.tanggal_produksi));
 
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = getWibTodayKey();
     const dateSet = new Set<string>([todayStr]);
 
     for (const b of batches) {
@@ -957,7 +943,7 @@ export async function getAvailableInvoiceDates(): Promise<string[]> {
     return Array.from(dateSet).sort((a, b) => b.localeCompare(a));
   } catch (error) {
     console.error('Error fetching available invoice dates:', error);
-    return [new Date().toISOString().slice(0, 10)];
+    return [getWibTodayKey()];
   }
 }
 
@@ -1002,7 +988,7 @@ export async function getInvoiceDailyData(
   batchId?: number,
 ): Promise<InvoiceDailySummary> {
   try {
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = getWibTodayKey();
     const selectedDate = targetDateStr || todayStr;
     const availableDates = await getAvailableInvoiceDates();
     const availableBatches = await getAvailableInvoiceBatches();
@@ -1111,7 +1097,7 @@ export async function getInvoiceDailyData(
         malam: ctx.tktp.malam,
         total: ctx.tktp.pagi + ctx.tktp.siang + ctx.tktp.malam,
       },
-      lastUpdated: new Date().toLocaleTimeString('id-ID'),
+      lastUpdated: new Date().toLocaleTimeString('id-ID', { timeZone: WIB_TIMEZONE }),
 
       isRange,
       startDate: start,

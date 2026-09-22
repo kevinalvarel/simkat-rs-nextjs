@@ -9,6 +9,13 @@ import {
 } from '@/db/schemas/master/siklus-menu';
 import { kategoriMenuTable } from '@/db/schemas/master/kategori-menu';
 import { getMenuTagOptions, normalizeMenuTags, parseMenuTags, type MenuTagOption } from '@/lib/siklus-menu-tags';
+import {
+  addCalendarDays,
+  formatIndo,
+  getWibHari,
+  getWibTodayKey,
+  parseCalendarDate,
+} from '@/lib/wib';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -182,17 +189,9 @@ async function ensureTableInitialized() {
 
       await db.insert(masterSiklusTable).values(
         defaultNumbers.map((num) => {
-          const targetDate = new Date();
-          targetDate.setDate(targetDate.getDate() + (num - 1));
-          const yyyy = targetDate.getFullYear();
-          const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
-          const dd = String(targetDate.getDate()).padStart(2, '0');
-          const iso = `${yyyy}-${mm}-${dd}`;
-          const displayTarget = targetDate.toLocaleDateString('id-ID', {
-            day: 'numeric',
-            month: 'long',
-            year: 'numeric',
-          });
+          // WIB sentral: seeding dari tanggal WIB, bukan tanggal UTC server.
+          const iso = addCalendarDays(getWibTodayKey(), num - 1);
+          const displayTarget = formatIndo(iso);
           return {
             nomor_siklus: num,
             nama_siklus: `Siklus ${num}${num === 31 ? ' (Tgl 31)' : ''}`,
@@ -215,30 +214,12 @@ async function ensureTableInitialized() {
         .orderBy(asc(masterSiklusTable.nomor_siklus));
 
       if (nullTanggalCycles.length > 0) {
-        const today = new Date();
-        const dayNames = [
-          'MINGGU',
-          'SENIN',
-          'SELASA',
-          'RABU',
-          'KAMIS',
-          'JUMAT',
-          'SABTU',
-        ];
+        const todayKey = getWibTodayKey();
         for (let i = 0; i < nullTanggalCycles.length; i++) {
           const row = nullTanggalCycles[i];
-          const targetDate = new Date(today);
-          targetDate.setDate(today.getDate() + (row.nomor_siklus - 1));
-          const yyyy = targetDate.getFullYear();
-          const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
-          const dd = String(targetDate.getDate()).padStart(2, '0');
-          const iso = `${yyyy}-${mm}-${dd}`;
-          const day = dayNames[targetDate.getDay()];
-          const displayTarget = targetDate.toLocaleDateString('id-ID', {
-            day: 'numeric',
-            month: 'long',
-            year: 'numeric',
-          });
+          const iso = addCalendarDays(todayKey, row.nomor_siklus - 1);
+          const day = getWibHari(iso);
+          const displayTarget = formatIndo(iso);
 
           await db
             .update(masterSiklusTable)
@@ -438,16 +419,31 @@ export async function applyStartDateRotation(
   try {
     await ensureTableInitialized();
 
-    const startDate =
-      typeof startDateInput === 'string'
-        ? new Date(startDateInput)
-        : startDateInput;
-
-    if (isNaN(startDate.getTime())) {
-      return {
-        success: false,
-        message: 'Tanggal mulai rotasi siklus tidak valid.',
-      };
+    // WIB sentral: input YYYY-MM-DD diperlakukan sebagai tanggal kalender WIB,
+    // bukan `new Date(str)` (UTC midnight) yang bisa geser hari.
+    let startKey: string | null = null;
+    if (typeof startDateInput === 'string') {
+      const parsed = parseCalendarDate(startDateInput);
+      if (parsed) {
+        startKey = `${parsed.year}-${String(parsed.month).padStart(2, '0')}-${String(parsed.day).padStart(2, '0')}`;
+      } else {
+        const d = new Date(startDateInput);
+        if (isNaN(d.getTime())) {
+          return {
+            success: false,
+            message: 'Tanggal mulai rotasi siklus tidak valid.',
+          };
+        }
+        startKey = getWibTodayKey(d);
+      }
+    } else {
+      if (isNaN(startDateInput.getTime())) {
+        return {
+          success: false,
+          message: 'Tanggal mulai rotasi siklus tidak valid.',
+        };
+      }
+      startKey = getWibTodayKey(startDateInput);
     }
 
     const cycles = await db
@@ -462,16 +458,6 @@ export async function applyStartDateRotation(
       };
     }
 
-    const dayNames = [
-      'MINGGU',
-      'SENIN',
-      'SELASA',
-      'RABU',
-      'KAMIS',
-      'JUMAT',
-      'SABTU',
-    ];
-
     const regularCycles = cycles.filter(
       (c) => c.nomor_siklus !== 11 && c.nomor_siklus !== 31,
     );
@@ -481,19 +467,9 @@ export async function applyStartDateRotation(
 
     for (let i = 0; i < regularCycles.length; i++) {
       const cycle = regularCycles[i];
-      const targetDate = new Date(startDate);
-      targetDate.setDate(startDate.getDate() + i);
-
-      const yyyy = targetDate.getFullYear();
-      const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
-      const dd = String(targetDate.getDate()).padStart(2, '0');
-      const isoDate = `${yyyy}-${mm}-${dd}`;
-      const assignedDay = dayNames[targetDate.getDay()];
-      const displayTargetDate = targetDate.toLocaleDateString('id-ID', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-      });
+      const isoDate = addCalendarDays(startKey, i);
+      const assignedDay = getWibHari(isoDate);
+      const displayTargetDate = formatIndo(isoDate);
 
       await db
         .update(masterSiklusTable)
@@ -522,11 +498,7 @@ export async function applyStartDateRotation(
       revalidatePath('/dashboard/ag-katering/admin/konfigurasi-siklus-menu');
     } catch {}
 
-    const displayDate = startDate.toLocaleDateString('id-ID', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    });
+    const displayDate = formatIndo(startKey);
 
     return {
       success: true,

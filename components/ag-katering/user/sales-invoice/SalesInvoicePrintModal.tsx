@@ -32,6 +32,7 @@ import type {
   SalesInvoicePriceConfig,
 } from '@/types/invoicetypes';
 import { angkaTerbilang } from '@/lib/sales-invoice-utils';
+import { formatIndo, parseCalendarDate } from '@/lib/wib';
 import { cn } from '@/lib/utils';
 
 interface SalesInvoicePrintModalProps {
@@ -43,15 +44,7 @@ interface SalesInvoicePrintModalProps {
 function formatTanggalIndo(dateStr?: string): string {
   if (!dateStr) return '6 Agustus 2026';
   const cleanStr = dateStr.includes(' ') ? dateStr.split(' ')[0] : dateStr;
-  const d = new Date(cleanStr);
-  if (!isNaN(d.getTime())) {
-    return d.toLocaleDateString('id-ID', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    });
-  }
-  return dateStr;
+  return formatIndo(cleanStr);
 }
 
 function generateDefaultNomorFaktur(
@@ -73,9 +66,9 @@ function generateDefaultNomorFaktur(
     'XII',
   ];
   const cleanStr = dateStr?.includes(' ') ? dateStr.split(' ')[0] : dateStr;
-  const d = cleanStr ? new Date(cleanStr) : new Date();
-  const monthIdx = !isNaN(d.getTime()) ? d.getMonth() : 7;
-  const year = !isNaN(d.getTime()) ? d.getFullYear() : 2026;
+  const parsed = cleanStr ? parseCalendarDate(cleanStr) : null;
+  const monthIdx = parsed ? parsed.month - 1 : 7;
+  const year = parsed ? parsed.year : 2026;
   const roman = romanMonths[monthIdx] || 'VIII';
   const num = String(batchId || 106).padStart(3, '0');
   return `${num}/${roman}/INV/TRADCO/${year}`;
