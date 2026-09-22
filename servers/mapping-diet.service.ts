@@ -24,7 +24,6 @@ export type KategoriMenuOption = {
   namaKategori: string;
   kodeItem: string;
   labelItem: string;
-  urutan: number;
   isTugasAgKatering?: boolean;
 };
 
@@ -342,7 +341,6 @@ export async function getKategoriMenuOptions(): Promise<KategoriMenuOption[]> {
     nama_kategori: string;
     kode_item: string;
     label_item: string;
-    urutan: number;
     is_tugas_ag_katering?: boolean | null;
   }[]): KategoriMenuOption[] =>
     rows.map((i) => ({
@@ -350,7 +348,6 @@ export async function getKategoriMenuOptions(): Promise<KategoriMenuOption[]> {
       namaKategori: i.nama_kategori,
       kodeItem: i.kode_item,
       labelItem: i.label_item,
-      urutan: i.urutan,
       isTugasAgKatering: i.is_tugas_ag_katering ?? false,
     }));
 
@@ -359,7 +356,7 @@ export async function getKategoriMenuOptions(): Promise<KategoriMenuOption[]> {
       .select()
       .from(kategoriMenuTable)
       .where(eq(kategoriMenuTable.is_active, true))
-      .orderBy(asc(kategoriMenuTable.nama_kategori), asc(kategoriMenuTable.urutan));
+      .orderBy(asc(kategoriMenuTable.nama_kategori), asc(kategoriMenuTable.kode_item));
 
     if (items && items.length > 0) {
       return toOptions(
@@ -388,12 +385,11 @@ export async function getKategoriMenuOptions(): Promise<KategoriMenuOption[]> {
         nama_kategori: kategoriMenuTable.nama_kategori,
         kode_item: kategoriMenuTable.kode_item,
         label_item: kategoriMenuTable.label_item,
-        urutan: kategoriMenuTable.urutan,
         is_active: kategoriMenuTable.is_active,
       })
       .from(kategoriMenuTable)
       .where(eq(kategoriMenuTable.is_active, true))
-      .orderBy(asc(kategoriMenuTable.nama_kategori), asc(kategoriMenuTable.urutan));
+      .orderBy(asc(kategoriMenuTable.nama_kategori), asc(kategoriMenuTable.kode_item));
 
     return toOptions(
       legacyItems.map((i) => ({ ...i, is_tugas_ag_katering: false })),

@@ -56,17 +56,11 @@ export const masterSiklusMenuTable = pgTable('master_siklus_menu', {
   /** Nama hidangan / menu makanan, contoh: "Telur Puyuh BB Kecap" */
   nama_makanan: text('nama_makanan').notNull(),
 
-  /** Tag kategori menu / kode diet terkait, contoh: "B", "Diit, DM", "RG", "DJ, RKol, RL", "RP, RS" */
+  /** Tag kategori menu / kode diet terkait (CSV multi-tag). Boleh >1 tag, misal: "B", "DM, RG", "DJ, RKol, RL". Diet gabungan bersifat implisit saat tag lebih dari satu. */
   kategori_menu: text('kategori_menu'),
-
-  /** Nama diet gabungan — wajib diisi saat hidangan dipasangkan dengan >1 tag diet */
-  nama_diet_gabungan: text('nama_diet_gabungan'),
 
   /** Catatan khusus persiapan/pemotongan, contoh: "*ptg dadu", "cetak D", "fillet" */
   catatan: text('catatan'),
-
-  /** Urutan tampil hidangan di dalam sel waktu makan (ascending) */
-  urutan: integer('urutan').notNull().default(0),
 
   /** Status aktif */
   is_active: boolean('is_active').notNull().default(true),

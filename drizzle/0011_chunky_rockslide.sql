@@ -1,0 +1,1 @@
+ALTER TABLE "kategori_menu" DROP COLUMN "urutan";

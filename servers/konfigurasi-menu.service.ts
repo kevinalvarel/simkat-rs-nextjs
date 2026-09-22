@@ -10,7 +10,6 @@ export interface KategoriMenuItem {
   nama_kategori: string;
   kode_item: string;
   label_item: string;
-  urutan?: number;
   is_active: boolean;
   is_tugas_ag_katering: boolean;
 }
@@ -24,7 +23,6 @@ export type CreateKategoriMenuPayload = {
   nama_kategori: string;
   kode_item: string;
   label_item: string;
-  urutan?: number;
   is_active?: boolean;
   is_tugas_ag_katering?: boolean;
 };
@@ -60,7 +58,6 @@ export async function getKategoriMenuAll(): Promise<KategoriMenuItem[]> {
     nama_kategori: string;
     kode_item: string;
     label_item: string;
-    urutan: number | null | undefined;
     is_active: boolean;
     is_tugas_ag_katering?: boolean | null;
   }[]): KategoriMenuItem[] =>
@@ -69,7 +66,6 @@ export async function getKategoriMenuAll(): Promise<KategoriMenuItem[]> {
       nama_kategori: item.nama_kategori,
       kode_item: item.kode_item,
       label_item: item.label_item,
-      urutan: item.urutan ?? 0,
       is_active: item.is_active,
       is_tugas_ag_katering: item.is_tugas_ag_katering ?? false,
     }));
@@ -101,7 +97,6 @@ export async function getKategoriMenuAll(): Promise<KategoriMenuItem[]> {
         nama_kategori: kategoriMenuTable.nama_kategori,
         kode_item: kategoriMenuTable.kode_item,
         label_item: kategoriMenuTable.label_item,
-        urutan: kategoriMenuTable.urutan,
         is_active: kategoriMenuTable.is_active,
       })
       .from(kategoriMenuTable)
@@ -131,7 +126,6 @@ export async function createKategoriMenuItem(
       nama_kategori: normalizedKategori,
       kode_item: payload.kode_item.trim().toUpperCase(),
       label_item: payload.label_item.trim(),
-      urutan: payload.urutan ?? 0,
       is_active: payload.is_active ?? true,
       is_tugas_ag_katering: isBentukMakanan
         ? (payload.is_tugas_ag_katering ?? false)
@@ -170,7 +164,6 @@ export async function updateKategoriMenuItem(
         ...(normalizedKategori ? { nama_kategori: normalizedKategori } : {}),
         ...(payload.kode_item ? { kode_item: payload.kode_item.trim().toUpperCase() } : {}),
         ...(payload.label_item ? { label_item: payload.label_item.trim() } : {}),
-        ...(payload.urutan !== undefined ? { urutan: payload.urutan } : {}),
         ...(payload.is_active !== undefined ? { is_active: payload.is_active } : {}),
         // Tugas AG Katering hanya berlaku untuk Bentuk Makanan; kategori lain dipaksa false.
         ...(normalizedKategori

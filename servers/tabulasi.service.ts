@@ -448,7 +448,7 @@ export async function getTabulasiDashboardData(
       )
       .orderBy(
         asc(masterSiklusMenuTable.jenis_makanan),
-        asc(masterSiklusMenuTable.urutan),
+        asc(masterSiklusMenuTable.id),
       );
 
     let slotMenuItems = cycleMenuItems.filter((item) =>
@@ -468,7 +468,7 @@ export async function getTabulasiDashboardData(
         )
         .orderBy(
           asc(masterSiklusMenuTable.jenis_makanan),
-          asc(masterSiklusMenuTable.urutan),
+          asc(masterSiklusMenuTable.id),
         );
 
       slotMenuItems = fallbackItems.filter((item) =>
@@ -978,13 +978,12 @@ function buildSupplementResult(
     for (const code of new Set(codes)) {
       const tagged = candidates.find((item) => (item.kategori_menu || '').toUpperCase()
         .split(/[,;/]+/).map((tag) => tag.trim()).includes(code));
-      const combinedMatched = candidates.find((item) => (item.nama_diet_gabungan || '').trim().toUpperCase() === code);
       const dietMatched = candidates.find((item) => (item.kategori_menu || '').toUpperCase()
         .split(/[,;/\s+]+/).some((tag) => tag !== 'B' && dietTokens.has(tag)));
       const generic = candidates.find((item) => !item.kategori_menu?.trim() ||
         (!/DM|RG|RP|RS|DJ|RL|TKTP/.test(patient.diet_rs_raw.toUpperCase()) &&
           item.kategori_menu.trim().toUpperCase() === 'B'));
-      const item = tagged || combinedMatched || dietMatched || generic;
+      const item = tagged || dietMatched || generic;
       const rowId = item ? `${kindLabel}-${item.id}-${code}` : `missing-${kindLabel}-${slot}-${code}`;
       const category = item ? `${kind} ${slot}` : `${kind} ${slot} - BELUM DIATUR`;
       const existing = rows.get(rowId) || {
@@ -1061,7 +1060,7 @@ export async function getTabulasiSupplementData(
       db.select().from(masterSiklusMenuTable).where(and(
         eq(masterSiklusMenuTable.siklus_ke, base.hospitalData.siklusNomor),
         eq(masterSiklusMenuTable.is_active, true),
-      )).orderBy(asc(masterSiklusMenuTable.urutan)),
+      )).orderBy(asc(masterSiklusMenuTable.id)),
       buildRoomBuildingMap(),
       base.batch ? db.select({ id: snapshotDetailTable.id, snack: snapshotDetailTable.snack, buah: snapshotDetailTable.buah })
         .from(snapshotDetailTable).where(eq(snapshotDetailTable.batch_id, base.batch.id)) : Promise.resolve([]),
@@ -1114,7 +1113,7 @@ export async function getTabulasiSnackBuahData(
       db.select().from(masterSiklusMenuTable).where(and(
         eq(masterSiklusMenuTable.siklus_ke, base.hospitalData.siklusNomor),
         eq(masterSiklusMenuTable.is_active, true),
-      )).orderBy(asc(masterSiklusMenuTable.urutan)),
+      )).orderBy(asc(masterSiklusMenuTable.id)),
       buildRoomBuildingMap(),
       base.batch ? db.select({ id: snapshotDetailTable.id, snack: snapshotDetailTable.snack, buah: snapshotDetailTable.buah })
         .from(snapshotDetailTable).where(eq(snapshotDetailTable.batch_id, base.batch.id)) : Promise.resolve([]),

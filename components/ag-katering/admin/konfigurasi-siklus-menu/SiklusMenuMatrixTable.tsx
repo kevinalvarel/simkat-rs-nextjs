@@ -243,11 +243,6 @@ export default function SiklusMenuMatrixTable({
                       ({dish.kategori_menu})
                     </span>
                   )}
-                  {dish.nama_diet_gabungan && (
-                    <div className='mt-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400'>
-                      Gabungan: {dish.nama_diet_gabungan}
-                    </div>
-                  )}
                   {dish.catatan && (
                     <span className='ml-1 text-[10px] text-amber-700 dark:text-amber-400 font-mono italic'>
                       {dish.catatan}
@@ -504,8 +499,6 @@ export default function SiklusMenuMatrixTable({
                 &quot;{itemToDelete?.nama_makanan}&quot;
                 {itemToDelete?.kategori_menu &&
                   ` (${itemToDelete.kategori_menu})`}
-                {itemToDelete?.nama_diet_gabungan &&
-                  ` — Gabungan: ${itemToDelete.nama_diet_gabungan}`}
               </strong>{' '}
               dari Siklus #{itemToDelete?.siklus_ke}?
             </DialogDescription>

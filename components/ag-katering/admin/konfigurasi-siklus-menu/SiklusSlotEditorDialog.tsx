@@ -27,8 +27,6 @@ import {
   getMenuTagOptions,
   normalizeMenuTags,
   parseMenuTags,
-  needsCombinedDietName,
-  COMBINED_DIET_NAME_REQUIRED_MESSAGE,
   type MenuTagOption,
 } from '@/lib/siklus-menu-tags';
 import type {
@@ -68,22 +66,18 @@ export default function SiklusSlotEditorDialog({
 }: SiklusSlotEditorDialogProps) {
   const [items, setItems] = useState<SlotItemInput[]>([]);
   const [isSaving, setIsSaving] = useState(false);
-  const [showCombinedErrors, setShowCombinedErrors] = useState(false);
   const availableTags = getMenuTagOptions(dietOptions, slotContext?.jenis_makanan);
 
   useEffect(() => {
     if (open && slotContext) {
       const timer = setTimeout(() => {
-        setShowCombinedErrors(false);
         if (slotContext.existingItems.length > 0) {
           setItems(
-            slotContext.existingItems.map((item, idx) => ({
+            slotContext.existingItems.map((item) => ({
               id: item.id,
               nama_makanan: item.nama_makanan,
               kategori_menu: item.kategori_menu || '',
-              nama_diet_gabungan: item.nama_diet_gabungan || '',
               catatan: item.catatan || '',
-              urutan: item.urutan || idx + 1,
             })),
           );
         } else {
@@ -91,9 +85,7 @@ export default function SiklusSlotEditorDialog({
             {
               nama_makanan: '',
               kategori_menu: '',
-              nama_diet_gabungan: '',
               catatan: '',
-              urutan: 1,
             },
           ]);
         }
@@ -108,9 +100,7 @@ export default function SiklusSlotEditorDialog({
       {
         nama_makanan: '',
         kategori_menu: '',
-        nama_diet_gabungan: '',
         catatan: '',
-        urutan: prev.length + 1,
       },
     ]);
   }
@@ -122,7 +112,7 @@ export default function SiklusSlotEditorDialog({
   function handleFieldChange(
     index: number,
     field: keyof SlotItemInput,
-    val: string | number,
+    val: string,
   ) {
     setItems((prev) => {
       const next = [...prev];
@@ -164,9 +154,6 @@ export default function SiklusSlotEditorDialog({
     }
     const nextValue = next.join(', ');
     handleFieldChange(index, 'kategori_menu', nextValue);
-    if (!needsCombinedDietName(nextValue)) {
-      handleFieldChange(index, 'nama_diet_gabungan', '');
-    }
   }
 
   async function handleSave() {
@@ -176,16 +163,6 @@ export default function SiklusSlotEditorDialog({
     const validItems = items.filter((i) => i.nama_makanan.trim());
     if (validItems.some((item) => normalizeMenuTags(item.kategori_menu, availableTags).invalid.length > 0)) {
       toast.error('Hapus tag yang tidak tersedia untuk kategori slot ini sebelum menyimpan.');
-      return;
-    }
-    const missingCombined = validItems.filter(
-      (item) =>
-        needsCombinedDietName(item.kategori_menu) &&
-        !(item.nama_diet_gabungan || '').trim(),
-    );
-    if (missingCombined.length > 0) {
-      setShowCombinedErrors(true);
-      toast.error(COMBINED_DIET_NAME_REQUIRED_MESSAGE);
       return;
     }
 
@@ -253,8 +230,6 @@ export default function SiklusSlotEditorDialog({
           {items.map((item, idx) => {
             const currentItemTags = parseMenuTags(item.kategori_menu);
             const { invalid: invalidTags } = normalizeMenuTags(item.kategori_menu, availableTags);
-            const needsCombined = needsCombinedDietName(item.kategori_menu);
-            const missingCombined = needsCombined && !(item.nama_diet_gabungan || '').trim();
 
             return (
               <div
@@ -381,29 +356,10 @@ export default function SiklusSlotEditorDialog({
                     </div>
                   </div>
                 )}
-                {needsCombined && (
-                  <div className='space-y-1 bg-primary/5 p-2.5 rounded-lg border border-primary/30'>
-                    <Label className='text-[11px] font-semibold'>
-                      Nama Diet Gabungan <span className='text-rose-500'>*</span>
-                    </Label>
-                    <Input
-                      value={item.nama_diet_gabungan || ''}
-                      onChange={(e) =>
-                        handleFieldChange(idx, 'nama_diet_gabungan', e.target.value)
-                      }
-                      placeholder='contoh: Diit DM + RG'
-                      className='h-8 text-xs bg-background'
-                    />
-                    {showCombinedErrors && missingCombined ? (
-                      <p className='text-[11px] text-destructive'>
-                        {COMBINED_DIET_NAME_REQUIRED_MESSAGE}
-                      </p>
-                    ) : (
-                      <p className='text-[10px] text-muted-foreground'>
-                        Hidangan ini memakai {currentItemTags.length} tag, berikan satu nama diet gabungan.
-                      </p>
-                    )}
-                  </div>
+                {currentItemTags.length > 1 && (
+                  <p className='text-[10px] text-muted-foreground'>
+                    {currentItemTags.length} tag ({currentItemTags.join(', ')}) — otomatis dianggap diet gabungan.
+                  </p>
                 )}
               </div>
             );

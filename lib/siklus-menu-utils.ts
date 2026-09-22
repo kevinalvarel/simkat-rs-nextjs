@@ -186,9 +186,7 @@ export interface ConsolidableMenuItem {
   waktu_makan: string;
   nama_makanan: string;
   kategori_menu?: string | null;
-  nama_diet_gabungan?: string | null;
   catatan?: string | null;
-  urutan?: number | null;
   is_active?: boolean | null;
 }
 
@@ -312,4 +310,92 @@ export function resolveTodayCycleNum(
   } catch {
     return fallbackNum;
   }
+}
+
+/**
+ * Menghitung tanggal tampilan rolling untuk tiap siklus reguler dalam
+ * "jendela periode berjalan" yang memuat `now`.
+ *
+ * Contoh: anchor Siklus 1 = 12 Sep, N = 10, hari ini 22 Sep (diff 10)
+ * → iterasi berjalan = 1, sehingga Siklus 1 = 22 Sep … Siklus 10 = 1 Okt.
+ * Kemarin (21 Sep) adalah Siklus 10 iterasi sebelumnya, hari ini otomatis
+ * kembali ke Siklus 1 — tanpa perlu menulis ulang kolom `tanggal` di DB.
+ *
+ * Siklus khusus (11 / 31) dikembalikan sebagai `null` agar pemanggil tetap
+ * menampilkan label "Tgl 31".
+ */
+export function getRollingCycleDates(
+  allMasterCycles: SimplifiedMasterSiklus[],
+  now: Date = new Date(),
+): Map<number, Date | null> {
+  const result = new Map<number, Date | null>();
+  if (!allMasterCycles || allMasterCycles.length === 0) return result;
+
+  const regularCycles = allMasterCycles
+    .filter(
+      (c) =>
+        c.nomor_siklus !== 11 &&
+        c.nomor_siklus !== 31 &&
+        c.is_active !== false,
+    )
+    .sort((a, b) => a.nomor_siklus - b.nomor_siklus);
+
+  // Tandai siklus khusus agar pemanggil menampilkan label khusus.
+  for (const c of allMasterCycles) {
+    if (c.nomor_siklus === 11 || c.nomor_siklus === 31) {
+      result.set(c.nomor_siklus, null);
+    }
+  }
+
+  if (regularCycles.length === 0) return result;
+
+  // Reuse logika anchor yang sama dengan resolveActiveCycleForDate:
+  // tanggal Siklus 1 adalah jangkar; fallback ke siklus bertanggal lain
+  // atau tanggal 1 bulan berjalan.
+  const resolved = resolveActiveCycleForDate(now, allMasterCycles);
+  const iteration = resolved.cycleIteration;
+
+  // Cari tanggal anchor (Siklus 1). resolveActiveCycleForDate sudah
+  // menghitung diff dari anchor, tapi tidak mengeksposnya — hitung ulang
+  // secara konsisten di sini dengan basis UTC kalender.
+  const cycle1 = regularCycles.find((c) => c.nomor_siklus === 1);
+  let anchorUtc: number | null = null;
+  if (cycle1?.tanggal) {
+    const p = extractYearMonthDay(cycle1.tanggal);
+    anchorUtc = Date.UTC(p.year, p.month - 1, p.day);
+  } else {
+    const anyWithDate = regularCycles.find((c) => Boolean(c.tanggal));
+    if (anyWithDate?.tanggal) {
+      const p = extractYearMonthDay(anyWithDate.tanggal);
+      const ref = new Date(Date.UTC(p.year, p.month - 1, p.day));
+      // Cari offset posisi siklus ini di dalam urutan reguler.
+      const idx = regularCycles.findIndex(
+        (c) => c.nomor_siklus === anyWithDate.nomor_siklus,
+      );
+      ref.setUTCDate(ref.getUTCDate() - (idx >= 0 ? idx : 0));
+      anchorUtc = ref.getTime();
+    } else {
+      anchorUtc = Date.UTC(
+        now.getFullYear(),
+        now.getMonth(),
+        1,
+      );
+    }
+  }
+
+  const N = regularCycles.length;
+  // Awal jendela periode berjalan = anchor + (iteration - 1) * N hari.
+  // `cycleIteration` dihitung sebagai floor(diffDays / N) + 1.
+  const windowStartUtc = (anchorUtc ?? Date.UTC(now.getFullYear(), now.getMonth(), 1)) + (iteration - 1) * N * 86400000;
+
+  regularCycles.forEach((cycle, index) => {
+    const d = new Date(windowStartUtc + index * 86400000);
+    // Bangun Date lokal tengah hari agar aman dari geser zona waktu.
+    result.set(
+      cycle.nomor_siklus,
+      new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 12, 0, 0),
+    );
+  });
+
+  return result;
 }

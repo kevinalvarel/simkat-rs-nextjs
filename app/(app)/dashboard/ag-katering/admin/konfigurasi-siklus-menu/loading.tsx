@@ -20,7 +20,7 @@ export default function KonfigurasiSiklusMenuLoading() {
       </div>
 
       {/* Cycle Selector Tab Bar Skeleton */}
-      <div className='flex items-center gap-2 overflow-x-auto pb-2'>
+      <div className='flex flex-wrap items-center gap-2'>
         {[1, 2, 3, 4, 5, 6, 7].map((i) => (
           <Skeleton key={i} className='h-9 w-24 shrink-0 rounded-lg' />
         ))}

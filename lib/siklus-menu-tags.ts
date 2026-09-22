@@ -49,19 +49,18 @@ export function normalizeMenuTags(
   return { codes, invalid };
 }
 
-export const COMBINED_DIET_NAME_REQUIRED_MESSAGE =
-  'Kamu memilih lebih dari 1 tag, maka berikan Nama Diet Gabungan';
-
 /**
- * True jika nilai tag (CSV) memuat lebih dari 1 tag unik —
- * dalam kondisi ini Nama Diet Gabungan wajib diisi.
+ * Diet gabungan bersifat implisit: hidangan dengan >1 tag otomatis
+ * dianggap diet gabungan dari tag-tag tersebut. Tidak ada lagi
+ * kolom / input nama diet gabungan terpisah.
  */
-export function needsCombinedDietName(
+export function countUniqueMenuTags(
   value: string | null | undefined,
-): boolean {
+): number {
   const seen = new Set<string>();
   for (const tag of parseMenuTags(value)) {
-    seen.add(tag.toUpperCase());
+    const key = tag.trim().toUpperCase();
+    if (key) seen.add(key);
   }
-  return seen.size > 1;
+  return seen.size;
 }

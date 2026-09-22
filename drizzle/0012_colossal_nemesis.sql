@@ -1,0 +1,1 @@
+ALTER TABLE "master_siklus_menu" DROP COLUMN "nama_diet_gabungan";

@@ -130,7 +130,6 @@ export function siklusDietOptionsForKind(
       namaKategori: o.jenisMakanan,
       kodeItem: o.kode,
       labelItem: o.label,
-      urutan: idx,
       isTugasAgKatering: false,
     }));
 }

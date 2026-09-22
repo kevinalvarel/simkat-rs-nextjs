@@ -163,7 +163,7 @@ export const routeDataSupervisor = {
           url: '/dashboard/ag-katering/admin/tambah-pengguna',
         },
         {
-          title: 'Konfigurasi Menu',
+          title: 'Konfigurasi Diet',
           url: '/dashboard/ag-katering/admin/konfigurasi-menu',
         },
         {

@@ -45,6 +45,7 @@ import { id } from 'date-fns/locale';
 import type { MenuTagOption } from '@/lib/siklus-menu-tags';
 import {
   getCycleNumForDate,
+  getRollingCycleDates,
   resolveTodayCycleNum,
 } from '@/lib/siklus-menu-utils';
 import type {
@@ -153,6 +154,35 @@ export default function KonfigurasiSiklusMenuClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [masterSiklusList],
   );
+
+  // Tanggal tampilan rolling: jendela periode berjalan yang memuat hari ini.
+  // Menggantikan kolom `tanggal` statis agar tab otomatis reset tiap putaran.
+  const rollingDates = useMemo(
+    () => getRollingCycleDates(masterSiklusList, new Date()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [masterSiklusList],
+  );
+
+  function formatRollingShort(nomorSiklus: number): string {
+    if (nomorSiklus === 11 || nomorSiklus === 31) return 'Tgl 31';
+    const d = rollingDates.get(nomorSiklus);
+    if (d && isValid(d)) return format(d, 'd MMM', { locale: id });
+    const fallback = masterSiklusList.find(
+      (c) => c.nomor_siklus === nomorSiklus,
+    );
+    return formatShortTanggal(fallback?.tanggal, nomorSiklus);
+  }
+
+  function formatRollingLong(nomorSiklus: number): string {
+    if (nomorSiklus === 11 || nomorSiklus === 31)
+      return 'Khusus Tanggal 31';
+    const d = rollingDates.get(nomorSiklus);
+    if (d && isValid(d)) return format(d, 'd MMMM yyyy', { locale: id });
+    const fallback = masterSiklusList.find(
+      (c) => c.nomor_siklus === nomorSiklus,
+    );
+    return formatDisplayTanggal(fallback?.tanggal, nomorSiklus);
+  }
 
   // Sinkronisasi awal client (koreksi drift tanggal server vs browser).
   useEffect(() => {
@@ -351,12 +381,9 @@ export default function KonfigurasiSiklusMenuClient({
         const matchKategori = (item.kategori_menu || '')
           .toLowerCase()
           .includes(q);
-        const matchGabungan = (item.nama_diet_gabungan || '')
-          .toLowerCase()
-          .includes(q);
         const matchKelas = item.kelas.toLowerCase().includes(q);
         const matchCatatan = (item.catatan || '').toLowerCase().includes(q);
-        return matchNama || matchKategori || matchGabungan || matchKelas || matchCatatan;
+        return matchNama || matchKategori || matchKelas || matchCatatan;
       }
 
       return true;
@@ -400,18 +427,13 @@ export default function KonfigurasiSiklusMenuClient({
       const rows = items.map((item) => ({
         'Siklus Ke': item.siklus_ke,
         'Nama Siklus': activeCycleObj.nama_siklus,
-        'Tanggal Rotasi': formatDisplayTanggal(
-          activeCycleObj.tanggal,
-          activeCycleObj.nomor_siklus,
-        ),
+        'Tanggal Rotasi': formatRollingLong(activeSiklus),
         Kelas: item.kelas,
         'Jenis Makanan': item.jenis_makanan,
         'Waktu Makan': item.waktu_makan,
         'Nama Hidangan': item.nama_makanan,
         'Kategori Menu / Diet': item.kategori_menu || '-',
-        'Nama Diet Gabungan': item.nama_diet_gabungan || '-',
         Catatan: item.catatan || '-',
-        Urutan: item.urutan,
       }));
 
       const worksheet = XLSX.utils.json_to_sheet(rows);
@@ -437,7 +459,7 @@ export default function KonfigurasiSiklusMenuClient({
   }, [masterSiklusList]);
 
   return (
-    <div className='flex flex-1 flex-col gap-6 p-4 sm:p-6 md:p-8 max-w-7xl mx-auto w-full'>
+    <div className='flex flex-1 min-w-0 flex-col gap-6 p-4 sm:p-6 md:p-8 max-w-7xl mx-auto w-full overflow-x-clip'>
       {/* Header Banner */}
       <div className='flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-5 rounded-2xl border border-primary/20 shadow-xs'>
         <div className='space-y-1'>
@@ -506,7 +528,7 @@ export default function KonfigurasiSiklusMenuClient({
       </div>
 
       {/* Cycle Selector & Rotation Settings Bar */}
-      <div className='bg-card p-3.5 rounded-2xl border shadow-xs space-y-3'>
+      <div className='bg-card p-3.5 rounded-2xl border shadow-xs space-y-3 min-w-0 max-w-full overflow-hidden'>
         <div className='flex items-center justify-between px-1 flex-wrap gap-2.5'>
           {/* Active Cycle Info */}
           <div className='flex items-center gap-2 flex-wrap'>
@@ -519,11 +541,7 @@ export default function KonfigurasiSiklusMenuClient({
               variant='secondary'
               className='text-[11px] font-mono font-bold bg-primary/10 text-primary border border-primary/20 gap-1 px-2 py-0.5'
             >
-              📅 Tanggal:{' '}
-              {formatDisplayTanggal(
-                activeCycleObj.tanggal,
-                activeCycleObj.nomor_siklus,
-              )}
+              📅 Tanggal: {formatRollingLong(activeSiklus)}
             </Badge>
 
             {activeCycleObj.deskripsi && (
@@ -609,7 +627,7 @@ export default function KonfigurasiSiklusMenuClient({
         </div>
 
         {/* Dynamic Cycle Tabs + Tambah Siklus Button */}
-        <div className='flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none'>
+        <div className='flex flex-wrap items-center gap-1.5'>
           {masterSiklusList.map((cycle) => {
             const num = cycle.nomor_siklus;
             const isActive = activeSiklus === num;
@@ -621,10 +639,10 @@ export default function KonfigurasiSiklusMenuClient({
                 onClick={() => handleSelectCycle(num)}
                 title={
                   isToday
-                    ? `${cycle.nama_siklus} — siklus hari ini`
-                    : cycle.nama_siklus
+                    ? `${cycle.nama_siklus} — siklus hari ini (${formatRollingLong(num)})`
+                    : `${cycle.nama_siklus} — ${formatRollingLong(num)}`
                 }
-                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer border ${
+                className={`flex min-w-0 items-center gap-2 px-2.5 py-1.5 rounded-xl text-[11px] sm:px-3.5 sm:py-2 sm:text-xs font-bold transition-all whitespace-nowrap cursor-pointer border ${
                   isActive
                     ? 'bg-primary text-primary-foreground border-primary shadow-xs scale-102'
                     : isToday
@@ -640,7 +658,7 @@ export default function KonfigurasiSiklusMenuClient({
                       : 'bg-muted-foreground/15 text-foreground/80'
                   }`}
                 >
-                  {formatShortTanggal(cycle.tanggal, cycle.nomor_siklus)}
+                  {formatRollingShort(num)}
                 </span>
                 {isToday && !isActive && (
                   <span className='text-[9px] font-extrabold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground'>
@@ -672,7 +690,7 @@ export default function KonfigurasiSiklusMenuClient({
       <SiklusStats items={items} activeSiklus={activeSiklus} />
 
       {/* Filter & Search Toolbar */}
-      <div className='flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-muted/40 p-3 rounded-xl border'>
+      <div className='flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-muted/40 p-3 rounded-xl border min-w-0 max-w-full overflow-hidden'>
         <div className='relative flex-1 max-w-md'>
           <Search className='absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground' />
           <Input
@@ -684,7 +702,7 @@ export default function KonfigurasiSiklusMenuClient({
         </div>
 
         {/* Quick Filter Buttons for Jenis */}
-        <div className='flex items-center gap-1.5 overflow-x-auto'>
+        <div className='flex items-center gap-1.5 overflow-x-auto min-w-0 max-w-full pb-1'>
           {[
             { id: 'ALL', label: 'Semua Lauk' },
             { id: 'HEWANI', label: '🍗 Hewani' },
@@ -700,7 +718,7 @@ export default function KonfigurasiSiklusMenuClient({
                 key={tab.id}
                 type='button'
                 onClick={() => setSelectedJenisFilter(tab.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border shrink-0 ${
                   isActive
                     ? 'bg-foreground text-background border-foreground shadow-2xs'
                     : 'bg-card text-muted-foreground border-border hover:bg-muted hover:text-foreground'

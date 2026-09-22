@@ -1,0 +1,1 @@
+ALTER TABLE "master_siklus_menu" DROP COLUMN "urutan";

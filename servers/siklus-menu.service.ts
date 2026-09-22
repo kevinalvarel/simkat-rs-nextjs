@@ -8,7 +8,7 @@ import {
   masterSiklusMenuTable,
 } from '@/db/schemas/master/siklus-menu';
 import { kategoriMenuTable } from '@/db/schemas/master/kategori-menu';
-import { getMenuTagOptions, normalizeMenuTags, parseMenuTags, needsCombinedDietName, COMBINED_DIET_NAME_REQUIRED_MESSAGE, type MenuTagOption } from '@/lib/siklus-menu-tags';
+import { getMenuTagOptions, normalizeMenuTags, parseMenuTags, type MenuTagOption } from '@/lib/siklus-menu-tags';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -62,9 +62,7 @@ export interface SiklusMenuItem {
   waktu_makan: string;
   nama_makanan: string;
   kategori_menu: string | null;
-  nama_diet_gabungan: string | null;
   catatan: string | null;
-  urutan: number;
   is_active: boolean;
   created_at: Date;
   updated_at: Date;
@@ -83,9 +81,7 @@ export type CreateSiklusItemPayload = {
   waktu_makan: string;
   nama_makanan: string;
   kategori_menu?: string | null;
-  nama_diet_gabungan?: string | null;
   catatan?: string | null;
-  urutan?: number;
   is_active?: boolean;
 };
 
@@ -95,9 +91,7 @@ export type SlotItemInput = {
   id?: number;
   nama_makanan: string;
   kategori_menu?: string | null;
-  nama_diet_gabungan?: string | null;
   catatan?: string | null;
-  urutan?: number;
 };
 
 export interface SiklusMatrixRow {
@@ -159,18 +153,11 @@ async function ensureTableInitialized() {
         "waktu_makan" text NOT NULL,
         "nama_makanan" text NOT NULL,
         "kategori_menu" text,
-        "nama_diet_gabungan" text,
         "catatan" text,
-        "urutan" integer DEFAULT 0 NOT NULL,
         "is_active" boolean DEFAULT true NOT NULL,
         "created_at" timestamp DEFAULT now() NOT NULL,
         "updated_at" timestamp DEFAULT now() NOT NULL
       );
-    `);
-
-    // Ensure nama_diet_gabungan column exists on older databases
-    await db.execute(sql`
-      ALTER TABLE "master_siklus_menu" ADD COLUMN IF NOT EXISTS "nama_diet_gabungan" text;
     `);
 
     // 3. Auto-seed default cycles 1-10 (+11) if master_siklus is empty
@@ -372,9 +359,7 @@ export async function createMasterSiklus(
             waktu_makan: item.waktu_makan,
             nama_makanan: item.nama_makanan,
             kategori_menu: item.kategori_menu,
-            nama_diet_gabungan: item.nama_diet_gabungan,
             catatan: item.catatan,
-            urutan: item.urutan,
             is_active: item.is_active,
           })),
         );
@@ -665,7 +650,6 @@ export async function getSiklusMenuList(
       .orderBy(
         asc(masterSiklusMenuTable.jenis_makanan),
         asc(masterSiklusMenuTable.kelas),
-        asc(masterSiklusMenuTable.urutan),
         asc(masterSiklusMenuTable.id),
       );
 
@@ -677,9 +661,7 @@ export async function getSiklusMenuList(
       waktu_makan: row.waktu_makan,
       nama_makanan: row.nama_makanan,
       kategori_menu: row.kategori_menu,
-      nama_diet_gabungan: row.nama_diet_gabungan,
       catatan: row.catatan,
-      urutan: row.urutan,
       is_active: row.is_active,
       created_at: row.created_at,
       updated_at: row.updated_at,
@@ -740,7 +722,7 @@ export async function getKategoriMenuDietList(): Promise<MenuTagOption[]> {
       .where(eq(kategoriMenuTable.is_active, true))
       .orderBy(
         asc(kategoriMenuTable.nama_kategori),
-        asc(kategoriMenuTable.urutan),
+        asc(kategoriMenuTable.kode_item),
       );
 
     return list.map((item) => ({
@@ -758,20 +740,20 @@ export async function getKategoriMenuDietList(): Promise<MenuTagOption[]> {
  * Opsi diet per jenis makanan yang bersumber dari data siklus menu
  * (master_siklus_menu) untuk dropdown mapping diet pasien.
  *
- * - Hidangan 0–1 tag menyumbang tag satuan (kode tag).
- * - Hidangan >1 tag menyumbang Nama Diet Gabungan (bukan tag penyusunnya,
- *   kecuali tag tersebut juga terdaftar sebagai hidangan satuan).
+ * Setiap tag unik (termasuk tag penyusun hidangan multi-tag) disajikan
+ * sebagai opsi satuan. Diet gabungan bersifat implisit dari kombinasi
+ * tag pada hidangan, tanpa nama gabungan terpisah.
  */
 export interface SiklusDietOption {
   id: string;
   /** HEWANI | NABATI | SAYUR | BUAH | SNACK */
   jenisMakanan: string;
-  /** Nilai yang disimpan ke mapping: kode tag satuan atau Nama Diet Gabungan */
+  /** Nilai yang disimpan ke mapping: kode tag */
   kode: string;
   /** Label tampilan dropdown */
   label: string;
   isGabungan: boolean;
-  /** Tag penyusun (hanya untuk opsi gabungan) */
+  /** Selalu kosong — dipertahankan agar konsumen lama tidak rusak */
   memberTags: string[];
 }
 
@@ -785,7 +767,6 @@ export async function getSiklusDietOptions(): Promise<SiklusDietOption[]> {
       .selectDistinct({
         jenis_makanan: masterSiklusMenuTable.jenis_makanan,
         kategori_menu: masterSiklusMenuTable.kategori_menu,
-        nama_diet_gabungan: masterSiklusMenuTable.nama_diet_gabungan,
       })
       .from(masterSiklusMenuTable)
       .where(eq(masterSiklusMenuTable.is_active, true));
@@ -806,44 +787,31 @@ export async function getSiklusDietOptions(): Promise<SiklusDietOption[]> {
     }
 
     const singles = new Map<string, SiklusDietOption>();
-    const combined = new Map<string, SiklusDietOption>();
 
     for (const row of rows) {
       const jenis = (row.jenis_makanan || '').trim().toUpperCase();
       if (!(SIKLUS_DIET_JENIS as readonly string[]).includes(jenis)) continue;
 
       const seen = new Set<string>();
-      const tags: string[] = [];
       for (const tag of parseMenuTags(row.kategori_menu)) {
-        const key = tag.toUpperCase();
-        if (seen.has(key)) continue;
+        const key = tag.trim().toUpperCase();
+        if (!key || seen.has(key)) continue;
         seen.add(key);
-        tags.push(tag);
-      }
-
-      if (tags.length > 1) {
-        const name = (row.nama_diet_gabungan || '').trim();
-        if (!name) continue;
-        const key = `${jenis}__${name.toUpperCase()}`;
-        if (!combined.has(key)) {
-          combined.set(key, {
-            id: `siklus-gabungan-${jenis}-${combined.size + 1}`,
+        const mapKey = `${jenis}__${key}`;
+        if (!singles.has(mapKey)) {
+          // Samakan canonical kode dengan master kategori bila tersedia
+          const canonical = [...labelMap.keys()].includes(mapKey)
+            ? labelRows.find(
+                (r) =>
+                  r.kategori.trim().toUpperCase() === jenis &&
+                  r.kode.trim().toUpperCase() === key,
+              )?.kode ?? tag
+            : tag;
+          singles.set(mapKey, {
+            id: `siklus-satuan-${jenis}-${key}`,
             jenisMakanan: jenis,
-            kode: name,
-            label: `Gabungan ${tags.join(', ')}`,
-            isGabungan: true,
-            memberTags: tags,
-          });
-        }
-      } else if (tags.length === 1) {
-        const code = tags[0];
-        const key = `${jenis}__${code.toUpperCase()}`;
-        if (!singles.has(key)) {
-          singles.set(key, {
-            id: `siklus-satuan-${jenis}-${code.toUpperCase()}`,
-            jenisMakanan: jenis,
-            kode: code,
-            label: labelMap.get(key) ?? code,
+            kode: canonical,
+            label: labelMap.get(mapKey) ?? canonical,
             isGabungan: false,
             memberTags: [],
           });
@@ -853,10 +821,7 @@ export async function getSiklusDietOptions(): Promise<SiklusDietOption[]> {
 
     const byKode = (a: SiklusDietOption, b: SiklusDietOption) =>
       a.kode.localeCompare(b.kode, 'id');
-    return [
-      ...[...singles.values()].sort(byKode),
-      ...[...combined.values()].sort(byKode),
-    ];
+    return [...singles.values()].sort(byKode);
   } catch (error) {
     console.error('Error fetching siklus diet options:', error);
     return [];
@@ -893,20 +858,6 @@ function validateMenuTagSelection(
   return { value: codes.length > 0 ? codes.join(', ') : null };
 }
 
-function validateCombinedDietName(
-  kategoriMenuValue: string | null | undefined,
-  namaDietGabungan: string | null | undefined,
-): { value: string | null; error?: string } {
-  if (needsCombinedDietName(kategoriMenuValue)) {
-    const trimmed = namaDietGabungan?.trim() || '';
-    if (!trimmed) {
-      return { value: null, error: COMBINED_DIET_NAME_REQUIRED_MESSAGE };
-    }
-    return { value: trimmed };
-  }
-  return { value: null };
-}
-
 function isInvalidFruitSlot(jenisMakanan: string, waktuMakan: string): boolean {
   return jenisMakanan.trim().toUpperCase() === 'BUAH' &&
     !['PAGI', 'SIANG'].includes(waktuMakan.trim().toUpperCase());
@@ -935,11 +886,6 @@ export async function createSiklusMenuItem(
       payload.jenis_makanan || 'HEWANI',
     );
     if (tagSelection.error) return { success: false, message: tagSelection.error };
-    const combinedSelection = validateCombinedDietName(
-      tagSelection.value,
-      payload.nama_diet_gabungan,
-    );
-    if (combinedSelection.error) return { success: false, message: combinedSelection.error };
 
     // Ensure cycle exists in master_siklus
     const targetCycle = payload.siklus_ke || 1;
@@ -966,9 +912,7 @@ export async function createSiklusMenuItem(
         waktu_makan: (payload.waktu_makan || 'PAGI').toUpperCase(),
         nama_makanan: payload.nama_makanan.trim(),
         kategori_menu: tagSelection.value,
-        nama_diet_gabungan: combinedSelection.value,
         catatan: payload.catatan?.trim() || null,
-        urutan: payload.urutan ?? 0,
         is_active: payload.is_active ?? true,
       })
       .returning({ id: masterSiklusMenuTable.id });
@@ -1002,7 +946,6 @@ export async function updateSiklusMenuItem(
         jenis_makanan: masterSiklusMenuTable.jenis_makanan,
         waktu_makan: masterSiklusMenuTable.waktu_makan,
         kategori_menu: masterSiklusMenuTable.kategori_menu,
-        nama_diet_gabungan: masterSiklusMenuTable.nama_diet_gabungan,
       })
       .from(masterSiklusMenuTable)
       .where(eq(masterSiklusMenuTable.id, id))
@@ -1020,11 +963,6 @@ export async function updateSiklusMenuItem(
       payload.jenis_makanan || existingItem.jenis_makanan,
     );
     if (tagSelection.error) return { success: false, message: tagSelection.error };
-    const combinedSelection = validateCombinedDietName(
-      tagSelection.value,
-      payload.nama_diet_gabungan === undefined ? existingItem.nama_diet_gabungan : payload.nama_diet_gabungan,
-    );
-    if (combinedSelection.error) return { success: false, message: combinedSelection.error };
 
     if (payload.siklus_ke !== undefined) {
       const existingCycle = await db
@@ -1059,11 +997,9 @@ export async function updateSiklusMenuItem(
           ? { nama_makanan: payload.nama_makanan.trim() }
           : {}),
         kategori_menu: tagSelection.value,
-        nama_diet_gabungan: combinedSelection.value,
         ...(payload.catatan !== undefined
           ? { catatan: payload.catatan?.trim() || null }
           : {}),
-        ...(payload.urutan !== undefined ? { urutan: payload.urutan } : {}),
         ...(payload.is_active !== undefined
           ? { is_active: payload.is_active }
           : {}),
@@ -1127,13 +1063,6 @@ export async function saveSlotMenuItems(
     if (invalidIndex !== -1) {
       return { success: false, message: `Hidangan #${invalidIndex + 1}: ${normalizedTags[invalidIndex].error}` };
     }
-    const normalizedCombined = validItems.map((item, idx) =>
-      validateCombinedDietName(normalizedTags[idx].value, item.nama_diet_gabungan),
-    );
-    const missingCombinedIndex = normalizedCombined.findIndex((selection) => selection.error);
-    if (missingCombinedIndex !== -1) {
-      return { success: false, message: `Hidangan #${missingCombinedIndex + 1}: ${normalizedCombined[missingCombinedIndex].error}` };
-    }
 
     // Ensure cycle exists in master_siklus
     const existingCycle = await db
@@ -1172,9 +1101,7 @@ export async function saveSlotMenuItems(
           waktu_makan: waktuMakan.toUpperCase(),
           nama_makanan: item.nama_makanan.trim(),
           kategori_menu: normalizedTags[idx].value,
-          nama_diet_gabungan: normalizedCombined[idx].value,
           catatan: item.catatan?.trim() || null,
-          urutan: item.urutan ?? idx + 1,
           is_active: true,
         })),
       );
@@ -1251,9 +1178,7 @@ export async function duplicateSiklus(
         waktu_makan: item.waktu_makan,
         nama_makanan: item.nama_makanan,
         kategori_menu: item.kategori_menu,
-        nama_diet_gabungan: item.nama_diet_gabungan,
         catatan: item.catatan,
-        urutan: item.urutan,
         is_active: item.is_active,
       })),
     );
