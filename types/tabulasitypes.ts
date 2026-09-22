@@ -1,3 +1,64 @@
+import type { masterSiklusMenuTable } from '@/db/schemas/master/siklus-menu';
+
+/**
+ * Normalized internal representation of a patient for tabulation processing.
+ * Used by all tabulasi service layers (makan, snack, buah).
+ */
+export interface TabulasiPatientRecord {
+  id: number | string;
+  no_rm: string;
+  nama_pasien: string;
+  gedung: string;
+  ruangan: string;
+  kelas: string;
+  diet_rs_raw: string;
+  bentuk_makanan: string | null;
+  kategori_diet: string | null;
+  status_pasien?: string | null;
+  status_saat_snapshot?: string | null;
+  is_npo?: boolean | null;
+}
+
+/**
+ * Strongly-typed JSON payload for post-snapshot approved revisions (NEW_PATIENT).
+ */
+export interface ParsedPatientRevisionPayload {
+  no_rm?: string;
+  nama_pasien?: string;
+  gedung?: string;
+  ruangan?: string;
+  bed?: string;
+  kelas?: string;
+  diet?: string;
+  bentuk_makanan?: string;
+  kategori_diet?: string;
+}
+
+/**
+ * Pre-analyzed patient flags for efficient and accurate dish matching.
+ * Computed once per patient in the main aggregation loop.
+ */
+export interface AnalyzedPatient {
+  patient: TabulasiPatientRecord;
+  gedungType: 'GEDUNG LAMA' | 'GEDUNG BARU';
+  kelasType: 'KELAS_1' | 'KELAS_2' | 'KELAS_3';
+  isNpo: boolean;
+  isDm: boolean;
+  isRg: boolean;
+  isRs: boolean;
+  isRp: boolean;
+  isDj: boolean;
+  isRl: boolean;
+  isRkol: boolean;
+  isTktp: boolean;
+  isSaring: boolean;
+  isBiasa: boolean;
+}
+
+/** Drizzle inferred type alias for master siklus menu row */
+export type MasterMenuItemRow = typeof masterSiklusMenuTable.$inferSelect;
+
+
 export type ProductionStatus = 'READY' | 'PENDING' | 'CHECK';
 
 export interface TabulasiDietBreakdown {

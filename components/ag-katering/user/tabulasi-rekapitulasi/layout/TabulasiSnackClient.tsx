@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react';
 import { Apple, Cookie, FileQuestion, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import type { TabulasiDashboardData } from '@/types/tabulasitypes';
-import { getTabulasiSnackBuahData } from '@/servers/tabulasi.service';
+import { getTabulasiSnackBuahData } from '@/servers/tabulasi-snack-buah.service';
 import { exportTabulasiBuahExcel, exportTabulasiSnackExcel } from '@/lib/exportTabulasiSnackExcel';
 import TabulasiHeader from './TabulasiHeader';
 import TabulasiStatsCards from './TabulasiStatsCards';
