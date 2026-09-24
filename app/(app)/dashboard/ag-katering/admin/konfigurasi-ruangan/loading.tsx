@@ -4,6 +4,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 export default function KonfigurasiRuanganLoading() {
   return (
     <div className='flex flex-1 flex-col gap-6 p-4 md:p-6 max-w-7xl mx-auto w-full'>
+      {/* Tab Switcher Skeleton (Ruangan | Kelas) */}
+      <Skeleton className='h-10 w-full sm:w-[420px] rounded-lg' />
+
       {/* Header Banner Skeleton */}
       <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-5 rounded-2xl border bg-gradient-to-r from-blue-500/10 via-primary/5 to-transparent'>
         <div className='space-y-1.5'>

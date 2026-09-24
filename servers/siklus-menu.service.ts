@@ -832,7 +832,7 @@ function validateMenuTagSelection(
 
 function isInvalidFruitSlot(jenisMakanan: string, waktuMakan: string): boolean {
   return jenisMakanan.trim().toUpperCase() === 'BUAH' &&
-    !['PAGI', 'SIANG'].includes(waktuMakan.trim().toUpperCase());
+    !['SIANG', 'SORE'].includes(waktuMakan.trim().toUpperCase());
 }
 
 // ─── Mutations ─────────────────────────────────────────────────────────────
@@ -850,7 +850,7 @@ export async function createSiklusMenuItem(
   try {
     await ensureTableInitialized();
     if (isInvalidFruitSlot(payload.jenis_makanan || 'HEWANI', payload.waktu_makan || 'PAGI')) {
-      return { success: false, message: 'Menu buah hanya tersedia untuk Pagi dan Siang.' };
+      return { success: false, message: 'Menu buah hanya tersedia untuk Siang dan Sore.' };
     }
     const tagSelection = validateMenuTagSelection(
       payload.kategori_menu,
@@ -927,7 +927,7 @@ export async function updateSiklusMenuItem(
       payload.jenis_makanan || existingItem.jenis_makanan,
       payload.waktu_makan || existingItem.waktu_makan,
     )) {
-      return { success: false, message: 'Menu buah hanya tersedia untuk Pagi dan Siang.' };
+      return { success: false, message: 'Menu buah hanya tersedia untuk Siang dan Sore.' };
     }
     const tagSelection = validateMenuTagSelection(
       payload.kategori_menu === undefined ? existingItem.kategori_menu : payload.kategori_menu,
@@ -1026,7 +1026,7 @@ export async function saveSlotMenuItems(
   try {
     await ensureTableInitialized();
     if (isInvalidFruitSlot(jenisMakanan, waktuMakan)) {
-      return { success: false, message: 'Menu buah hanya tersedia untuk Pagi dan Siang.' };
+      return { success: false, message: 'Menu buah hanya tersedia untuk Siang dan Sore.' };
     }
     const validItems = items.filter((item) => item.nama_makanan?.trim());
     const allowedTags = await getActiveTagOptions(jenisMakanan);

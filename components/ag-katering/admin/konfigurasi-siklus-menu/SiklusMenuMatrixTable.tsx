@@ -33,6 +33,7 @@ import {
 import type { SiklusMenuItem } from '@/servers/siklus-menu.service';
 import { deleteSiklusMenuItem } from '@/servers/siklus-menu.service';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 
 interface SiklusMenuMatrixTableProps {
   items: SiklusMenuItem[];
@@ -75,8 +76,10 @@ interface MatrixRowDefinition {
   kelas: string;
   jenis_makanan: string;
   isSaringSlot?: boolean;
-  /** Jika true, slot SORE dinonaktifkan (Buah dan Snack hanya Pagi & Siang) */
+  /** Jika true, slot SORE dinonaktifkan (Snack hanya Pagi & Siang) */
   hanyaPagiSiang?: boolean;
+  /** Jika true, slot PAGI dinonaktifkan (Buah hanya Siang & Sore) */
+  hanyaSiangSore?: boolean;
 }
 
 // Baris matriks kanonis KELAS I/II/III (tanpa VIP; legacy II-III tetap dibaca di matcher)
@@ -90,7 +93,7 @@ const STANDARD_ROWS: MatrixRowDefinition[] = [
     id: 'SEMUA-BUAH',
     kelas: 'Semua Kelas',
     jenis_makanan: 'BUAH',
-    hanyaPagiSiang: true,
+    hanyaSiangSore: true,
   },
   // Baris snack — hanya ada 2 waktu: Pagi dan Siang (Sore dinonaktifkan)
   {
@@ -143,7 +146,8 @@ export default function SiklusMenuMatrixTable({
         id: key,
         kelas: item.kelas,
         jenis_makanan: item.jenis_makanan,
-        hanyaPagiSiang: item.jenis_makanan === 'BUAH',
+        hanyaSiangSore: item.jenis_makanan === 'BUAH',
+        hanyaPagiSiang: item.jenis_makanan === 'SNACK',
       });
     }
   }
@@ -232,7 +236,7 @@ export default function SiklusMenuMatrixTable({
             dishes.map((dish) => (
               <div
                 key={dish.id}
-                className='text-xs text-foreground bg-background border border-border/80 rounded-md p-1.5 shadow-2xs group/item hover:border-primary/50 transition-all flex items-start justify-between gap-1.5'
+                className={cn('text-xs text-foreground border border-border/80 rounded-md p-1.5 shadow-2xs group/item hover:border-primary/50 transition-all flex items-start justify-between gap-1.5', dish.kategori_menu === 'TKTP' && 'bg-primary/10')}
               >
                 <div className='leading-tight'>
                   <span className='font-medium text-foreground'>
@@ -367,9 +371,6 @@ export default function SiklusMenuMatrixTable({
                 const badgeStyle =
                   JENIS_BADGE_STYLE[row.jenis_makanan] ||
                   'bg-gray-100 text-gray-800 border-gray-300';
-                const legacyFruitSore = row.jenis_makanan === 'BUAH'
-                  ? getCellDishes(row.kelas, 'BUAH', 'SORE')
-                  : [];
 
                 return (
                   <TableRow
@@ -418,17 +419,32 @@ export default function SiklusMenuMatrixTable({
                       </Badge>
                     </TableCell>
 
-                    {/* MAKAN PAGI */}
-                    <TableCell className='border-r align-top p-1 bg-background'>
-                      {renderSlotCell(row.kelas, row.jenis_makanan, 'PAGI')}
-                    </TableCell>
+                    {/* MAKAN PAGI — Buah hanya tersedia Siang & Sore */}
+                    {row.hanyaSiangSore ? (
+                      <TableCell className='border-r align-top p-1 bg-muted/40'>
+                        <div className='min-h-[90px] p-2 flex flex-col items-center justify-center gap-1 rounded-lg text-center select-none'>
+                          <span className='text-[11px] font-semibold text-muted-foreground'>
+                            —
+                          </span>
+                          <span className='text-[10px] leading-tight text-muted-foreground/70 italic'>
+                            Buah hanya
+                            <br />
+                            Siang & Sore
+                          </span>
+                        </div>
+                      </TableCell>
+                    ) : (
+                      <TableCell className='border-r align-top p-1 bg-background'>
+                        {renderSlotCell(row.kelas, row.jenis_makanan, 'PAGI')}
+                      </TableCell>
+                    )}
 
                     {/* MAKAN SIANG */}
                     <TableCell className='border-r align-top p-1 bg-background'>
                       {renderSlotCell(row.kelas, row.jenis_makanan, 'SIANG')}
                     </TableCell>
 
-                    {/* MAKAN SORE — Buah dan Snack hanya tersedia Pagi & Siang */}
+                    {/* MAKAN SORE — Snack hanya tersedia Pagi & Siang */}
                     {row.hanyaPagiSiang ? (
                       <TableCell className='border-r align-top p-1 bg-muted/40'>
                         <div className='min-h-[90px] p-2 flex flex-col items-center justify-center gap-1 rounded-lg text-center select-none'>
@@ -436,20 +452,10 @@ export default function SiklusMenuMatrixTable({
                             —
                           </span>
                           <span className='text-[10px] leading-tight text-muted-foreground/70 italic'>
-                            {row.jenis_makanan === 'BUAH' ? 'Buah' : 'Snack'} hanya
+                            Snack hanya
                             <br />
                             Pagi & Siang
                           </span>
-                          {legacyFruitSore.map((dish) => (
-                            <button
-                              key={dish.id}
-                              type='button'
-                              onClick={() => onEditItem(dish)}
-                              className='text-[10px] text-amber-700 dark:text-amber-300 underline cursor-pointer'
-                            >
-                              Pindahkan menu lama: {dish.nama_makanan}
-                            </button>
-                          ))}
                         </div>
                       </TableCell>
                     ) : (

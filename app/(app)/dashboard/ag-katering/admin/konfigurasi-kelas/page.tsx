@@ -1,16 +1,9 @@
-import React from 'react';
-import type { Metadata } from 'next';
-import { getKelasList } from '@/servers/kelas.service';
-import KonfigurasiKelasClient from '@/components/ag-katering/admin/konfigurasi-kelas/KonfigurasiKelasClient';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = {
-  title: 'Konfigurasi Kelas - Supervisor',
-  description:
-    'Modul khusus supervisor untuk pengelolaan jenis kelas perawatan (KELAS I, KELAS II, KELAS III).',
-};
-
-export default async function KonfigurasiKelasPage() {
-  const kelasList = await getKelasList();
-
-  return <KonfigurasiKelasClient initialKelasList={kelasList} />;
+/**
+ * Route lama digabung ke konfigurasi-ruangan bertab.
+ * Bookmark / URL lama tetap hidup via redirect ke tab Kelas.
+ */
+export default function KonfigurasiKelasPage() {
+  redirect('/dashboard/ag-katering/admin/konfigurasi-ruangan?tab=kelas');
 }

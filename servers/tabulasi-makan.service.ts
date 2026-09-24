@@ -145,6 +145,12 @@ export async function getTabulasiDashboardData(
       );
     }
 
+    // Tabulasi makan hanya untuk hidangan utama (pokok/hewani/nabati/sayur/extra).
+    // Buah dikecualikan: porsinya dihitung dari mapping pasien di tabulasi snack & buah.
+    slotMenuItems = slotMenuItems.filter(
+      (item) => (item.jenis_makanan || '').toUpperCase().trim() !== 'BUAH',
+    );
+
     // 5. Analyze patient diet tags
     const totalPatients = patientRecords.length;
     let patientsEating = 0;

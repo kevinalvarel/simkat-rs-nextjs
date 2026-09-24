@@ -65,7 +65,7 @@ const JENIS_MAKANAN_OPTIONS = [
   { value: 'NABATI', label: 'NABATI (Lauk Nabati)' },
   { value: 'SAYUR', label: 'SAYUR (Sayur Mayur)' },
   { value: 'SARING', label: 'SARING (Makanan Saring / Lunak)' },
-  { value: 'BUAH', label: 'BUAH (Buah Pagi / Siang)' },
+  { value: 'BUAH', label: 'BUAH (Buah Siang / Sore)' },
   { value: 'SNACK', label: 'SNACK (Snack Pagi / Siang)' },
 ];
 
@@ -85,8 +85,8 @@ const ItemSchema = z.object({
   kategori_menu: z.string().optional().nullable(),
   catatan: z.string().optional().nullable(),
 }).refine(
-  (value) => value.jenis_makanan !== 'BUAH' || ['PAGI', 'SIANG'].includes(value.waktu_makan),
-  { path: ['waktu_makan'], message: 'Buah hanya tersedia untuk Pagi dan Siang.' },
+  (value) => value.jenis_makanan !== 'BUAH' || ['SIANG', 'SORE'].includes(value.waktu_makan),
+  { path: ['waktu_makan'], message: 'Buah hanya tersedia untuk Siang dan Sore.' },
 );
 
 type ItemFormValues = z.infer<typeof ItemSchema>;
@@ -152,7 +152,6 @@ export default function SiklusItemDialog({
 
   const selectedTagsString = useWatch({ control, name: 'kategori_menu' }) || '';
   const selectedJenis = useWatch({ control, name: 'jenis_makanan' });
-  const selectedWaktu = useWatch({ control, name: 'waktu_makan' });
   const currentTags = parseMenuTags(selectedTagsString);
   const tagCount = countUniqueMenuTags(selectedTagsString);
   const availableTags = getMenuTagOptions(dietOptions, selectedJenis);
@@ -302,7 +301,7 @@ export default function SiklusItemDialog({
                     </SelectTrigger>
                     <SelectContent>
                       {WAKTU_MAKAN_OPTIONS.filter((opt) =>
-                        selectedJenis !== 'BUAH' || opt.value === 'PAGI' || opt.value === 'SIANG',
+                        selectedJenis !== 'BUAH' || opt.value === 'SIANG' || opt.value === 'SORE',
                       ).map((opt) => (
                         <SelectItem key={opt.value} value={opt.value}>
                           {opt.label}
@@ -364,9 +363,8 @@ export default function SiklusItemDialog({
                       const retainedValue = retained.join(', ');
                       field.onChange(val);
                       setValue('kategori_menu', retainedValue, { shouldDirty: true, shouldValidate: true });
-                      if (val === 'BUAH' && selectedWaktu !== 'PAGI' && selectedWaktu !== 'SIANG') {
-                        setValue('waktu_makan', 'PAGI', { shouldDirty: true, shouldValidate: true });
-                      }
+                      // Waktu makan mengikuti slot matriks yang diklik (defaultSlot);
+                      // tidak ada auto-koreksi global — validasi zod + filter dropdown yang menolak slot invalid.
                     }}
                   >
                     <SelectTrigger className='w-full h-9 text-xs bg-background'>

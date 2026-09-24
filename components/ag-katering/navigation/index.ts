@@ -151,11 +151,7 @@ export const routeDataSupervisor = {
       title: 'Konfigurasi (Admin)',
       items: [
         {
-          title: 'Konfigurasi Kelas',
-          url: '/dashboard/ag-katering/admin/konfigurasi-kelas',
-        },
-        {
-          title: 'Konfigurasi Ruangan',
+          title: 'Konfigurasi Ruangan & Kelas',
           url: '/dashboard/ag-katering/admin/konfigurasi-ruangan',
         },
         {
