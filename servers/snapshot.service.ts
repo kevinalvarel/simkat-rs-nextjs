@@ -360,6 +360,7 @@ export async function triggerManualSnapshot(
           kelas: p.kelas,
           diet_rs_raw: p.diet,
           bentuk_makanan: isNpo ? 'NPO' : mapped?.bentuk_makanan || null,
+          karbohidrat: isNpo ? 'NPO' : mapped?.karbohidrat || null,
           kategori_diet: isNpo ? 'NPO' : mapped?.kategori_diet || null,
           nabati: isNpo ? 'NPO' : mapped?.nabati || null,
           sayur: isNpo ? 'NPO' : mapped?.sayur || null,

@@ -57,6 +57,7 @@ interface MappingDietTableProps {
 
 interface RowFormState {
   bentukMakanan: string;
+  karbohidrat: string;
   hewani: string;
   nabati: string;
   sayur: string;
@@ -70,14 +71,16 @@ interface RowFormState {
 function rowFromItem(item: UnmappedDietItem): RowFormState {
   const legacyParts = item.extra?.split(',').map((part) => part.trim()) || [];
   const useLegacyExtra = !item.nabati && !item.sayur;
+  const isNpo = item.diet_rs_raw.trim().toUpperCase() === 'NPO' || item.bentuk_makanan === 'NPO';
   return {
     bentukMakanan: item.bentuk_makanan ?? '',
+    karbohidrat: isNpo ? 'NPO' : item.karbohidrat ?? '',
     hewani: item.kategori_diet ?? '',
     nabati: item.nabati || (useLegacyExtra ? legacyParts[0] : '') || '',
     sayur: item.sayur || (useLegacyExtra ? legacyParts[1] : '') || '',
     buah: item.buah ?? '',
     snack: item.snack ?? '',
-    mode: item.diet_rs_raw.trim().toUpperCase() === 'NPO' || item.bentuk_makanan === 'NPO' ? 'NPO' : 'STANDARD',
+    mode: isNpo ? 'NPO' : 'STANDARD',
     status: 'idle',
     isDirty: false,
   };
@@ -173,9 +176,9 @@ export default function MappingDietTable({
   const [isSubmittingConfirm, setIsSubmittingConfirm] = useState(false);
 
   // Group master options by category
-  // Bentuk makanan tetap dari Konfigurasi Menu (KARBO / BENTUK_MAKANAN).
+  // Bentuk makanan dan karbohidrat berasal dari kategori terpisah di Konfigurasi Diet.
   // Hewani–snack diambil dari data siklus menu (tag satuan + Nama Diet Gabungan).
-  const karboOptions = useMemo(
+  const bentukOptions = useMemo(
     () =>
       options.filter(
         (o) =>
@@ -187,6 +190,11 @@ export default function MappingDietTable({
   const hewaniOptions = useMemo(
     () => siklusDietOptionsForKind(siklusDietOptions, 'HEWANI'),
     [siklusDietOptions],
+  );
+
+  const karbohidratOptions = useMemo(
+    () => options.filter((o) => o.namaKategori === 'KARBOHIDRAT'),
+    [options],
   );
 
   const nabatiOptions = useMemo(
@@ -218,7 +226,7 @@ export default function MappingDietTable({
   // Handle instant inline change of a single cell — DRAFT ONLY, NO AUTO-SAVE!
   function handleCellChange(
     diet_rs_raw: string,
-    field: 'bentukMakanan' | 'hewani' | 'nabati' | 'sayur' | 'buah' | 'snack',
+    field: 'bentukMakanan' | 'karbohidrat' | 'hewani' | 'nabati' | 'sayur' | 'buah' | 'snack',
     value: string,
   ) {
     const item = allItems.find((entry) => entry.diet_rs_raw === diet_rs_raw);
@@ -249,6 +257,7 @@ export default function MappingDietTable({
           diet_rs_raw: item.diet_rs_raw,
           mode: state.mode,
           bentukMakanan: state.bentukMakanan,
+          karbohidrat: state.karbohidrat,
           hewani: state.hewani,
           nabati: state.nabati,
           sayur: state.sayur,
@@ -260,7 +269,7 @@ export default function MappingDietTable({
       }
     }
     return result;
-  }, [allItems, rowStates]);
+  }, [allItems, rowStates, tugasKateringCodes]);
 
   const dirtyCount = useMemo(() => allItems.filter((item) => rowStates[item.diet_rs_raw]?.isDirty).length, [allItems, rowStates]);
 
@@ -288,6 +297,7 @@ export default function MappingDietTable({
             diet_rs_raw: row.diet_rs_raw,
             mode: row.mode || 'STANDARD',
             bentuk_makanan: row.bentukMakanan || null,
+            karbohidrat: row.karbohidrat || null,
             kategori_diet: row.hewani || null,
             nabati: row.nabati || null,
             sayur: row.sayur || null,
@@ -387,6 +397,10 @@ export default function MappingDietTable({
               </TableHead>
 
               <TableHead className='min-w-[125px] w-[135px] font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider text-center border-r border-slate-300 dark:border-slate-700 py-2.5'>
+                KARBOHIDRAT
+              </TableHead>
+
+              <TableHead className='min-w-[125px] w-[135px] font-bold text-slate-800 dark:text-slate-100 uppercase tracking-wider text-center border-r border-slate-300 dark:border-slate-700 py-2.5'>
                 <div className='flex items-center justify-center gap-1'>
                   <span>HEWANI</span>
                   <Filter className='w-3 h-3 text-slate-400' />
@@ -436,7 +450,7 @@ export default function MappingDietTable({
           {/* Excel-style Body */}
           <TableBody>
             {items.length === 0 && (
-              <TableRow><TableCell colSpan={10} className='py-8 text-center text-xs text-muted-foreground'>Tidak ada diet yang cocok dengan filter. Draft di tab ini tetap dapat dikonfirmasi melalui tombol di bawah.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={11} className='py-8 text-center text-xs text-muted-foreground'>Tidak ada diet yang cocok dengan filter. Draft di tab ini tetap dapat dikonfirmasi melalui tombol di bawah.</TableCell></TableRow>
             )}
             {items.map((item, idx) => {
               const isSelected = selectedRaws.includes(item.diet_rs_raw);
@@ -507,13 +521,23 @@ export default function MappingDietTable({
                   <TableCell className='p-0 border-r border-slate-200 dark:border-slate-800 align-middle bg-[#ffe8ec]/60 dark:bg-[#381a22]/30 hover:bg-[#ffe8ec] dark:hover:bg-[#381a22]/50 transition-colors'>
                     <CategorySelectCell
                       value={row.bentukMakanan}
-                      options={karboOptions}
+                      options={bentukOptions}
                       disabled={isSubmittingConfirm}
                       includeSpecial
                       onChange={(val) =>
                         handleCellChange(item.diet_rs_raw, 'bentukMakanan', val)
                       }
                       isBold
+                    />
+                  </TableCell>
+
+                  {/* KARBOHIDRAT Select Cell */}
+                  <TableCell className='p-0 border-r border-slate-200 dark:border-slate-800 align-middle bg-[#ffe8ec]/60 dark:bg-[#381a22]/30 hover:bg-[#ffe8ec] dark:hover:bg-[#381a22]/50 transition-colors'>
+                    <CategorySelectCell
+                      value={row.karbohidrat}
+                      options={karbohidratOptions}
+                      disabled={isSubmittingConfirm || row.mode !== 'STANDARD'}
+                      onChange={(val) => handleCellChange(item.diet_rs_raw, 'karbohidrat', val)}
                     />
                   </TableCell>
 

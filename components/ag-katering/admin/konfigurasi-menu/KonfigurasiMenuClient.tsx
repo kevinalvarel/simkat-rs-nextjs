@@ -33,6 +33,7 @@ interface KonfigurasiMenuClientProps {
 const CATEGORY_TABS: Array<{ id: string; label: string; icon: string }> = [
   { id: 'ALL', label: 'Semua Kategori', icon: '📋' },
   { id: 'BENTUK_MAKANAN', label: 'Bentuk Makanan', icon: '🍚' },
+  { id: 'KARBOHIDRAT', label: 'Karbohidrat', icon: '🍚' },
   { id: 'HEWANI', label: 'Lauk Hewani', icon: '🍗' },
   { id: 'NABATI', label: 'Lauk Nabati', icon: '🫘' },
   { id: 'SAYUR', label: 'Sayur', icon: '🥦' },

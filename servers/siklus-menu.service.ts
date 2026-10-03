@@ -1,242 +1,57 @@
 'use server';
 
-import { eq, and, asc, sql } from 'drizzle-orm';
-import { revalidatePath } from 'next/cache';
+import { eq, and, asc } from 'drizzle-orm';
 import { db } from '@/drizzle';
 import {
   masterSiklusTable,
   masterSiklusMenuTable,
 } from '@/db/schemas/master/siklus-menu';
 import { kategoriMenuTable } from '@/db/schemas/master/kategori-menu';
-import { getMenuTagOptions, normalizeMenuTags, parseMenuTags, type MenuTagOption } from '@/lib/siklus-menu-tags';
+import { type MenuTagOption } from '@/lib/siklus-menu-tags';
+import { addCalendarDays, formatIndo, getWibHari } from '@/lib/wib';
 import {
-  addCalendarDays,
-  formatIndo,
-  getWibHari,
-  getWibTodayKey,
-  parseCalendarDate,
-} from '@/lib/wib';
+  HARI_ROTASI_LIST,
+  type MasterSiklusItem,
+  type CreateMasterSiklusPayload,
+  type UpdateMasterSiklusPayload,
+  type SiklusMenuItem,
+  type MutationResult,
+  type CreateSiklusItemPayload,
+  type UpdateSiklusItemPayload,
+  type SlotItemInput,
+  type SiklusDietOption,
+} from '@/types/siklus-menu.types';
+import {
+  ensureTableInitialized,
+  ensureCycleExists,
+  copyCycleMenuItems,
+  isInvalidFruitSlot,
+  getActiveTagOptions,
+  validateMenuTagSelection,
+  parseRotationStartDate,
+  buildSiklusDietOptions,
+  revalidateSiklusPath,
+  createSuccessResult,
+  createErrorResult,
+} from '@/helper/siklus-menu';
 
-// ─── Types ──────────────────────────────────────────────────────────────────
+// ─── Re-export Types for Backwards Compatibility ────────────────────────────
 
-const HARI_ROTASI_LIST = [
-  'SENIN',
-  'SELASA',
-  'RABU',
-  'KAMIS',
-  'JUMAT',
-  'SABTU',
-  'MINGGU',
-] as const;
-
-export type HariRotasi = (typeof HARI_ROTASI_LIST)[number];
-
-
-export interface MasterSiklusItem {
-  id: number;
-  nomor_siklus: number;
-  nama_siklus: string;
-  hari?: string | null;
-  tanggal?: string | null;
-  deskripsi: string | null;
-  is_active: boolean;
-  created_at: Date;
-  updated_at: Date;
-}
-
-export type CreateMasterSiklusPayload = {
-  nomor_siklus: number;
-  nama_siklus: string;
-  hari?: string | null;
-  tanggal?: string | null;
-  deskripsi?: string | null;
-  copyFromSiklus?: number | null;
-};
-
-export type UpdateMasterSiklusPayload = {
-  nama_siklus?: string;
-  hari?: string | null;
-  tanggal?: string | null;
-  deskripsi?: string | null;
-  is_active?: boolean;
-};
-
-export interface SiklusMenuItem {
-  id: number;
-  siklus_ke: number;
-  kelas: string;
-  jenis_makanan: string;
-  waktu_makan: string;
-  nama_makanan: string;
-  kategori_menu: string | null;
-  catatan: string | null;
-  is_active: boolean;
-  created_at: Date;
-  updated_at: Date;
-}
-
-export interface MutationResult {
-  success: boolean;
-  message: string;
-  insertedId?: number;
-}
-
-export type CreateSiklusItemPayload = {
-  siklus_ke: number;
-  kelas: string;
-  jenis_makanan: string;
-  waktu_makan: string;
-  nama_makanan: string;
-  kategori_menu?: string | null;
-  catatan?: string | null;
-  is_active?: boolean;
-};
-
-export type UpdateSiklusItemPayload = Partial<CreateSiklusItemPayload>;
-
-export type SlotItemInput = {
-  id?: number;
-  nama_makanan: string;
-  kategori_menu?: string | null;
-  catatan?: string | null;
-};
-
-export interface SiklusMatrixRow {
-  id: string; // Unique key e.g. "KELAS-I-HEWANI" atau "ALL-NABATI"
-  kelas: string; // "KELAS I" | "KELAS II" | "KELAS III" | "Semua Kelas" (nilai dari sistem)
-  jenis_makanan: string; // "HEWANI" | "NABATI" | "SAYUR" | "SARING"
-  label: string;
-  pagi: SiklusMenuItem[];
-  siang: SiklusMenuItem[];
-  sore: SiklusMenuItem[];
-  saring_siang: SiklusMenuItem[];
-}
-
-export interface SiklusStatsData {
-  totalItems: number;
-  pagiCount: number;
-  siangCount: number;
-  soreCount: number;
-  saringCount: number;
-  hewaniCount: number;
-  nabatiCount: number;
-  sayurCount: number;
-  kelasCount: number;
-}
-
-// ─── Helpers: Ensure Tables Exist & Seed Default Master ─────────────────────
-
-async function ensureTableInitialized() {
-  try {
-    // 1. Ensure master_siklus table exists
-    await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS "master_siklus" (
-        "id" serial PRIMARY KEY NOT NULL,
-        "nomor_siklus" integer UNIQUE NOT NULL,
-        "nama_siklus" text NOT NULL,
-        "hari" text,
-        "deskripsi" text,
-        "is_active" boolean DEFAULT true NOT NULL,
-        "created_at" timestamp DEFAULT now() NOT NULL,
-        "updated_at" timestamp DEFAULT now() NOT NULL
-      );
-    `);
-
-    // Ensure hari & tanggal columns exist if created previously
-    await db.execute(sql`
-      ALTER TABLE "master_siklus" ADD COLUMN IF NOT EXISTS "hari" text;
-    `);
-    await db.execute(sql`
-      ALTER TABLE "master_siklus" ADD COLUMN IF NOT EXISTS "tanggal" text;
-    `);
-
-    // 2. Ensure master_siklus_menu table exists
-    await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS "master_siklus_menu" (
-        "id" serial PRIMARY KEY NOT NULL,
-        "siklus_ke" integer DEFAULT 1 NOT NULL,
-        "kelas" text DEFAULT 'Semua Kelas' NOT NULL,
-        "jenis_makanan" text NOT NULL,
-        "waktu_makan" text NOT NULL,
-        "nama_makanan" text NOT NULL,
-        "kategori_menu" text,
-        "catatan" text,
-        "is_active" boolean DEFAULT true NOT NULL,
-        "created_at" timestamp DEFAULT now() NOT NULL,
-        "updated_at" timestamp DEFAULT now() NOT NULL
-      );
-    `);
-
-    // 3. Auto-seed default cycles 1-10 (+11) if master_siklus is empty
-    const countRes = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(masterSiklusTable);
-    const totalCycles = countRes[0]?.count || 0;
-
-    if (totalCycles === 0) {
-      // Look for any existing cycles in master_siklus_menu
-      const existingMenuCycles = await db
-        .selectDistinct({ siklus_ke: masterSiklusMenuTable.siklus_ke })
-        .from(masterSiklusMenuTable);
-
-      const distinctNums = existingMenuCycles
-        .map((r) => r.siklus_ke)
-        .filter(Boolean);
-
-      const defaultNumbers = Array.from(
-        new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, ...distinctNums]),
-      ).sort((a, b) => a - b);
-
-      await db.insert(masterSiklusTable).values(
-        defaultNumbers.map((num) => {
-          // WIB sentral: seeding dari tanggal WIB, bukan tanggal UTC server.
-          const iso = addCalendarDays(getWibTodayKey(), num - 1);
-          const displayTarget = formatIndo(iso);
-          return {
-            nomor_siklus: num,
-            nama_siklus: `Siklus ${num}${num === 31 ? ' (Tgl 31)' : ''}`,
-            hari: HARI_ROTASI_LIST[(num - 1) % 7],
-            tanggal: iso,
-            deskripsi: `Rotasi menu makanan siklus tanggal ${displayTarget}`,
-            is_active: true,
-          };
-        }),
-      );
-    } else {
-      // If table already has cycles but tanggal is null, initialize them
-      const nullTanggalCycles = await db
-        .select({
-          id: masterSiklusTable.id,
-          nomor_siklus: masterSiklusTable.nomor_siklus,
-        })
-        .from(masterSiklusTable)
-        .where(sql`"tanggal" IS NULL`)
-        .orderBy(asc(masterSiklusTable.nomor_siklus));
-
-      if (nullTanggalCycles.length > 0) {
-        const todayKey = getWibTodayKey();
-        for (let i = 0; i < nullTanggalCycles.length; i++) {
-          const row = nullTanggalCycles[i];
-          const iso = addCalendarDays(todayKey, row.nomor_siklus - 1);
-          const day = getWibHari(iso);
-          const displayTarget = formatIndo(iso);
-
-          await db
-            .update(masterSiklusTable)
-            .set({
-              tanggal: iso,
-              hari: day,
-              deskripsi: `Rotasi menu makanan siklus tanggal ${displayTarget}`,
-              updated_at: new Date(),
-            })
-            .where(eq(masterSiklusTable.id, row.id));
-        }
-      }
-    }
-  } catch (err) {
-    console.error('Error ensuring master_siklus / menu tables exist:', err);
-  }
-}
+export type {
+  HariRotasi,
+  SiklusDietJenis,
+  MasterSiklusItem,
+  CreateMasterSiklusPayload,
+  UpdateMasterSiklusPayload,
+  SiklusMenuItem,
+  MutationResult,
+  CreateSiklusItemPayload,
+  UpdateSiklusItemPayload,
+  SlotItemInput,
+  SiklusMatrixRow,
+  SiklusStatsData,
+  SiklusDietOption,
+} from '@/types/siklus-menu.types';
 
 // ─── Master Siklus Management ───────────────────────────────────────────────
 
@@ -280,16 +95,15 @@ export async function getMasterSiklusList(): Promise<MasterSiklusItem[]> {
 }
 
 /**
- * Create a new cycle in the master table with optional copy
+ * Create a new cycle in the master table with optional dish copy
  */
 export async function createMasterSiklus(
   payload: CreateMasterSiklusPayload,
 ): Promise<MutationResult & { createdSiklus?: number }> {
   if (!payload.nomor_siklus || payload.nomor_siklus < 1) {
-    return {
-      success: false,
-      message: 'Nomor siklus harus berupa angka positif (minimal 1).',
-    };
+    return createErrorResult(
+      'Nomor siklus harus berupa angka positif (minimal 1).',
+    );
   }
 
   try {
@@ -297,16 +111,15 @@ export async function createMasterSiklus(
 
     // Check duplicate
     const existing = await db
-      .select()
+      .select({ id: masterSiklusTable.id })
       .from(masterSiklusTable)
       .where(eq(masterSiklusTable.nomor_siklus, payload.nomor_siklus))
       .limit(1);
 
     if (existing.length > 0) {
-      return {
-        success: false,
-        message: `Siklus #${payload.nomor_siklus} sudah terdaftar. Silakan pilih nomor siklus lain.`,
-      };
+      return createErrorResult(
+        `Siklus #${payload.nomor_siklus} sudah terdaftar. Silakan pilih nomor siklus lain.`,
+      );
     }
 
     const namaSiklus =
@@ -325,34 +138,20 @@ export async function createMasterSiklus(
       .returning({ id: masterSiklusTable.id });
 
     // Optional: Copy menu dishes from existing cycle
+    let copiedCount = 0;
     if (payload.copyFromSiklus && payload.copyFromSiklus > 0) {
-      const sourceItems = await db
-        .select()
-        .from(masterSiklusMenuTable)
-        .where(eq(masterSiklusMenuTable.siklus_ke, payload.copyFromSiklus));
-
-      if (sourceItems && sourceItems.length > 0) {
-        await db.insert(masterSiklusMenuTable).values(
-          sourceItems.map((item) => ({
-            siklus_ke: payload.nomor_siklus,
-            kelas: item.kelas,
-            jenis_makanan: item.jenis_makanan,
-            waktu_makan: item.waktu_makan,
-            nama_makanan: item.nama_makanan,
-            kategori_menu: item.kategori_menu,
-            catatan: item.catatan,
-            is_active: item.is_active,
-          })),
-        );
-      }
+      copiedCount = await copyCycleMenuItems(
+        payload.copyFromSiklus,
+        payload.nomor_siklus,
+      );
     }
 
-    revalidatePath('/dashboard/ag-katering/admin/konfigurasi-siklus-menu');
+    revalidateSiklusPath();
     return {
       success: true,
       message: `${namaSiklus} berhasil ditambahkan ke master siklus.${
-        payload.copyFromSiklus
-          ? ` (Hidangan disalin dari Siklus #${payload.copyFromSiklus})`
+        copiedCount > 0
+          ? ` (${copiedCount} hidangan disalin dari Siklus #${payload.copyFromSiklus})`
           : ''
       }`,
       insertedId: inserted?.id,
@@ -360,10 +159,7 @@ export async function createMasterSiklus(
     };
   } catch (error) {
     console.error('Error creating master siklus:', error);
-    return {
-      success: false,
-      message: 'Gagal menambahkan siklus baru ke sistem.',
-    };
+    return createErrorResult('Gagal menambahkan siklus baru ke sistem.');
   }
 }
 
@@ -399,14 +195,13 @@ export async function updateMasterSiklus(
       })
       .where(eq(masterSiklusTable.nomor_siklus, nomorSiklus));
 
-    revalidatePath('/dashboard/ag-katering/admin/konfigurasi-siklus-menu');
-    return {
-      success: true,
-      message: `Informasi Siklus #${nomorSiklus} berhasil diperbarui.`,
-    };
+    revalidateSiklusPath();
+    return createSuccessResult(
+      `Informasi Siklus #${nomorSiklus} berhasil diperbarui.`,
+    );
   } catch (error) {
     console.error('Error updating master siklus:', error);
-    return { success: false, message: 'Gagal memperbarui data master siklus.' };
+    return createErrorResult('Gagal memperbarui data master siklus.');
   }
 }
 
@@ -419,31 +214,9 @@ export async function applyStartDateRotation(
   try {
     await ensureTableInitialized();
 
-    // WIB sentral: input YYYY-MM-DD diperlakukan sebagai tanggal kalender WIB,
-    // bukan `new Date(str)` (UTC midnight) yang bisa geser hari.
-    let startKey: string | null = null;
-    if (typeof startDateInput === 'string') {
-      const parsed = parseCalendarDate(startDateInput);
-      if (parsed) {
-        startKey = `${parsed.year}-${String(parsed.month).padStart(2, '0')}-${String(parsed.day).padStart(2, '0')}`;
-      } else {
-        const d = new Date(startDateInput);
-        if (isNaN(d.getTime())) {
-          return {
-            success: false,
-            message: 'Tanggal mulai rotasi siklus tidak valid.',
-          };
-        }
-        startKey = getWibTodayKey(d);
-      }
-    } else {
-      if (isNaN(startDateInput.getTime())) {
-        return {
-          success: false,
-          message: 'Tanggal mulai rotasi siklus tidak valid.',
-        };
-      }
-      startKey = getWibTodayKey(startDateInput);
+    const startKey = parseRotationStartDate(startDateInput);
+    if (!startKey) {
+      return createErrorResult('Tanggal mulai rotasi siklus tidak valid.');
     }
 
     const cycles = await db
@@ -452,10 +225,7 @@ export async function applyStartDateRotation(
       .orderBy(asc(masterSiklusTable.nomor_siklus));
 
     if (!cycles || cycles.length === 0) {
-      return {
-        success: false,
-        message: 'Tidak ada data siklus menu yang terdaftar.',
-      };
+      return createErrorResult('Tidak ada data siklus menu yang terdaftar.');
     }
 
     const regularCycles = cycles.filter(
@@ -494,22 +264,15 @@ export async function applyStartDateRotation(
         .where(eq(masterSiklusTable.nomor_siklus, sc.nomor_siklus));
     }
 
-    try {
-      revalidatePath('/dashboard/ag-katering/admin/konfigurasi-siklus-menu');
-    } catch {}
-
+    revalidateSiklusPath();
     const displayDate = formatIndo(startKey);
 
-    return {
-      success: true,
-      message: `Jadwal rotasi siklus berhasil diperbarui: Siklus #1 dimulai pada tanggal ${displayDate}.`,
-    };
+    return createSuccessResult(
+      `Jadwal rotasi siklus berhasil diperbarui: Siklus #1 dimulai pada tanggal ${displayDate}.`,
+    );
   } catch (error) {
     console.error('Error applying start date rotation:', error);
-    return {
-      success: false,
-      message: 'Gagal mengatur jadwal tanggal rotasi siklus.',
-    };
+    return createErrorResult('Gagal mengatur jadwal tanggal rotasi siklus.');
   }
 }
 
@@ -528,10 +291,9 @@ export async function applyStartDayRotation(
     );
 
     if (startIndex === -1) {
-      return {
-        success: false,
-        message: `Hari "${startDay}" tidak valid. Pilih antara SENIN s.d. MINGGU.`,
-      };
+      return createErrorResult(
+        `Hari "${startDay}" tidak valid. Pilih antara SENIN s.d. MINGGU.`,
+      );
     }
 
     const cycles = await db
@@ -540,10 +302,7 @@ export async function applyStartDayRotation(
       .orderBy(asc(masterSiklusTable.nomor_siklus));
 
     if (!cycles || cycles.length === 0) {
-      return {
-        success: false,
-        message: 'Tidak ada data siklus menu yang terdaftar.',
-      };
+      return createErrorResult('Tidak ada data siklus menu yang terdaftar.');
     }
 
     for (let i = 0; i < cycles.length; i++) {
@@ -560,17 +319,13 @@ export async function applyStartDayRotation(
         .where(eq(masterSiklusTable.nomor_siklus, cycle.nomor_siklus));
     }
 
-    revalidatePath('/dashboard/ag-katering/admin/konfigurasi-siklus-menu');
-    return {
-      success: true,
-      message: `Jadwal rotasi siklus berhasil diperbarui: Siklus #1 dimulai pada hari ${normalizedStartDay}.`,
-    };
+    revalidateSiklusPath();
+    return createSuccessResult(
+      `Jadwal rotasi siklus berhasil diperbarui: Siklus #1 dimulai pada hari ${normalizedStartDay}.`,
+    );
   } catch (error) {
     console.error('Error applying start day rotation:', error);
-    return {
-      success: false,
-      message: 'Gagal mengatur jadwal hari rotasi siklus.',
-    };
+    return createErrorResult('Gagal mengatur jadwal hari rotasi siklus.');
   }
 }
 
@@ -593,14 +348,13 @@ export async function deleteMasterSiklus(
       .delete(masterSiklusTable)
       .where(eq(masterSiklusTable.nomor_siklus, nomorSiklus));
 
-    revalidatePath('/dashboard/ag-katering/admin/konfigurasi-siklus-menu');
-    return {
-      success: true,
-      message: `Siklus #${nomorSiklus} beserta seluruh menu hidangannya berhasil dihapus.`,
-    };
+    revalidateSiklusPath();
+    return createSuccessResult(
+      `Siklus #${nomorSiklus} beserta seluruh menu hidangannya berhasil dihapus.`,
+    );
   } catch (error) {
     console.error('Error deleting master siklus:', error);
-    return { success: false, message: 'Gagal menghapus siklus dari sistem.' };
+    return createErrorResult('Gagal menghapus siklus dari sistem.');
   }
 }
 
@@ -644,6 +398,9 @@ export async function getSiklusMenuList(
   }
 }
 
+/**
+ * Delete all menu items for a specific cycle
+ */
 export async function deleteAllItemSiklusMenu(siklusKe: number): Promise<void> {
   try {
     await ensureTableInitialized();
@@ -652,7 +409,7 @@ export async function deleteAllItemSiklusMenu(siklusKe: number): Promise<void> {
       .delete(masterSiklusMenuTable)
       .where(eq(masterSiklusMenuTable.siklus_ke, siklusKe));
 
-    revalidatePath('/dashboard/ag-katering/admin/konfigurasi-siklus-menu');
+    revalidateSiklusPath();
   } catch (error) {
     console.error('Error deleting siklus menu items:', error);
     throw error;
@@ -672,11 +429,7 @@ export async function getAvailableSiklusList(): Promise<number[]> {
       .where(eq(masterSiklusTable.is_active, true))
       .orderBy(asc(masterSiklusTable.nomor_siklus));
 
-    const nums = results.map((r) => r.nomor_siklus).filter(Boolean);
-    if (nums.length === 0) {
-      return [];
-    }
-    return nums;
+    return results.map((r) => r.nomor_siklus).filter(Boolean);
   } catch (error) {
     console.error('Error getting available siklus list:', error);
     return [];
@@ -709,130 +462,35 @@ export async function getKategoriMenuDietList(): Promise<MenuTagOption[]> {
 }
 
 /**
- * Opsi diet per jenis makanan yang bersumber dari data siklus menu
- * (master_siklus_menu) untuk dropdown mapping diet pasien.
- *
- * Setiap tag unik (termasuk tag penyusun hidangan multi-tag) disajikan
- * sebagai opsi satuan. Diet gabungan bersifat implisit dari kombinasi
- * tag pada hidangan, tanpa nama gabungan terpisah.
+ * Fetch unique diet options from existing cycle menu items for patient diet mapping dropdowns.
  */
-export interface SiklusDietOption {
-  id: string;
-  /** HEWANI | NABATI | SAYUR | BUAH | SNACK */
-  jenisMakanan: string;
-  /** Nilai yang disimpan ke mapping: kode tag */
-  kode: string;
-  /** Label tampilan dropdown */
-  label: string;
-  isGabungan: boolean;
-  /** Selalu kosong — dipertahankan agar konsumen lama tidak rusak */
-  memberTags: string[];
-}
-
-const SIKLUS_DIET_JENIS = ['HEWANI', 'NABATI', 'SAYUR', 'BUAH', 'SNACK'] as const;
-
 export async function getSiklusDietOptions(): Promise<SiklusDietOption[]> {
   try {
     await ensureTableInitialized();
 
-    const rows = await db
-      .selectDistinct({
-        jenis_makanan: masterSiklusMenuTable.jenis_makanan,
-        kategori_menu: masterSiklusMenuTable.kategori_menu,
-      })
-      .from(masterSiklusMenuTable)
-      .where(eq(masterSiklusMenuTable.is_active, true));
+    const [rows, labelRows] = await Promise.all([
+      db
+        .selectDistinct({
+          jenis_makanan: masterSiklusMenuTable.jenis_makanan,
+          kategori_menu: masterSiklusMenuTable.kategori_menu,
+        })
+        .from(masterSiklusMenuTable)
+        .where(eq(masterSiklusMenuTable.is_active, true)),
+      db
+        .select({
+          kode: kategoriMenuTable.kode_item,
+          label: kategoriMenuTable.label_item,
+          kategori: kategoriMenuTable.nama_kategori,
+        })
+        .from(kategoriMenuTable)
+        .where(eq(kategoriMenuTable.is_active, true)),
+    ]);
 
-    // Lookup label tag satuan dari master kategori_menu (kode → label_item)
-    const labelRows = await db
-      .select({
-        kode: kategoriMenuTable.kode_item,
-        label: kategoriMenuTable.label_item,
-        kategori: kategoriMenuTable.nama_kategori,
-      })
-      .from(kategoriMenuTable)
-      .where(eq(kategoriMenuTable.is_active, true));
-    const labelMap = new Map<string, string>();
-    for (const row of labelRows) {
-      const key = `${row.kategori.trim().toUpperCase()}__${row.kode.trim().toUpperCase()}`;
-      if (!labelMap.has(key)) labelMap.set(key, row.label);
-    }
-
-    const singles = new Map<string, SiklusDietOption>();
-
-    for (const row of rows) {
-      const jenis = (row.jenis_makanan || '').trim().toUpperCase();
-      if (!(SIKLUS_DIET_JENIS as readonly string[]).includes(jenis)) continue;
-
-      const seen = new Set<string>();
-      for (const tag of parseMenuTags(row.kategori_menu)) {
-        const key = tag.trim().toUpperCase();
-        if (!key || seen.has(key)) continue;
-        seen.add(key);
-        const mapKey = `${jenis}__${key}`;
-        if (!singles.has(mapKey)) {
-          // Samakan canonical kode dengan master kategori bila tersedia
-          const canonical = [...labelMap.keys()].includes(mapKey)
-            ? labelRows.find(
-                (r) =>
-                  r.kategori.trim().toUpperCase() === jenis &&
-                  r.kode.trim().toUpperCase() === key,
-              )?.kode ?? tag
-            : tag;
-          singles.set(mapKey, {
-            id: `siklus-satuan-${jenis}-${key}`,
-            jenisMakanan: jenis,
-            kode: canonical,
-            label: labelMap.get(mapKey) ?? canonical,
-            isGabungan: false,
-            memberTags: [],
-          });
-        }
-      }
-    }
-
-    const byKode = (a: SiklusDietOption, b: SiklusDietOption) =>
-      a.kode.localeCompare(b.kode, 'id');
-    return [...singles.values()].sort(byKode);
+    return buildSiklusDietOptions(rows, labelRows);
   } catch (error) {
     console.error('Error fetching siklus diet options:', error);
     return [];
   }
-}
-
-async function getActiveTagOptions(jenisMakanan: string): Promise<MenuTagOption[]> {
-  const rows = await db
-    .select({
-      kode: kategoriMenuTable.kode_item,
-      label: kategoriMenuTable.label_item,
-      kategori: kategoriMenuTable.nama_kategori,
-    })
-    .from(kategoriMenuTable)
-    .where(and(
-      eq(kategoriMenuTable.nama_kategori, jenisMakanan.trim().toUpperCase()),
-      eq(kategoriMenuTable.is_active, true),
-    ));
-  return getMenuTagOptions(rows, jenisMakanan);
-}
-
-function validateMenuTagSelection(
-  value: string | null | undefined,
-  options: MenuTagOption[],
-  jenisMakanan: string,
-): { value: string | null; error?: string } {
-  const { codes, invalid } = normalizeMenuTags(value, options);
-  if (invalid.length > 0) {
-    return {
-      value: null,
-      error: `Tag ${invalid.join(', ')} tidak tersedia pada kategori ${jenisMakanan.trim().toUpperCase()}. Pilih tag dari Konfigurasi Master Menu.`,
-    };
-  }
-  return { value: codes.length > 0 ? codes.join(', ') : null };
-}
-
-function isInvalidFruitSlot(jenisMakanan: string, waktuMakan: string): boolean {
-  return jenisMakanan.trim().toUpperCase() === 'BUAH' &&
-    !['SIANG', 'SORE'].includes(waktuMakan.trim().toUpperCase());
 }
 
 // ─── Mutations ─────────────────────────────────────────────────────────────
@@ -844,44 +502,40 @@ export async function createSiklusMenuItem(
   payload: CreateSiklusItemPayload,
 ): Promise<MutationResult> {
   if (!payload.nama_makanan?.trim()) {
-    return { success: false, message: 'Nama makanan tidak boleh kosong.' };
+    return createErrorResult('Nama makanan tidak boleh kosong.');
   }
+
+  const jenisMakanan = (payload.jenis_makanan || 'HEWANI').toUpperCase();
+  const waktuMakan = (payload.waktu_makan || 'PAGI').toUpperCase();
 
   try {
     await ensureTableInitialized();
-    if (isInvalidFruitSlot(payload.jenis_makanan || 'HEWANI', payload.waktu_makan || 'PAGI')) {
-      return { success: false, message: 'Menu buah hanya tersedia untuk Siang dan Sore.' };
+
+    if (isInvalidFruitSlot(jenisMakanan, waktuMakan)) {
+      return createErrorResult(
+        'Menu buah hanya tersedia untuk Siang dan Sore.',
+      );
     }
+
+    const tagOptions = await getActiveTagOptions(jenisMakanan);
     const tagSelection = validateMenuTagSelection(
       payload.kategori_menu,
-      await getActiveTagOptions(payload.jenis_makanan || 'HEWANI'),
-      payload.jenis_makanan || 'HEWANI',
+      tagOptions,
+      jenisMakanan,
     );
-    if (tagSelection.error) return { success: false, message: tagSelection.error };
+    if (tagSelection.error) return createErrorResult(tagSelection.error);
 
     // Ensure cycle exists in master_siklus
     const targetCycle = payload.siklus_ke || 1;
-    const existingCycle = await db
-      .select()
-      .from(masterSiklusTable)
-      .where(eq(masterSiklusTable.nomor_siklus, targetCycle))
-      .limit(1);
-
-    if (existingCycle.length === 0) {
-      await db.insert(masterSiklusTable).values({
-        nomor_siklus: targetCycle,
-        nama_siklus: `Siklus ${targetCycle}`,
-        is_active: true,
-      });
-    }
+    await ensureCycleExists(targetCycle);
 
     const [inserted] = await db
       .insert(masterSiklusMenuTable)
       .values({
         siklus_ke: targetCycle,
         kelas: payload.kelas || 'Semua Kelas',
-        jenis_makanan: (payload.jenis_makanan || 'HEWANI').toUpperCase(),
-        waktu_makan: (payload.waktu_makan || 'PAGI').toUpperCase(),
+        jenis_makanan: jenisMakanan,
+        waktu_makan: waktuMakan,
         nama_makanan: payload.nama_makanan.trim(),
         kategori_menu: tagSelection.value,
         catatan: payload.catatan?.trim() || null,
@@ -889,18 +543,14 @@ export async function createSiklusMenuItem(
       })
       .returning({ id: masterSiklusMenuTable.id });
 
-    revalidatePath('/dashboard/ag-katering/admin/konfigurasi-siklus-menu');
-    return {
-      success: true,
-      message: `Menu "${payload.nama_makanan}" berhasil ditambahkan.`,
-      insertedId: inserted?.id,
-    };
+    revalidateSiklusPath();
+    return createSuccessResult(
+      `Menu "${payload.nama_makanan}" berhasil ditambahkan.`,
+      inserted?.id,
+    );
   } catch (error) {
     console.error('Error creating siklus_menu item:', error);
-    return {
-      success: false,
-      message: 'Gagal menambahkan hidangan ke siklus menu.',
-    };
+    return createErrorResult('Gagal menambahkan hidangan ke siklus menu.');
   }
 }
 
@@ -913,6 +563,7 @@ export async function updateSiklusMenuItem(
 ): Promise<MutationResult> {
   try {
     await ensureTableInitialized();
+
     const [existingItem] = await db
       .select({
         jenis_makanan: masterSiklusMenuTable.jenis_makanan,
@@ -922,34 +573,35 @@ export async function updateSiklusMenuItem(
       .from(masterSiklusMenuTable)
       .where(eq(masterSiklusMenuTable.id, id))
       .limit(1);
-    if (!existingItem) return { success: false, message: 'Hidangan siklus menu tidak ditemukan.' };
-    if (isInvalidFruitSlot(
-      payload.jenis_makanan || existingItem.jenis_makanan,
-      payload.waktu_makan || existingItem.waktu_makan,
-    )) {
-      return { success: false, message: 'Menu buah hanya tersedia untuk Siang dan Sore.' };
+
+    if (!existingItem) {
+      return createErrorResult('Hidangan siklus menu tidak ditemukan.');
     }
+
+    const targetJenis = payload.jenis_makanan || existingItem.jenis_makanan;
+    const targetWaktu = payload.waktu_makan || existingItem.waktu_makan;
+
+    if (isInvalidFruitSlot(targetJenis, targetWaktu)) {
+      return createErrorResult(
+        'Menu buah hanya tersedia untuk Siang dan Sore.',
+      );
+    }
+
+    const targetKategori =
+      payload.kategori_menu === undefined
+        ? existingItem.kategori_menu
+        : payload.kategori_menu;
+
+    const tagOptions = await getActiveTagOptions(targetJenis);
     const tagSelection = validateMenuTagSelection(
-      payload.kategori_menu === undefined ? existingItem.kategori_menu : payload.kategori_menu,
-      await getActiveTagOptions(payload.jenis_makanan || existingItem.jenis_makanan),
-      payload.jenis_makanan || existingItem.jenis_makanan,
+      targetKategori,
+      tagOptions,
+      targetJenis,
     );
-    if (tagSelection.error) return { success: false, message: tagSelection.error };
+    if (tagSelection.error) return createErrorResult(tagSelection.error);
 
     if (payload.siklus_ke !== undefined) {
-      const existingCycle = await db
-        .select()
-        .from(masterSiklusTable)
-        .where(eq(masterSiklusTable.nomor_siklus, payload.siklus_ke))
-        .limit(1);
-
-      if (existingCycle.length === 0) {
-        await db.insert(masterSiklusTable).values({
-          nomor_siklus: payload.siklus_ke,
-          nama_siklus: `Siklus ${payload.siklus_ke}`,
-          is_active: true,
-        });
-      }
+      await ensureCycleExists(payload.siklus_ke);
     }
 
     await db
@@ -979,14 +631,11 @@ export async function updateSiklusMenuItem(
       })
       .where(eq(masterSiklusMenuTable.id, id));
 
-    revalidatePath('/dashboard/ag-katering/admin/konfigurasi-siklus-menu');
-    return {
-      success: true,
-      message: 'Hidangan siklus menu berhasil diperbarui.',
-    };
+    revalidateSiklusPath();
+    return createSuccessResult('Hidangan siklus menu berhasil diperbarui.');
   } catch (error) {
     console.error('Error updating siklus_menu item:', error);
-    return { success: false, message: 'Gagal memperbarui hidangan.' };
+    return createErrorResult('Gagal memperbarui hidangan.');
   }
 }
 
@@ -998,18 +647,16 @@ export async function deleteSiklusMenuItem(
 ): Promise<MutationResult> {
   try {
     await ensureTableInitialized();
+
     await db
       .delete(masterSiklusMenuTable)
       .where(eq(masterSiklusMenuTable.id, id));
 
-    revalidatePath('/dashboard/ag-katering/admin/konfigurasi-siklus-menu');
-    return {
-      success: true,
-      message: 'Hidangan berhasil dihapus dari siklus menu.',
-    };
+    revalidateSiklusPath();
+    return createSuccessResult('Hidangan berhasil dihapus dari siklus menu.');
   } catch (error) {
     console.error('Error deleting siklus_menu item:', error);
-    return { success: false, message: 'Gagal menghapus hidangan.' };
+    return createErrorResult('Gagal menghapus hidangan.');
   }
 }
 
@@ -1025,31 +672,30 @@ export async function saveSlotMenuItems(
 ): Promise<MutationResult> {
   try {
     await ensureTableInitialized();
+
     if (isInvalidFruitSlot(jenisMakanan, waktuMakan)) {
-      return { success: false, message: 'Menu buah hanya tersedia untuk Siang dan Sore.' };
+      return createErrorResult(
+        'Menu buah hanya tersedia untuk Siang dan Sore.',
+      );
     }
+
     const validItems = items.filter((item) => item.nama_makanan?.trim());
     const allowedTags = await getActiveTagOptions(jenisMakanan);
-    const normalizedTags = validItems.map((item) => validateMenuTagSelection(item.kategori_menu, allowedTags, jenisMakanan));
-    const invalidIndex = normalizedTags.findIndex((selection) => selection.error);
+    const normalizedTags = validItems.map((item) =>
+      validateMenuTagSelection(item.kategori_menu, allowedTags, jenisMakanan),
+    );
+
+    const invalidIndex = normalizedTags.findIndex(
+      (selection) => selection.error,
+    );
     if (invalidIndex !== -1) {
-      return { success: false, message: `Hidangan #${invalidIndex + 1}: ${normalizedTags[invalidIndex].error}` };
+      return createErrorResult(
+        `Hidangan #${invalidIndex + 1}: ${normalizedTags[invalidIndex].error}`,
+      );
     }
 
     // Ensure cycle exists in master_siklus
-    const existingCycle = await db
-      .select()
-      .from(masterSiklusTable)
-      .where(eq(masterSiklusTable.nomor_siklus, siklusKe))
-      .limit(1);
-
-    if (existingCycle.length === 0) {
-      await db.insert(masterSiklusTable).values({
-        nomor_siklus: siklusKe,
-        nama_siklus: `Siklus ${siklusKe}`,
-        is_active: true,
-      });
-    }
+    await ensureCycleExists(siklusKe);
 
     // 1. Delete existing items in this exact slot
     await db
@@ -1079,14 +725,13 @@ export async function saveSlotMenuItems(
       );
     }
 
-    revalidatePath('/dashboard/ag-katering/admin/konfigurasi-siklus-menu');
-    return {
-      success: true,
-      message: `Konfigurasi slot (${validItems.length} hidangan) berhasil disimpan.`,
-    };
+    revalidateSiklusPath();
+    return createSuccessResult(
+      `Konfigurasi slot (${validItems.length} hidangan) berhasil disimpan.`,
+    );
   } catch (error) {
     console.error('Error batch updating slot menu items:', error);
-    return { success: false, message: 'Gagal menyimpan slot hidangan.' };
+    return createErrorResult('Gagal menyimpan slot hidangan.');
   }
 }
 
@@ -1098,70 +743,35 @@ export async function duplicateSiklus(
   toSiklus: number,
 ): Promise<MutationResult> {
   if (fromSiklus === toSiklus) {
-    return {
-      success: false,
-      message: 'Siklus sumber dan tujuan tidak boleh sama.',
-    };
+    return createErrorResult('Siklus sumber dan tujuan tidak boleh sama.');
   }
 
   try {
     await ensureTableInitialized();
 
     // Ensure target cycle exists in master_siklus
-    const existingTarget = await db
-      .select()
-      .from(masterSiklusTable)
-      .where(eq(masterSiklusTable.nomor_siklus, toSiklus))
-      .limit(1);
-
-    if (existingTarget.length === 0) {
-      await db.insert(masterSiklusTable).values({
-        nomor_siklus: toSiklus,
-        nama_siklus: `Siklus ${toSiklus}`,
-        deskripsi: `Diduplikasi dari Siklus #${fromSiklus}`,
-        is_active: true,
-      });
-    }
-
-    // Fetch source items
-    const sourceItems = await db
-      .select()
-      .from(masterSiklusMenuTable)
-      .where(eq(masterSiklusMenuTable.siklus_ke, fromSiklus));
-
-    if (!sourceItems || sourceItems.length === 0) {
-      return {
-        success: false,
-        message: `Tidak ada data pada Siklus ${fromSiklus} untuk disalin.`,
-      };
-    }
+    await ensureCycleExists(toSiklus, `Diduplikasi dari Siklus #${fromSiklus}`);
 
     // Delete existing items in target cycle
     await db
       .delete(masterSiklusMenuTable)
       .where(eq(masterSiklusMenuTable.siklus_ke, toSiklus));
 
-    // Insert copied items into target cycle
-    await db.insert(masterSiklusMenuTable).values(
-      sourceItems.map((item) => ({
-        siklus_ke: toSiklus,
-        kelas: item.kelas,
-        jenis_makanan: item.jenis_makanan,
-        waktu_makan: item.waktu_makan,
-        nama_makanan: item.nama_makanan,
-        kategori_menu: item.kategori_menu,
-        catatan: item.catatan,
-        is_active: item.is_active,
-      })),
-    );
+    // Copy dishes from source cycle to target cycle
+    const copiedCount = await copyCycleMenuItems(fromSiklus, toSiklus);
 
-    revalidatePath('/dashboard/ag-katering/admin/konfigurasi-siklus-menu');
-    return {
-      success: true,
-      message: `Berhasil menduplikasi ${sourceItems.length} hidangan dari Siklus ${fromSiklus} ke Siklus ${toSiklus}.`,
-    };
+    if (copiedCount === 0) {
+      return createErrorResult(
+        `Tidak ada data pada Siklus ${fromSiklus} untuk disalin.`,
+      );
+    }
+
+    revalidateSiklusPath();
+    return createSuccessResult(
+      `Berhasil menduplikasi ${copiedCount} hidangan dari Siklus ${fromSiklus} ke Siklus ${toSiklus}.`,
+    );
   } catch (error) {
     console.error('Error duplicating siklus:', error);
-    return { success: false, message: 'Gagal menduplikasi siklus menu.' };
+    return createErrorResult('Gagal menduplikasi siklus menu.');
   }
 }

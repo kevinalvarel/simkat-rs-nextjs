@@ -29,6 +29,7 @@ const CLEAR_SENTINEL = '__CLEAR__';
 // Category Labels: KARBO, HEWANI, NABATI, SAYUR, BUAH, SNACK
 export const KATEGORI_LABEL: Record<string, string> = {
   KARBO: 'Karbohidrat',
+  KARBOHIDRAT: 'Karbohidrat',
   HEWANI: 'Lauk Hewani',
   NABATI: 'Lauk Nabati',
   SAYUR: 'Sayur',

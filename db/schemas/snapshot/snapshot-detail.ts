@@ -18,6 +18,7 @@ export const snapshotDetailTable = pgTable('snapshot_detail_pasien', {
 
   /** Hasil auto-mapping dari master_diet_mapping (nullable jika UNMAPPED). */
   bentuk_makanan: text('bentuk_makanan'),
+  karbohidrat: text('karbohidrat'),
   kategori_diet: text('kategori_diet'),
   nabati: text('nabati'),
   sayur: text('sayur'),

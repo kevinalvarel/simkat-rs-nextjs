@@ -61,6 +61,8 @@ const CATEGORY_BADGE_STYLE: Record<string, string> = {
     'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border-purple-300',
   BENTUK_MAKANAN:
     'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300 border-sky-300',
+  KARBOHIDRAT:
+    'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-300',
 };
 
 export default function MenuTable({

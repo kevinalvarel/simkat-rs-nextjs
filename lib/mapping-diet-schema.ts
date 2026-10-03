@@ -4,6 +4,7 @@ import { hasFormFoodMapping } from './mapping-diet-fields';
 export const mappingDietFormSchema = z.object({
   mode: z.enum(['STANDARD', 'NPO']),
   bentukMakanan: z.string().optional(),
+  karbohidrat: z.string().optional(),
   hewani: z.string().optional(),
   nabati: z.string().optional(),
   sayur: z.string().optional(),

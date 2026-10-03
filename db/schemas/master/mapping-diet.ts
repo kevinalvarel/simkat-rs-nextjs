@@ -11,6 +11,7 @@ export const dietMappingTable = pgTable('master_diet_mapping', {
   id: serial('id').primaryKey(),
   diet_rs_raw: text('diet_rs_raw').notNull().unique(),
   bentuk_makanan: text('bentuk_makanan'),
+  karbohidrat: text('karbohidrat'),
   kategori_diet: text('kategori_diet'),
   nabati: text('nabati'),
   sayur: text('sayur'),

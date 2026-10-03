@@ -48,13 +48,17 @@ export default function MappingDietBulkDialog({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Group options strictly from DB kategori_menu table
-  // Bentuk makanan tetap dari Konfigurasi Menu; hewani–snack dari siklus menu.
-  const karboOptions = useMemo(
+  // Bentuk makanan dan karbohidrat dari Konfigurasi Diet; hewani–snack dari siklus menu.
+  const bentukOptions = useMemo(
     () =>
       options.filter(
         (o) =>
           o.namaKategori === 'KARBO' || o.namaKategori === 'BENTUK_MAKANAN',
       ),
+    [options],
+  );
+  const karbohidratOptions = useMemo(
+    () => options.filter((o) => o.namaKategori === 'KARBOHIDRAT'),
     [options],
   );
 
@@ -100,6 +104,7 @@ export default function MappingDietBulkDialog({
     defaultValues: {
       mode: 'STANDARD',
       bentukMakanan: '',
+      karbohidrat: '',
       hewani: '',
       nabati: '',
       sayur: '',
@@ -111,6 +116,7 @@ export default function MappingDietBulkDialog({
   const values = useWatch({ control });
   const mode = values.mode || 'STANDARD';
   const bentukMakanan = values.bentukMakanan || '';
+  const karbohidrat = values.karbohidrat || '';
   const hewani = values.hewani || '';
   const nabati = values.nabati || '';
   const sayur = values.sayur || '';
@@ -118,9 +124,10 @@ export default function MappingDietBulkDialog({
   const snack = values.snack || '';
 
   function handleBentukMakananChange(value: string) {
-    const next = selectBentukMakanan({ hewani, nabati, sayur, buah, snack }, value);
+    const next = selectBentukMakanan({ karbohidrat, hewani, nabati, sayur, buah, snack }, value);
     setValue('mode', next.mode);
     setValue('bentukMakanan', next.bentukMakanan, { shouldValidate: true });
+    setValue('karbohidrat', next.karbohidrat);
     setValue('hewani', next.hewani);
     setValue('nabati', next.nabati);
     setValue('sayur', next.sayur);
@@ -145,6 +152,7 @@ export default function MappingDietBulkDialog({
       const res = await bulkSaveDietMapping(selectedRaws, {
         mode,
         bentuk_makanan: bentukMakanan || null,
+        karbohidrat: karbohidrat || null,
         kategori_diet: hewani || null,
         nabati: nabati || null,
         sayur: sayur || null,
@@ -165,6 +173,7 @@ export default function MappingDietBulkDialog({
         reset({
           mode: 'STANDARD',
           bentukMakanan: '',
+          karbohidrat: '',
           hewani: '',
           nabati: '',
           sayur: '',
@@ -183,7 +192,7 @@ export default function MappingDietBulkDialog({
     }
   }
 
-  const isFormIncomplete = mode === 'STANDARD' && !hasFormFoodMapping({ bentukMakanan, hewani, nabati, sayur, buah, snack });
+  const isFormIncomplete = mode === 'STANDARD' && !hasFormFoodMapping({ bentukMakanan, karbohidrat, hewani, nabati, sayur, buah, snack });
   const isTugasKatering = isBentukTugasKatering(bentukMakanan, tugasKateringCodes);
 
   return (
@@ -239,14 +248,31 @@ export default function MappingDietBulkDialog({
                       value={field.value || ''}
                       onChange={handleBentukMakananChange}
                       placeholder='Pilih Bentuk Makanan...'
-                      options={karboOptions}
+                      options={bentukOptions}
                       includeSpecial
                       error={errors.bentukMakanan?.message}
                     />
                   )}
                 />
 
-                {/* 2. HEWANI */}
+                {/* 2. KARBOHIDRAT */}
+                <Controller
+                  control={control}
+                  name='karbohidrat'
+                  render={({ field }) => (
+                    <SelectField
+                      label={KATEGORI_LABEL['KARBOHIDRAT']}
+                      value={field.value || ''}
+                      onChange={field.onChange}
+                      placeholder='Pilih Karbohidrat...'
+                      options={karbohidratOptions}
+                      disabled={mode !== 'STANDARD'}
+                      error={errors.karbohidrat?.message}
+                    />
+                  )}
+                />
+
+                {/* 3. HEWANI */}
                 <Controller
                   control={control}
                   name='hewani'
@@ -372,6 +398,7 @@ export default function MappingDietBulkDialog({
         mode={mode}
         values={{
           bentukMakanan,
+          karbohidrat,
           hewani,
           nabati,
           sayur,
@@ -381,6 +408,7 @@ export default function MappingDietBulkDialog({
         items={selectedRaws.map((raw) => ({
           diet_rs_raw: raw,
           bentukMakanan,
+          karbohidrat,
           hewani,
           nabati,
           sayur,

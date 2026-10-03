@@ -238,7 +238,7 @@ function mapCategoryGroup(jenis: string | null | undefined): MenuCategoryGroup {
   if (j === 'NABATI & SAYUR' || j === 'NABATI_SAYUR') return 'NABATI & SAYUR';
   if (j === 'HEWANI & SAYUR' || j === 'HEWANI_SAYUR') return 'HEWANI & SAYUR';
   if (j === 'SARING') return 'SARING';
-  if (j === 'POKOK' || j === 'KARBO' || j === 'BENTUK_MAKANAN') return 'POKOK';
+  if (j === 'POKOK' || j === 'KARBO' || j === 'KARBOHIDRAT' || j === 'BENTUK_MAKANAN') return 'POKOK';
   if (j === 'EXTRA') return 'EXTRA';
   if (j === 'BUAH') return 'BUAH';
   if (j === 'SNACK') return 'SNACK';
@@ -310,6 +310,8 @@ function resolveSupplementDishes(
   const candidates = activeSlotMenuItems.filter((item) =>
     item.jenis_makanan.toUpperCase() === category && matchesKelas(item.kelas, patientKelas),
   );
+
+  if (category === 'BUAH' && candidates.length === 0) return [];
 
   return [...new Set(codes.map((code) => code.trim().toUpperCase()))]
     .filter((code) => {
@@ -596,8 +598,13 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
     // 6. Fetch Master Menu Categories for human-readable labels (BN -> Biasa Nasi, etc.)
     const masterMenuItems = await db.select().from(kategoriMenuTable);
     const labelMap = new Map<string, string>();
+    const karboLabelMap = new Map<string, string>();
     for (const item of masterMenuItems) {
-      labelMap.set(item.kode_item.toUpperCase(), item.label_item);
+      if (item.nama_kategori === 'KARBOHIDRAT') {
+        karboLabelMap.set(item.kode_item.trim().toUpperCase(), item.label_item);
+      } else {
+        labelMap.set(item.kode_item.toUpperCase(), item.label_item);
+      }
     }
 
     // Kode bentuk yang otomatis teralihkan ke Live Katering (flag tugas AG Katering)
@@ -648,6 +655,25 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
       UNMAPPED: 'Belum Di-mapping',
     };
 
+    function resolveKarboDishes(
+      codes: string[],
+      bentukCodes: string[],
+      kelas: string,
+    ): DishCounter[] {
+      const category: MenuCategoryGroup = bentukCodes.some((code) =>
+        ['SAR', 'SARING'].includes(code.toUpperCase()),
+      ) ? 'SARING' : 'POKOK';
+      return codes
+        .filter((code) => !['NPO', 'PUASA'].includes(code.toUpperCase()))
+        .map((code) => {
+          const normalized = code.trim().toUpperCase();
+          const name = karboLabelMap.get(normalized);
+          return name
+            ? { code: normalized, name, category, kelas }
+            : buildMissingCycleMenuDish(code, category, kelas);
+        });
+    }
+
     // 7. Fetch Master Diet Mappings
     const masterMappings = await db
       .select()
@@ -658,6 +684,7 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
       string,
       {
         bentuk_makanan: string | null;
+        karbohidrat: string | null;
         kategori_diet: string | null;
         nabati: string | null;
         sayur: string | null;
@@ -678,6 +705,7 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
       }
       mappingByRaw.set(m.diet_rs_raw.trim().toLowerCase(), {
         bentuk_makanan: m.bentuk_makanan,
+        karbohidrat: m.karbohidrat,
         kategori_diet: m.kategori_diet,
         nabati,
         sayur,
@@ -767,6 +795,7 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
       const pKelas = p.kelas || 'KELAS I';
 
       const bentukCodes = extractCodes(mapped.bentuk_makanan);
+      const karboCodes = extractCodes(mapped.karbohidrat);
       const hewaniCodes = extractCodes(mapped.kategori_diet);
       const nabatiCodes = extractCodes(mapped.nabati);
       const sayurCodes = extractCodes(mapped.sayur);
@@ -794,7 +823,9 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
       }
 
       // A. Makanan Pokok / Kategori Diet (e.g. BN -> Nasi Biasa, BL/TIM -> Nasi Tim, SAR -> Bubur Saring, CAIR -> Cair)
-      if (bentukCodes.length > 0) {
+      if (karboCodes.length > 0) {
+        for (const dish of resolveKarboDishes(karboCodes, bentukCodes, pKelas)) addLiveDish(dish);
+      } else if (bentukCodes.length > 0) {
         for (const code of bentukCodes) {
           const upperCode = code.toUpperCase();
           if (upperCode === 'NPO' || upperCode === 'PUASA') continue;
@@ -917,6 +948,7 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
           diet_rs_raw: snapshotDetailTable.diet_rs_raw,
           kelas: snapshotDetailTable.kelas,
           bentuk_makanan: snapshotDetailTable.bentuk_makanan,
+          karbohidrat: snapshotDetailTable.karbohidrat,
           kategori_diet: snapshotDetailTable.kategori_diet,
           nabati: snapshotDetailTable.nabati,
           sayur: snapshotDetailTable.sayur,
@@ -936,6 +968,7 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
         const rawDiet = (sd.diet_rs_raw || '').trim();
         const pKelas = sd.kelas || 'KELAS I';
         let bentukCodes = extractCodes(sd.bentuk_makanan);
+        let karboCodes = extractCodes(sd.karbohidrat);
         let hewaniCodes = extractCodes(sd.kategori_diet);
         let nabatiCodes = extractCodes(sd.nabati);
         let sayurCodes = extractCodes(sd.sayur);
@@ -944,10 +977,11 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
         let snackCodes = extractCodes(sd.snack);
 
         // Fallback to mapping by raw text if parsed columns are empty
-        if (!sd.bentuk_makanan && !sd.kategori_diet && rawDiet) {
+        if (!sd.bentuk_makanan && !sd.karbohidrat && !sd.kategori_diet && rawDiet) {
           const mapped = mappingByRaw.get(rawDiet.toLowerCase());
           if (mapped && mapped.status_mapping === 'MAPPED') {
             bentukCodes = extractCodes(mapped.bentuk_makanan);
+            karboCodes = extractCodes(mapped.karbohidrat);
             hewaniCodes = extractCodes(mapped.kategori_diet);
             nabatiCodes = extractCodes(mapped.nabati);
             sayurCodes = extractCodes(mapped.sayur);
@@ -960,6 +994,7 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
         // If not mapped, do not add snapshot dishes
         if (
           bentukCodes.length === 0 &&
+          karboCodes.length === 0 &&
           hewaniCodes.length === 0 &&
           nabatiCodes.length === 0 &&
           sayurCodes.length === 0 &&
@@ -988,7 +1023,9 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
         }
 
         // Staple
-        if (bentukCodes.length > 0) {
+        if (karboCodes.length > 0) {
+          for (const dish of resolveKarboDishes(karboCodes, bentukCodes, pKelas)) addSnapshotDish(dish);
+        } else if (bentukCodes.length > 0) {
           for (const code of bentukCodes) {
             const upperCode = code.toUpperCase();
             if (upperCode === 'NPO' || upperCode === 'PUASA') continue;

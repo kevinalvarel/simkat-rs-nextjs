@@ -29,6 +29,7 @@ export interface MappingDietConfirmDialogProps {
   mode: 'STANDARD' | 'NPO';
   values?: {
     bentukMakanan: string;
+    karbohidrat: string;
     hewani: string;
     nabati: string;
     sayur: string;
@@ -54,6 +55,7 @@ export default function MappingDietConfirmDialog({
   mode,
   values = {
     bentukMakanan: '',
+    karbohidrat: '',
     hewani: '',
     nabati: '',
     sayur: '',
@@ -140,6 +142,7 @@ export default function MappingDietConfirmDialog({
                       </div>
                       <div className='text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5 flex-wrap'>
                         <span>Bentuk Makanan: <strong>{it.bentukMakanan || '-'}</strong></span>
+                        <span>Karbohidrat: <strong>{it.karbohidrat || '-'}</strong></span>
                         <span>•</span>
                         <span>Hewani: <strong>{it.hewani || '-'}</strong></span>
                         <span>•</span>
@@ -184,7 +187,7 @@ export default function MappingDietConfirmDialog({
                 <span>Otomatisasi Kriteria NPO (Puasa)</span>
               </div>
               <p className='text-[11px] leading-relaxed text-purple-900/90 dark:text-purple-200/90'>
-                Semua jenis kriteria (<strong>Bentuk Makanan, Hewani, Nabati, Sayur, Buah, Snack</strong>) akan otomatis dipetakan sebagai <strong>NPO</strong>. Pasien dengan diet ini tidak akan mendapatkan porsi makanan reguler di dapur produksi.
+                Semua jenis kriteria (<strong>Bentuk Makanan, Karbohidrat, Hewani, Nabati, Sayur, Buah, Snack</strong>) akan otomatis dipetakan sebagai <strong>NPO</strong>. Pasien dengan diet ini tidak akan mendapatkan porsi makanan reguler di dapur produksi.
               </p>
             </div>
           )}
@@ -213,6 +216,12 @@ export default function MappingDietConfirmDialog({
                   <span className='text-[10px] text-muted-foreground block'>Bentuk Makanan:</span>
                   <span className='font-mono font-bold text-foreground truncate block'>
                     {values.bentukMakanan || '-'}
+                  </span>
+                </div>
+                <div className='p-2 rounded-lg bg-background border'>
+                  <span className='text-[10px] text-muted-foreground block'>Karbohidrat:</span>
+                  <span className='font-mono font-bold text-foreground truncate block'>
+                    {values.karbohidrat || '-'}
                   </span>
                 </div>
                 <div className='p-2 rounded-lg bg-background border'>

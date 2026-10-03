@@ -7,6 +7,7 @@ export interface ReadyDietRow {
   diet_rs_raw: string;
   mode?: 'STANDARD' | 'NPO';
   bentukMakanan: string;
+  karbohidrat: string;
   hewani: string;
   nabati: string;
   sayur: string;

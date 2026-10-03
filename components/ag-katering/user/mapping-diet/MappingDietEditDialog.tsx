@@ -55,13 +55,17 @@ export default function MappingDietEditDialog({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Group options strictly from DB kategori_menu table
-  // Bentuk makanan tetap dari Konfigurasi Menu; hewani–snack dari siklus menu.
-  const karboOptions = useMemo(
+  // Bentuk makanan dan karbohidrat dari Konfigurasi Diet; hewani–snack dari siklus menu.
+  const bentukOptions = useMemo(
     () =>
       options.filter(
         (o) =>
           o.namaKategori === 'KARBO' || o.namaKategori === 'BENTUK_MAKANAN',
       ),
+    [options],
+  );
+  const karbohidratOptions = useMemo(
+    () => options.filter((o) => o.namaKategori === 'KARBOHIDRAT'),
     [options],
   );
 
@@ -107,6 +111,7 @@ export default function MappingDietEditDialog({
     defaultValues: {
       mode: 'STANDARD',
       bentukMakanan: '',
+      karbohidrat: '',
       hewani: '',
       nabati: '',
       sayur: '',
@@ -118,6 +123,7 @@ export default function MappingDietEditDialog({
   const values = useWatch({ control });
   const mode = values.mode || 'STANDARD';
   const bentukMakanan = values.bentukMakanan || '';
+  const karbohidrat = values.karbohidrat || '';
   const hewani = values.hewani || '';
   const nabati = values.nabati || '';
   const sayur = values.sayur || '';
@@ -149,6 +155,7 @@ export default function MappingDietEditDialog({
       reset({
         mode: 'NPO',
         bentukMakanan: 'NPO',
+        karbohidrat: 'NPO',
         hewani: 'NPO',
         nabati: 'NPO',
         sayur: 'NPO',
@@ -159,6 +166,7 @@ export default function MappingDietEditDialog({
       reset({
         mode: 'STANDARD',
         bentukMakanan: item.bentuk_makanan ?? '',
+        karbohidrat: item.karbohidrat ?? '',
         hewani: item.kategori_diet ?? '',
         nabati: initNabati,
         sayur: initSayur,
@@ -169,9 +177,10 @@ export default function MappingDietEditDialog({
   }, [item, open, reset]);
 
   function handleBentukMakananChange(value: string) {
-    const next = selectBentukMakanan({ hewani, nabati, sayur, buah, snack }, value);
+    const next = selectBentukMakanan({ karbohidrat, hewani, nabati, sayur, buah, snack }, value);
     setValue('mode', next.mode);
     setValue('bentukMakanan', next.bentukMakanan, { shouldValidate: true });
+    setValue('karbohidrat', next.karbohidrat);
     setValue('hewani', next.hewani);
     setValue('nabati', next.nabati);
     setValue('sayur', next.sayur);
@@ -198,6 +207,7 @@ export default function MappingDietEditDialog({
         diet_rs_raw: item.diet_rs_raw,
         mode: mode,
         bentuk_makanan: bentukMakanan || null,
+        karbohidrat: karbohidrat || null,
         kategori_diet: hewani || null,
         nabati: nabati || null,
         sayur: sayur || null,
@@ -226,7 +236,7 @@ export default function MappingDietEditDialog({
 
   if (!item) return null;
 
-  const isFormIncomplete = mode === 'STANDARD' && !hasFormFoodMapping({ bentukMakanan, hewani, nabati, sayur, buah, snack });
+  const isFormIncomplete = mode === 'STANDARD' && !hasFormFoodMapping({ bentukMakanan, karbohidrat, hewani, nabati, sayur, buah, snack });
   const isTugasKatering = isBentukTugasKatering(bentukMakanan, tugasKateringCodes);
 
   return (
@@ -286,7 +296,7 @@ export default function MappingDietEditDialog({
                 <div className='flex items-start gap-2.5 p-3 rounded-xl border border-purple-200 dark:border-purple-900 bg-purple-500/10 text-purple-900 dark:text-purple-200 text-xs'>
                   <Sparkles className='w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0 mt-0.5' />
                   <p>
-                    <strong>Mode NPO Aktif:</strong> Bentuk Makanan, Lauk Hewani,
+                    <strong>Mode NPO Aktif:</strong> Bentuk Makanan, Karbohidrat, Lauk Hewani,
                     Nabati, Sayur, Buah, dan Snack otomatis dipetakan sebagai{' '}
                     <span className='font-mono font-bold'>NPO</span>.
                   </p>
@@ -317,14 +327,31 @@ export default function MappingDietEditDialog({
                         value={field.value || ''}
                         onChange={handleBentukMakananChange}
                         placeholder='Pilih Bentuk Makanan...'
-                        options={karboOptions}
+                        options={bentukOptions}
                         includeSpecial
                         error={errors.bentukMakanan?.message}
                       />
                     )}
                   />
 
-                  {/* 2. HEWANI */}
+                  {/* 2. KARBOHIDRAT */}
+                  <Controller
+                    control={control}
+                    name='karbohidrat'
+                    render={({ field }) => (
+                      <SelectField
+                        label={KATEGORI_LABEL['KARBOHIDRAT']}
+                        value={field.value || ''}
+                        onChange={field.onChange}
+                        placeholder='Pilih Karbohidrat...'
+                        options={karbohidratOptions}
+                        disabled={mode !== 'STANDARD'}
+                        error={errors.karbohidrat?.message}
+                      />
+                    )}
+                  />
+
+                  {/* 3. HEWANI */}
                   <Controller
                     control={control}
                     name='hewani'
@@ -444,6 +471,7 @@ export default function MappingDietEditDialog({
         mode={mode}
         values={{
           bentukMakanan,
+          karbohidrat,
           hewani,
           nabati,
           sayur,

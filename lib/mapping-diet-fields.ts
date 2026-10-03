@@ -3,6 +3,7 @@ import type { KategoriMenuOption } from '@/servers/mapping-diet.service';
 
 export const FOOD_FIELDS = [
   'bentuk_makanan',
+  'karbohidrat',
   'kategori_diet',
   'nabati',
   'sayur',
@@ -18,7 +19,7 @@ export function modeFromBentukMakanan(value: string | null | undefined): Mapping
   return value === 'NPO' ? 'NPO' : 'STANDARD';
 }
 
-export function selectBentukMakanan<T extends { hewani: string; nabati: string; sayur: string; buah: string; snack: string }>(
+export function selectBentukMakanan<T extends { karbohidrat: string; hewani: string; nabati: string; sayur: string; buah: string; snack: string }>(
   current: T,
   bentukMakanan: string,
 ): T & { bentukMakanan: string; mode: MappingMode } {
@@ -28,6 +29,7 @@ export function selectBentukMakanan<T extends { hewani: string; nabati: string; 
     ...current,
     bentukMakanan,
     mode,
+    karbohidrat: mode === 'NPO' ? 'NPO' : clean(current.karbohidrat),
     hewani: mode === 'NPO' ? 'NPO' : clean(current.hewani),
     nabati: mode === 'NPO' ? 'NPO' : clean(current.nabati),
     sayur: mode === 'NPO' ? 'NPO' : clean(current.sayur),
@@ -52,13 +54,14 @@ export function hasFoodMapping(values: Record<FoodField, string | null | undefin
 
 export function hasFormFoodMapping(values: {
   bentukMakanan?: string | null;
+  karbohidrat?: string | null;
   hewani?: string | null;
   nabati?: string | null;
   sayur?: string | null;
   buah?: string | null;
   snack?: string | null;
 }): boolean {
-  return [values.bentukMakanan, values.hewani, values.nabati, values.sayur, values.buah, values.snack]
+  return [values.bentukMakanan, values.karbohidrat, values.hewani, values.nabati, values.sayur, values.buah, values.snack]
     .some((value) => Boolean(value?.trim()));
 }
 

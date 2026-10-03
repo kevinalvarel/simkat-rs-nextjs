@@ -40,6 +40,7 @@ interface MenuFormDialogProps {
 
 const CATEGORY_OPTIONS = [
   { value: 'BENTUK_MAKANAN', label: 'BENTUK MAKANAN' },
+  { value: 'KARBOHIDRAT', label: 'KARBOHIDRAT' },
   { value: 'HEWANI', label: 'HEWANI' },
   { value: 'NABATI', label: 'NABATI' },
   { value: 'SAYUR', label: 'SAYUR' },

@@ -44,6 +44,7 @@ export type UnmappedDietItem = {
   mapping_id: number | null;
   status_mapping: string;
   bentuk_makanan: string | null;
+  karbohidrat: string | null;
   kategori_diet: string | null;
   nabati?: string | null;
   sayur?: string | null;
@@ -168,6 +169,7 @@ export async function getUnmappedDietItems(): Promise<UnmappedDietItem[]> {
         mapping_id: existing?.id ?? null,
         status_mapping: statusMapping,
         bentuk_makanan: existing?.bentuk_makanan ?? null,
+        karbohidrat: existing?.karbohidrat ?? null,
         kategori_diet: existing?.kategori_diet ?? null,
         nabati,
         sayur,
@@ -285,6 +287,7 @@ export async function getMappedDietItems(): Promise<UnmappedDietItem[]> {
         mapping_id: m.id,
         status_mapping: m.status_mapping,
         bentuk_makanan: m.bentuk_makanan,
+        karbohidrat: m.karbohidrat,
         kategori_diet: m.kategori_diet,
         nabati,
         sayur,
@@ -429,6 +432,7 @@ export async function getMappingDietStats(
 export type SaveMappingPayload = {
   diet_rs_raw: string;
   bentuk_makanan?: string | null;
+  karbohidrat?: string | null;
   kategori_diet?: string | null;
   nabati?: string | null;
   sayur?: string | null;
@@ -458,6 +462,7 @@ export async function saveDietMapping(
 
   const raw = payload.diet_rs_raw.trim();
   let bentuk_makanan = payload.bentuk_makanan?.trim() || null;
+  let karbohidrat = payload.karbohidrat?.trim() || null;
   let kategori_diet = payload.kategori_diet?.trim() || null;
   let nabati = payload.nabati?.trim() || null;
   let sayur = payload.sayur?.trim() || null;
@@ -476,6 +481,7 @@ export async function saveDietMapping(
     raw.toUpperCase() === 'NPO'
   ) {
     bentuk_makanan = 'NPO';
+    karbohidrat = 'NPO';
     kategori_diet = 'NPO';
     nabati = 'NPO';
     sayur = 'NPO';
@@ -486,11 +492,12 @@ export async function saveDietMapping(
   }
   // Mode 2: Standard mapping (pengalihan katering otomatis via flag,
   // bukan mode manual)
-  {
+  else {
     // Normalisasi sentinel era manual: 'KATERING' bukan kode menu valid.
     const clearLegacy = (value: string | null) =>
       value && value.trim().toUpperCase() === 'KATERING' ? null : value;
     bentuk_makanan = clearLegacy(bentuk_makanan);
+    karbohidrat = clearLegacy(karbohidrat);
     kategori_diet = clearLegacy(kategori_diet);
     nabati = clearLegacy(nabati);
     sayur = clearLegacy(sayur);
@@ -503,10 +510,10 @@ export async function saveDietMapping(
         .some((part) => part.trim().toUpperCase() === 'KATERING')
         ? [nabati, sayur].filter(Boolean).join(', ') || null
         : extraCombined;
-    if ([bentuk_makanan, kategori_diet, nabati, sayur, buah, snack].some((value) => value === 'NPO')) {
+    if ([bentuk_makanan, karbohidrat, kategori_diet, nabati, sayur, buah, snack].some((value) => value === 'NPO')) {
       return { success: false, message: 'Pilih mode NPO untuk nilai khusus.' };
     }
-    if (!hasFoodMapping({ bentuk_makanan, kategori_diet, nabati, sayur, buah, snack })) {
+    if (!hasFoodMapping({ bentuk_makanan, karbohidrat, kategori_diet, nabati, sayur, buah, snack })) {
       return { success: false, message: 'Isi minimal satu jenis makanan sebelum menyimpan mapping.' };
     }
     status_mapping = 'MAPPED';
@@ -523,6 +530,7 @@ export async function saveDietMapping(
         .update(dietMappingTable)
         .set({
           bentuk_makanan,
+          karbohidrat,
           kategori_diet,
           nabati,
           sayur,
@@ -539,6 +547,7 @@ export async function saveDietMapping(
       await db.insert(dietMappingTable).values({
         diet_rs_raw: raw,
         bentuk_makanan,
+        karbohidrat,
         kategori_diet,
         nabati,
         sayur,
@@ -612,6 +621,7 @@ export async function bulkSaveDietMapping(
   const isStandard = !mappingValues.mode || mappingValues.mode === 'STANDARD';
   if (isStandard && !hasFoodMapping({
     bentuk_makanan: mappingValues.bentuk_makanan,
+    karbohidrat: mappingValues.karbohidrat,
     kategori_diet: mappingValues.kategori_diet,
     nabati: mappingValues.nabati,
     sayur: mappingValues.sayur,
@@ -642,6 +652,7 @@ export async function bulkSaveDietMapping(
       const useLegacyExtra = !existing?.nabati && !existing?.sayur;
       const foodFields = mergeFoodMapping({
         bentuk_makanan: existing?.bentuk_makanan,
+        karbohidrat: existing?.karbohidrat,
         kategori_diet: existing?.kategori_diet,
         nabati: existing?.nabati || (useLegacyExtra ? legacyParts[0] : null),
         sayur: existing?.sayur || (useLegacyExtra ? legacyParts[1] : null),
