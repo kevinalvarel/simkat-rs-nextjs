@@ -49,7 +49,7 @@ export function matchesDishKelas(
 
 export function matchPatientToDish( 
   patient: AnalyzedPatient,
-  item: Pick<MasterMenuItemRow, 'kelas' | 'kategori_menu'>,
+  item: Pick<MasterMenuItemRow, 'kelas' | 'kategori_menu' | 'jenis_makanan'>,
 ): boolean {
   if (patient.isNpo) return false;
 
@@ -58,6 +58,14 @@ export function matchPatientToDish(
 
   // 2. Clinical Diet Tag Matching
   const tag = (item.kategori_menu || '').toUpperCase();
+  const jenis = (item.jenis_makanan || '').toUpperCase();
+  // Jenis tanpa diet: hidangan tanpa tag dipakai semua pasien makan.
+  if (
+    (!tag || tag === 'B') &&
+    (jenis === 'NABATI' || jenis === 'SAYUR' || jenis === 'BUAH' || jenis === 'SNACK')
+  ) {
+    return true;
+  }
   if (!tag || tag === 'B') {
     return (
       patient.isBiasa ||

@@ -28,6 +28,18 @@ export const DIIT_EXCLUDED_CODES = new Set([
 ]);
 
 /**
+ * Kategori master tanpa diet: kodenya tidak pernah masuk DIIT karena
+ * hidangannya dipakai semua pasien (bukan per kode diet).
+ */
+const DIIT_NON_DIET_KATEGORI = new Set([
+  "KARBOHIDRAT",
+  "NABATI",
+  "SAYUR",
+  "BUAH",
+  "SNACK",
+]);
+
+/**
  * Kategori master (nama_kategori / jenis_makanan) yang relevan per waktu makan.
  * SARING dikembalikan kosong — tag kategori SARING masuk daftar excluded,
  * sehingga strip SARING tidak menampilkan noise diet reguler.
@@ -47,6 +59,108 @@ function applicableKategoriForWaktu(waktu: DiitWaktuKey): Set<string> | null {
     default:
       return new Set();
   }
+}
+
+/**
+ * Jenis yang masih memakai diet (selisih dihitung per tag).
+ * Jenis lain tanpa diet: ada hidangan berarti tertutup semua.
+ */
+const DIIT_TAG_AWARE_JENIS = new Set(["HEWANI", "EXTRA"]);
+
+/** Jenis yang tidak pernah menampilkan chip (tanpa konfigurasi diet). */
+const DIIT_NO_CHIP_JENIS = new Set([
+  "SARING",
+  "KARBOHIDRAT",
+  "POKOK",
+  "BENTUK_MAKANAN",
+]);
+
+function isSemuaKelasLabel(value: string | null | undefined): boolean {
+  const v = (value || "").trim().toUpperCase();
+  return !v || v === "SEMUA KELAS" || v === "SEMUA" || v === "ALL" || v === "UMUM";
+}
+
+/**
+ * True bila hidangan dengan kelas hidangan dipakai untuk baris kelas tersebut.
+ * Hidangan Semua Kelas berlaku untuk semua baris, dan baris Semua Kelas
+ * terisi bila ada hidangan apa pun di slot itu.
+ */
+function kelasCoversRow(
+  dishKelas: string | null | undefined,
+  rowKelas: string | null | undefined,
+): boolean {
+  if (isSemuaKelasLabel(dishKelas) || isSemuaKelasLabel(rowKelas)) return true;
+  return (
+    (dishKelas || "").trim().toUpperCase() ===
+    (rowKelas || "").trim().toUpperCase()
+  );
+}
+
+/**
+ * Sisa tag diet untuk satu sel matriks (jenis + kelas + jam makan).
+ * Tidak menggabungkan kelas: tiap baris kelas dihitung dari hidangan
+ * kelasnya sendiri plus hidangan Semua Kelas.
+ *
+ * Jenis tanpa diet (nabati, sayur, buah, snack): kembalikan seluruh kode
+ * master jenis itu bila slot kosong, atau kosong bila sudah ada hidangan.
+ */
+export function computeDiitForSel(
+  jenis: string | null | undefined,
+  kelas: string | null | undefined,
+  waktu: string | null | undefined,
+  activeTags: MenuTagOption[],
+  items: Array<
+    Pick<
+      SiklusMenuItem,
+      "jenis_makanan" | "kelas" | "waktu_makan" | "kategori_menu" | "is_active"
+    >
+  >,
+): MenuTagOption[] {
+  const jenisUpper = (jenis || "").trim().toUpperCase();
+  const waktuUpper = (waktu || "").trim().toUpperCase();
+  if (!jenisUpper || !waktuUpper) return [];
+  if (DIIT_NO_CHIP_JENIS.has(jenisUpper)) return [];
+  if (waktuUpper === "SARING") return [];
+
+  const master: MenuTagOption[] = [];
+  const seen = new Set<string>();
+  for (const opt of activeTags || []) {
+    if ((opt.kategori || "").trim().toUpperCase() !== jenisUpper) continue;
+    const code = (opt.kode || "").trim().toUpperCase();
+    if (!code || DIIT_EXCLUDED_CODES.has(code) || seen.has(code)) continue;
+    seen.add(code);
+    master.push({
+      kode: opt.kode.trim(),
+      label: opt.label,
+      kategori: opt.kategori,
+    });
+  }
+  if (master.length === 0) return [];
+
+  const slotItems = (items || []).filter((item) => {
+    if (item.is_active === false) return false;
+    const itemWaktu = (item.waktu_makan || "").trim().toUpperCase();
+    const itemJenis = (item.jenis_makanan || "").trim().toUpperCase();
+    if (itemWaktu !== waktuUpper || itemJenis !== jenisUpper) return false;
+    if (waktuUpper !== "SARING" && isSaringItem(item)) return false;
+    return kelasCoversRow(item.kelas, kelas);
+  });
+  if (slotItems.length === 0) return master;
+
+  // Jenis tanpa diet: ada hidangan berarti semua kode tertutup.
+  if (!DIIT_TAG_AWARE_JENIS.has(jenisUpper)) return [];
+
+  const used = new Set<string>();
+  for (const item of slotItems) {
+    for (const tag of parseMenuTags(item.kategori_menu)) {
+      const key = tag.trim().toUpperCase();
+      if (!key || DIIT_EXCLUDED_CODES.has(key)) continue;
+      used.add(key);
+    }
+  }
+  return master
+    .filter((m) => !used.has(m.kode.trim().toUpperCase()))
+    .sort((a, b) => a.kode.localeCompare(b.kode, "id", { sensitivity: "base" }));
 }
 
 function isActiveItem(item: Pick<SiklusMenuItem, "is_active">): boolean {
@@ -80,6 +194,7 @@ export function computeDiitPerWaktu(
   for (const opt of activeTags || []) {
     const code = (opt.kode || "").trim().toUpperCase();
     if (!code || DIIT_EXCLUDED_CODES.has(code)) continue;
+    if (DIIT_NON_DIET_KATEGORI.has((opt.kategori || "").trim().toUpperCase())) continue;
     if (!canonical.has(code)) {
       canonical.set(code, {
         kode: opt.kode.trim(),

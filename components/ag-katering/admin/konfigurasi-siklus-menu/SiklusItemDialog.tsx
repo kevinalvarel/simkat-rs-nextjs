@@ -61,6 +61,7 @@ interface SiklusItemDialogProps {
 const KELAS_FALLBACK_LIST = ['KELAS I', 'KELAS II', 'KELAS III'];
 
 const JENIS_MAKANAN_OPTIONS = [
+  { value: 'KARBOHIDRAT', label: 'KARBOHIDRAT (Karbohidrat / Makanan Pokok)' },
   { value: 'HEWANI', label: 'HEWANI (Lauk Hewani)' },
   { value: 'NABATI', label: 'NABATI (Lauk Nabati)' },
   { value: 'SAYUR', label: 'SAYUR (Sayur Mayur)' },
@@ -111,7 +112,6 @@ export default function SiklusItemDialog({
       value: v,
       label: v === 'Semua Kelas' ? 'Semua Kelas (semua kelas)' : v,
     }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kelasOptions, itemToEdit, defaultSlot]);
   const isEdit = Boolean(itemToEdit);
 
@@ -152,6 +152,12 @@ export default function SiklusItemDialog({
 
   const selectedTagsString = useWatch({ control, name: 'kategori_menu' }) || '';
   const selectedJenis = useWatch({ control, name: 'jenis_makanan' });
+  // Nabati, sayur, buah, snack, dan karbohidrat tidak memakai diet.
+  const isTanpaDietJenis = (jenis: string | null | undefined) =>
+    ['KARBOHIDRAT', 'NABATI', 'SAYUR', 'BUAH', 'SNACK'].includes(
+      (jenis || '').trim().toUpperCase(),
+    );
+  const isTanpaDiet = isTanpaDietJenis(selectedJenis);
   const currentTags = parseMenuTags(selectedTagsString);
   const tagCount = countUniqueMenuTags(selectedTagsString);
   const availableTags = getMenuTagOptions(dietOptions, selectedJenis);
@@ -203,13 +209,21 @@ export default function SiklusItemDialog({
   }
 
   async function onSubmit(data: ItemFormValues) {
-    if (normalizeMenuTags(data.kategori_menu, getMenuTagOptions(dietOptions, data.jenis_makanan)).invalid.length) {
+    // Jenis tanpa diet: paksa tag kosong dan lewati validasi tag.
+    const payload =
+      isTanpaDietJenis(data.jenis_makanan)
+        ? { ...data, kategori_menu: '' }
+        : data;
+    if (
+      !isTanpaDietJenis(payload.jenis_makanan) &&
+      normalizeMenuTags(payload.kategori_menu, getMenuTagOptions(dietOptions, payload.jenis_makanan)).invalid.length
+    ) {
       toast.error('Hapus tag yang tidak tersedia untuk jenis makanan ini.');
       return;
     }
     try {
       if (isEdit && itemToEdit) {
-        const res = await updateSiklusMenuItem(itemToEdit.id, data);
+        const res = await updateSiklusMenuItem(itemToEdit.id, payload);
         if (res.success) {
           toast.success(res.message);
           onSuccess();
@@ -218,7 +232,7 @@ export default function SiklusItemDialog({
           toast.error(res.message);
         }
       } else {
-        const res = await createSiklusMenuItem(data);
+        const res = await createSiklusMenuItem(payload);
         if (res.success) {
           toast.success(res.message);
           onSuccess();
@@ -358,6 +372,12 @@ export default function SiklusItemDialog({
                     value={field.value}
                     onValueChange={(val) => {
                       if (!val || val === field.value) return;
+                      // Jenis tanpa diet: tag lama ikut dibuang.
+                      if (isTanpaDietJenis(val)) {
+                        field.onChange(val);
+                        setValue('kategori_menu', '', { shouldDirty: true, shouldValidate: true });
+                        return;
+                      }
                       const nextOptions = getMenuTagOptions(dietOptions, val);
                       const retained = normalizeMenuTags(selectedTagsString, nextOptions).codes;
                       const retainedValue = retained.join(', ');
@@ -400,8 +420,16 @@ export default function SiklusItemDialog({
             )}
           </div>
 
-          {/* Tag Kategori Menu / Diet */}
-          <div className='space-y-2 bg-muted/40 p-3 rounded-xl border'>
+          {/* Tag Kategori Menu / Diet (jenis tanpa diet menyembunyikan tag) */}
+          {isTanpaDiet ? (
+            <div className='space-y-1.5 bg-muted/40 p-3 rounded-xl border'>
+              <p className='text-[11px] text-muted-foreground leading-snug'>
+                Jenis ini tidak memakai tag diet. Hidangan ini otomatis
+                dipakai semua pasien yang butuh di jam ini.
+              </p>
+            </div>
+          ) : (
+            <div className='space-y-2 bg-muted/40 p-3 rounded-xl border'>
             <div className='flex items-center justify-between'>
               <Label className='text-xs font-semibold flex items-center gap-1.5'>
                 <Tag className='w-3.5 h-3.5 text-primary' />
@@ -462,6 +490,7 @@ export default function SiklusItemDialog({
                   : ''}
             </p>
           </div>
+          )}
 
           {/* Catatan Khusus */}
           <div className='space-y-1.5'>

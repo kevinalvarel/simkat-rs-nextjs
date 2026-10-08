@@ -95,7 +95,7 @@ export async function getTabulasiSupplementData(
     return {
       ...base,
       success: false,
-      hospitalData: { ...base.hospitalData, categoryGroups: [], allItems: [] },
+      hospitalData: { ...base.hospitalData, categoryGroups: [], allItems: [], tktpGabungan: null },
     };
   }
 }
@@ -211,7 +211,7 @@ export async function getTabulasiSnackBuahData(
     const failed = {
       ...base,
       success: false,
-      hospitalData: { ...base.hospitalData, categoryGroups: [], allItems: [] },
+      hospitalData: { ...base.hospitalData, categoryGroups: [], allItems: [], tktpGabungan: null },
     };
     return { snack: failed, buah: failed };
   }

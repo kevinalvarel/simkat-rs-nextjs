@@ -154,6 +154,62 @@ function extractCodes(val: string | null | undefined): string[] {
 }
 
 /**
+ * Normalisasi kode diet untuk rincian produksi (DJ, RL, DH, ...).
+ * Buang sentinel non diet agar chip tidak tampilkan NPO / PUASA / '-'.
+ */
+function normalizeDietCodes(codes: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of codes || []) {
+    const code = (raw || '').trim().toUpperCase();
+    if (!code) continue;
+    if (code === '-' || code === 'TIDAK' || code === 'NON') continue;
+    if (code === 'NPO' || code === 'PUASA') continue;
+    if (seen.has(code)) continue;
+    seen.add(code);
+    out.push(code);
+  }
+  return out;
+}
+
+/**
+ * Tentukan 1 kode diet pemicu untuk satu hidangan agar jumlah rincian
+ * selalu sama dengan total porsi (1 pasien = 1 hitung rincian).
+ * Prioritas: irisan kode pasien dengan tag hidangan, lalu kode pasien pertama.
+ */
+function pickDietContributors(
+  patientCodes: string[],
+  dishTag: string | null | undefined,
+): string[] {
+  const patients = normalizeDietCodes(patientCodes);
+  if (patients.length === 0) return [];
+  if (!dishTag || !dishTag.trim() || dishTag.trim() === '-') {
+    return [patients[0]];
+  }
+  const tags = new Set(extractCodes(dishTag).map((t) => t.toUpperCase()));
+  const hit = patients.find((c) => tags.has(c));
+  return [hit || patients[0]];
+}
+
+/**
+ * Kode diet utama pasien untuk kartu non lauk (pokok, ekstra, buah, snack).
+ * Pakai kategori diet (hewani) dulu agar konsisten RL / DJ / DH.
+ */
+function primaryDietCodes(
+  hewani: string[],
+  nabati: string[],
+  sayur: string[],
+): string[] {
+  const h = normalizeDietCodes(hewani);
+  if (h.length > 0) return [h[0]];
+  const n = normalizeDietCodes(nabati);
+  if (n.length > 0) return [n[0]];
+  const s = normalizeDietCodes(sayur);
+  if (s.length > 0) return [s[0]];
+  return [];
+}
+
+/**
  * Sentinel era "Alihkan ke AG Katering" manual — hanya untuk data lama.
  * Mapping baru tidak lagi menulis nilai ini (lihat mapping-diet.service).
  */
@@ -266,14 +322,10 @@ interface DishCounter {
  * Jika kode tidak ada di siklus menu, jangan tampilkan nama generik
  * ("Diet X" / "Menu X" / "Makanan Pokok (X)") — tampilkan keterangan eksplisit ini.
  */
-const MISSING_CYCLE_MENU_TEXT = 'Tidak terdaftar pada siklus menu';
-
 function buildMissingCycleMenuDish(
   code: string,
   jenis: string,
   pKelas: string,
-  labelMap?: Map<string, string>,
-  defaultLabels?: Record<string, string>,
 ): DishCounter {
   const displayCode = (code || '').trim() || '-';
   return {
@@ -282,20 +334,6 @@ function buildMissingCycleMenuDish(
     category: mapCategoryGroup(jenis),
     kelas: pKelas,
     dietTag: displayCode,
-    catatan: 'Tidak terdaftar pada siklus menu',
-  };
-}
-
-function buildMissingCycleMenuSlotDish(
-  jenis: string,
-  pKelas: string,
-): DishCounter {
-  return {
-    code: `MISSING-${jenis}`,
-    name: 'Tidak terdaftar pada siklus menu',
-    category: mapCategoryGroup(jenis),
-    kelas: pKelas,
-    dietTag: '-',
     catatan: 'Tidak terdaftar pada siklus menu',
   };
 }
@@ -337,7 +375,6 @@ function resolveSupplementDishes(
   codes: string[],
   patientKelas: string,
   mealSlot: string,
-  dietCodes: string[],
 ): DishCounter[] {
   if (!['PAGI', 'SIANG'].includes(mealSlot)) return [];
 
@@ -347,39 +384,35 @@ function resolveSupplementDishes(
 
   if (category === 'BUAH' && candidates.length === 0) return [];
 
-  // Penampung DIIT slot ini (dipakai bila kode tidak punya hidangan spesifik).
-  const diitFallback = candidates.find((item) => isDiitDish(item));
+  const valid = [...new Set(codes.map((code) => code.trim().toUpperCase()))].filter((code) => {
+    if (category !== 'SNACK') return true;
+    if (code === 'SNACK_PAGI') return mealSlot === 'PAGI';
+    if (code === 'SNACK_SIANG' || code === 'SNACK_SORE') return mealSlot === 'SIANG';
+    return true;
+  });
+  if (valid.length === 0) return [];
 
-  return [...new Set(codes.map((code) => code.trim().toUpperCase()))]
-    .filter((code) => {
-      if (category !== 'SNACK') return true;
-      if (code === 'SNACK_PAGI') return mealSlot === 'PAGI';
-      if (code === 'SNACK_SIANG' || code === 'SNACK_SORE') return mealSlot === 'SIANG';
-      return true;
-    })
-    .map((code) => {
-      const matched = candidates.find((item) =>
-        extractCodes(item.kategori_menu).some((tag) => tag.toUpperCase() === code),
-      ) || candidates.find((item) =>
-        extractCodes(item.kategori_menu).some((tag) =>
-          dietCodes.some((dietCode) => dietCode.toUpperCase() === tag.toUpperCase()),
-        ),
-      ) || diitFallback || candidates.find((item) => !item.kategori_menu?.trim());
-
-      if (!matched) return buildMissingCycleMenuDish(code, category, patientKelas);
-
-      // Hidangan DIIT: tag tampil tetap kode diet yang diminta (mis. DH tetap DH).
-      if (isDiitDish(matched)) return buildDiitFallbackDish(matched, code);
-
-      return {
-        code: `MENU-${matched.id}`,
-        name: matched.nama_makanan,
-        category,
-        kelas: matched.kelas,
-        dietTag: matched.kategori_menu || code,
-        catatan: matched.catatan || undefined,
-      };
-    });
+  // Tanpa diet: satu hidangan biasa untuk semua kode (1 pasien = 1 porsi).
+  const hidangan =
+    candidates.find((item) => !isDiitDish(item)) ||
+    candidates.find((item) => isDiitDish(item)) ||
+    null;
+  if (!hidangan) {
+    return valid.map((code) => buildMissingCycleMenuDish(code, category, patientKelas));
+  }
+  if (isDiitDish(hidangan)) {
+    return valid.map((code) => buildDiitFallbackDish(hidangan, code));
+  }
+  return [
+    {
+      code: `MENU-${hidangan.id}`,
+      name: hidangan.nama_makanan,
+      category,
+      kelas: hidangan.kelas,
+      dietTag: hidangan.kategori_menu || undefined,
+      catatan: hidangan.catatan || undefined,
+    },
+  ];
 }
 
 /**
@@ -393,8 +426,6 @@ function resolvePatientMainDishes(
     NABATI: string[];
     SAYUR: string[];
   },
-  labelMap: Map<string, string>,
-  defaultLabels: Record<string, string>,
 ): DishCounter[] {
   const resolvedCategories: Array<{
     jenis: 'HEWANI' | 'NABATI' | 'SAYUR';
@@ -418,6 +449,35 @@ function resolvePatientMainDishes(
     );
 
     if (candidates.length > 0) {
+      // Jenis tanpa diet: ambil hidangan biasa pertama di slot,
+      // kode pasien diabaikan (1 pasien = 1 porsi).
+      if (jenis === 'NABATI' || jenis === 'SAYUR') {
+        const plain = candidates.find((dish) => !isDiitDish(dish));
+        if (plain) {
+          resolvedCategories.push({
+            jenis,
+            dish: {
+              code: `MENU-${plain.id}`,
+              name: plain.nama_makanan,
+              category: mapCategoryGroup(plain.jenis_makanan),
+              kelas: plain.kelas,
+              dietTag: plain.kategori_menu || undefined,
+              catatan: plain.catatan || undefined,
+            },
+          });
+        } else {
+          const diitOnly = candidates.find((dish) => isDiitDish(dish));
+          const fallbackCode = targetCodes[0] || '-';
+          resolvedCategories.push({
+            jenis,
+            dish: diitOnly
+              ? buildDiitFallbackDish(diitOnly, fallbackCode)
+              : buildMissingCycleMenuDish(fallbackCode, jenis, pKelas),
+          });
+        }
+        continue;
+      }
+
       const exactMatch = candidates.find((dish) => {
         if (!dish.kategori_menu) return false;
         const dishTags = extractCodes(dish.kategori_menu);
@@ -475,27 +535,23 @@ function resolvePatientMainDishes(
             jenis,
             dish: diitMatch
               ? buildDiitFallbackDish(diitMatch, tc)
-              : buildMissingCycleMenuDish(
-                  tc,
-                  jenis,
-                  pKelas,
-                  labelMap,
-                  defaultLabels,
-                ),
+              : buildMissingCycleMenuDish(tc, jenis, pKelas),
           });
         }
       }
     } else {
+      // Jenis tanpa diet: cukup 1 penanda missing per pasien.
+      if (jenis === 'NABATI' || jenis === 'SAYUR') {
+        resolvedCategories.push({
+          jenis,
+          dish: buildMissingCycleMenuDish(targetCodes[0] || '-', jenis, pKelas),
+        });
+        continue;
+      }
       for (const tc of targetCodes) {
         resolvedCategories.push({
           jenis,
-          dish: buildMissingCycleMenuDish(
-            tc,
-            jenis,
-            pKelas,
-            labelMap,
-            defaultLabels,
-          ),
+          dish: buildMissingCycleMenuDish(tc, jenis, pKelas),
         });
       }
     }
@@ -677,13 +733,8 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
     // 6. Fetch Master Menu Categories for human-readable labels (BN -> Biasa Nasi, etc.)
     const masterMenuItems = await db.select().from(kategoriMenuTable);
     const labelMap = new Map<string, string>();
-    const karboLabelMap = new Map<string, string>();
     for (const item of masterMenuItems) {
-      if (item.nama_kategori === 'KARBOHIDRAT') {
-        karboLabelMap.set(item.kode_item.trim().toUpperCase(), item.label_item);
-      } else {
-        labelMap.set(item.kode_item.toUpperCase(), item.label_item);
-      }
+      labelMap.set(item.kode_item.toUpperCase(), item.label_item);
     }
 
     // Kode bentuk yang otomatis teralihkan ke Live Katering (flag tugas AG Katering)
@@ -742,15 +793,31 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
       const category: MenuCategoryGroup = bentukCodes.some((code) =>
         ['SAR', 'SARING'].includes(code.toUpperCase()),
       ) ? 'SARING' : 'POKOK';
-      return codes
-        .filter((code) => !['NPO', 'PUASA'].includes(code.toUpperCase()))
-        .map((code) => {
-          const normalized = code.trim().toUpperCase();
-          const name = karboLabelMap.get(normalized);
-          return name
-            ? { code: normalized, name, category, kelas }
-            : buildMissingCycleMenuDish(code, category, kelas);
-        });
+      // Karbohidrat tidak memakai diet: satu hidangan slot dipakai semua pasien.
+      // Kode pasien diabaikan, kelas tidak difilter.
+      const karboSlotItems = activeSlotMenuItems.filter(
+        (item) => item.jenis_makanan.toUpperCase() === 'KARBOHIDRAT',
+      );
+      const hidangan = karboSlotItems[0];
+      const valid = codes.filter(
+        (code) => !['NPO', 'PUASA'].includes(code.toUpperCase()),
+      );
+      if (valid.length === 0) return [];
+      // Satu hidangan untuk semua kode: kembalikan 1 porsi per pasien,
+      // bukan 1 per kode, agar tidak hitung ganda.
+      if (hidangan) {
+        return [
+          {
+            code: `MENU-${hidangan.id}`,
+            name: hidangan.nama_makanan,
+            category: mapCategoryGroup(hidangan.jenis_makanan),
+            kelas: hidangan.kelas,
+            dietTag: hidangan.kategori_menu || undefined,
+            catatan: hidangan.catatan || undefined,
+          },
+        ];
+      }
+      return valid.map((code) => buildMissingCycleMenuDish(code, category, kelas));
     }
 
     // 7. Fetch Master Diet Mappings
@@ -843,7 +910,10 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
       isDiit?: boolean;
     }
 
-    const liveDishes: Record<string, { count: number; meta: DishCounter }> = {};
+    const liveDishes: Record<
+      string,
+      { count: number; meta: DishCounter; breakdown: Record<string, number> }
+    > = {};
 
     function dishKey(item: DishCounter): string {
       const base = `${item.category}:${item.name.trim()}`;
@@ -851,13 +921,59 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
       return item.isDiit ? `${base}:DIIT:${(item.dietTag || '-').toUpperCase()}` : base;
     }
 
-    function addLiveDish(item: DishCounter, amount = 1) {
+    function addLiveDish(
+      item: DishCounter,
+      amount = 1,
+      contributors: string[] = [],
+    ) {
       if (!item.name || !item.name.trim()) return;
       const key = dishKey(item);
       if (!liveDishes[key]) {
-        liveDishes[key] = { count: 0, meta: item };
+        liveDishes[key] = { count: 0, meta: item, breakdown: {} };
       }
       liveDishes[key].count += amount;
+      const dietCodes = normalizeDietCodes(contributors);
+      // Fallback: bila pemicu kosong tapi hidangan DIIT bawa 1 kode, pakai itu.
+      // Ini menjaga kartu DIIT tetap tampil RL: 1 walau pemanggil lupa kirim kode.
+      const effective =
+        dietCodes.length > 0
+          ? dietCodes.slice(0, 1)
+          : item.isDiit
+            ? normalizeDietCodes([item.dietTag || '']).slice(0, 1)
+            : [];
+      for (const diet of effective) {
+        liveDishes[key].breakdown[diet] =
+          (liveDishes[key].breakdown[diet] || 0) + amount;
+      }
+    }
+
+    function resolveMainDishContributors(
+      dish: DishCounter,
+      hewaniCodes: string[],
+      nabatiCodes: string[],
+      sayurCodes: string[],
+    ): string[] {
+      // DIIT dan missing sudah bawa 1 kode spesifik di dietTag / code.
+      if (dish.isDiit) {
+        return normalizeDietCodes([dish.dietTag || '']).slice(0, 1);
+      }
+      if ((dish.name || '').toLowerCase().includes('tidak terdaftar')) {
+        const fromCode = normalizeDietCodes([dish.code || '']);
+        if (fromCode.length > 0) return fromCode.slice(0, 1);
+      }
+      const cat = (dish.category || '').toUpperCase();
+      if (cat === 'HEWANI') {
+        return pickDietContributors(hewaniCodes, dish.dietTag);
+      }
+      if (cat === 'NABATI') {
+        return pickDietContributors(nabatiCodes, dish.dietTag);
+      }
+      if (cat === 'SAYUR') {
+        return pickDietContributors(sayurCodes, dish.dietTag);
+      }
+      // Gabungan (HEWANI & NABATI, dsb): 1 pasien tetap 1 hitung rincian,
+      // pakai diet utama agar total sama dengan porsi.
+      return primaryDietCodes(hewaniCodes, nabatiCodes, sayurCodes);
     }
 
     // Process each active patient
@@ -909,8 +1025,15 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
       }
 
       // A. Makanan Pokok / Kategori Diet (e.g. BN -> Nasi Biasa, BL/TIM -> Nasi Tim, SAR -> Bubur Saring, CAIR -> Cair)
+      const stapleContributors = primaryDietCodes(hewaniCodes, nabatiCodes, sayurCodes);
       if (karboCodes.length > 0) {
-        for (const dish of resolveKarboDishes(karboCodes, bentukCodes, pKelas)) addLiveDish(dish);
+        for (const dish of resolveKarboDishes(karboCodes, bentukCodes, pKelas)) {
+          const fallback =
+            stapleContributors.length > 0
+              ? stapleContributors
+              : normalizeDietCodes([dish.code || '']);
+          addLiveDish(dish, 1, fallback);
+        }
       } else if (bentukCodes.length > 0) {
         for (const code of bentukCodes) {
           const upperCode = code.toUpperCase();
@@ -936,25 +1059,30 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
               stapleName = knownStaple;
             } else {
               // Kode mapping tidak dikenal di master maupun siklus → tandai missing secara eksplisit.
+              const missing = buildMissingCycleMenuDish(code, 'POKOK', pKelas);
               addLiveDish(
-                buildMissingCycleMenuDish(
-                  code,
-                  'POKOK',
-                  pKelas,
-                  labelMap,
-                  defaultLabels,
-                ),
+                missing,
+                1,
+                stapleContributors.length > 0
+                  ? stapleContributors
+                  : normalizeDietCodes([code]),
               );
               continue;
             }
           }
 
-          addLiveDish({
-            code: upperCode,
-            name: stapleName,
-            category: stapleCategory,
-            kelas: pKelas,
-          });
+          addLiveDish(
+            {
+              code: upperCode,
+              name: stapleName,
+              category: stapleCategory,
+              kelas: pKelas,
+            },
+            1,
+            stapleContributors.length > 0
+              ? stapleContributors
+              : normalizeDietCodes([upperCode]),
+          );
         }
       }
 
@@ -967,11 +1095,13 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
           NABATI: nabatiCodes,
           SAYUR: sayurCodes,
         },
-        labelMap,
-        defaultLabels,
       );
       for (const dish of mainDishes) {
-        addLiveDish(dish);
+        addLiveDish(
+          dish,
+          1,
+          resolveMainDishContributors(dish, hewaniCodes, nabatiCodes, sayurCodes),
+        );
       }
 
 
@@ -982,31 +1112,52 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
           const extraName =
             labelMap.get(upperCode) || defaultLabels[upperCode];
           if (extraName) {
-            addLiveDish({
-              code: upperCode,
-              name: extraName,
-              category: 'EXTRA',
-              kelas: pKelas,
-            });
-          } else {
             addLiveDish(
-              buildMissingCycleMenuDish(
-                code,
-                'EXTRA',
-                pKelas,
-                labelMap,
-                defaultLabels,
-              ),
+              {
+                code: upperCode,
+                name: extraName,
+                category: 'EXTRA',
+                kelas: pKelas,
+              },
+              1,
+              stapleContributors.length > 0
+                ? stapleContributors
+                : normalizeDietCodes([upperCode]),
+            );
+          } else {
+            const missingExtra = buildMissingCycleMenuDish(code, 'EXTRA', pKelas);
+            addLiveDish(
+              missingExtra,
+              1,
+              stapleContributors.length > 0
+                ? stapleContributors
+                : normalizeDietCodes([code]),
             );
           }
         }
       }
 
-      for (const dish of resolveSupplementDishes(activeSlotMenuItems, 'BUAH', buahCodes, pKelas, targetWaktuMakan, hewaniCodes)) {
-        addLiveDish(dish);
+      for (const dish of resolveSupplementDishes(activeSlotMenuItems, 'BUAH', buahCodes, pKelas, targetWaktuMakan)) {
+        addLiveDish(
+          dish,
+          1,
+          dish.isDiit
+            ? normalizeDietCodes([dish.dietTag || ''])
+            : stapleContributors.length > 0
+              ? stapleContributors
+              : normalizeDietCodes([dish.code || dish.dietTag || '']),
+        );
       }
-      for (const dish of resolveSupplementDishes(activeSlotMenuItems, 'SNACK', snackCodes, pKelas, targetWaktuMakan, hewaniCodes)) {
-        addLiveDish(dish);
+      for (const dish of resolveSupplementDishes(activeSlotMenuItems, 'SNACK', snackCodes, pKelas, targetWaktuMakan)) {
+        addLiveDish(
+          dish,
+          1,
+          dish.isDiit
+            ? normalizeDietCodes([dish.dietTag || ''])
+            : stapleContributors.length > 0
+              ? stapleContributors
+              : normalizeDietCodes([dish.code || dish.dietTag || '']),
+        );
       }
     }
 
@@ -1017,15 +1168,33 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
       .orderBy(desc(snapshotBatchTable.timestamp_snapshot))
       .limit(1);
 
-    const snapshotDishes: Record<string, { count: number; meta: DishCounter }> = {};
+    const snapshotDishes: Record<
+      string,
+      { count: number; meta: DishCounter; breakdown: Record<string, number> }
+    > = {};
 
-    function addSnapshotDish(item: DishCounter, amount = 1) {
+    function addSnapshotDish(
+      item: DishCounter,
+      amount = 1,
+      contributors: string[] = [],
+    ) {
       if (!item.name || !item.name.trim()) return;
       const key = dishKey(item);
       if (!snapshotDishes[key]) {
-        snapshotDishes[key] = { count: 0, meta: item };
+        snapshotDishes[key] = { count: 0, meta: item, breakdown: {} };
       }
       snapshotDishes[key].count += amount;
+      const dietCodes = normalizeDietCodes(contributors);
+      const effective =
+        dietCodes.length > 0
+          ? dietCodes.slice(0, 1)
+          : item.isDiit
+            ? normalizeDietCodes([item.dietTag || '']).slice(0, 1)
+            : [];
+      for (const diet of effective) {
+        snapshotDishes[key].breakdown[diet] =
+          (snapshotDishes[key].breakdown[diet] || 0) + amount;
+      }
     }
 
     if (latestBatch) {
@@ -1109,8 +1278,17 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
         }
 
         // Staple
+        const snapStapleContributors = primaryDietCodes(hewaniCodes, nabatiCodes, sayurCodes);
         if (karboCodes.length > 0) {
-          for (const dish of resolveKarboDishes(karboCodes, bentukCodes, pKelas)) addSnapshotDish(dish);
+          for (const dish of resolveKarboDishes(karboCodes, bentukCodes, pKelas)) {
+            addSnapshotDish(
+              dish,
+              1,
+              snapStapleContributors.length > 0
+                ? snapStapleContributors
+                : normalizeDietCodes([dish.code || '']),
+            );
+          }
         } else if (bentukCodes.length > 0) {
           for (const code of bentukCodes) {
             const upperCode = code.toUpperCase();
@@ -1136,25 +1314,30 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
                 stapleName = knownStaple;
               } else {
                 // Kode mapping tidak dikenal di master maupun siklus → tandai missing secara eksplisit.
+                const missingStaple = buildMissingCycleMenuDish(code, 'POKOK', pKelas);
                 addSnapshotDish(
-                  buildMissingCycleMenuDish(
-                    code,
-                    'POKOK',
-                    pKelas,
-                    labelMap,
-                    defaultLabels,
-                  ),
+                  missingStaple,
+                  1,
+                  snapStapleContributors.length > 0
+                    ? snapStapleContributors
+                    : normalizeDietCodes([code]),
                 );
                 continue;
               }
             }
 
-            addSnapshotDish({
-              code: upperCode,
-              name: stapleName,
-              category: stapleCategory,
-              kelas: pKelas,
-            });
+            addSnapshotDish(
+              {
+                code: upperCode,
+                name: stapleName,
+                category: stapleCategory,
+                kelas: pKelas,
+              },
+              1,
+              snapStapleContributors.length > 0
+                ? snapStapleContributors
+                : normalizeDietCodes([upperCode]),
+            );
           }
         }
 
@@ -1167,11 +1350,13 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
             NABATI: nabatiCodes,
             SAYUR: sayurCodes,
           },
-          labelMap,
-          defaultLabels,
         );
         for (const dish of mainDishes) {
-          addSnapshotDish(dish);
+          addSnapshotDish(
+            dish,
+            1,
+            resolveMainDishContributors(dish, hewaniCodes, nabatiCodes, sayurCodes),
+          );
         }
 
 
@@ -1182,31 +1367,52 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
             const extraName =
               labelMap.get(upperCode) || defaultLabels[upperCode];
             if (extraName) {
-              addSnapshotDish({
-                code: upperCode,
-                name: extraName,
-                category: 'EXTRA',
-                kelas: pKelas,
-              });
-            } else {
               addSnapshotDish(
-                buildMissingCycleMenuDish(
-                  code,
-                  'EXTRA',
-                  pKelas,
-                  labelMap,
-                  defaultLabels,
-                ),
+                {
+                  code: upperCode,
+                  name: extraName,
+                  category: 'EXTRA',
+                  kelas: pKelas,
+                },
+                1,
+                snapStapleContributors.length > 0
+                  ? snapStapleContributors
+                  : normalizeDietCodes([upperCode]),
+              );
+            } else {
+              const missingSnapExtra = buildMissingCycleMenuDish(code, 'EXTRA', pKelas);
+              addSnapshotDish(
+                missingSnapExtra,
+                1,
+                snapStapleContributors.length > 0
+                  ? snapStapleContributors
+                  : normalizeDietCodes([code]),
               );
             }
           }
         }
 
-        for (const dish of resolveSupplementDishes(activeSlotMenuItems, 'BUAH', buahCodes, pKelas, targetWaktuMakan, hewaniCodes)) {
-          addSnapshotDish(dish);
+      for (const dish of resolveSupplementDishes(activeSlotMenuItems, 'BUAH', buahCodes, pKelas, targetWaktuMakan)) {
+          addSnapshotDish(
+            dish,
+            1,
+            dish.isDiit
+              ? normalizeDietCodes([dish.dietTag || ''])
+              : snapStapleContributors.length > 0
+                ? snapStapleContributors
+                : normalizeDietCodes([dish.code || dish.dietTag || '']),
+          );
         }
-        for (const dish of resolveSupplementDishes(activeSlotMenuItems, 'SNACK', snackCodes, pKelas, targetWaktuMakan, hewaniCodes)) {
-          addSnapshotDish(dish);
+      for (const dish of resolveSupplementDishes(activeSlotMenuItems, 'SNACK', snackCodes, pKelas, targetWaktuMakan)) {
+          addSnapshotDish(
+            dish,
+            1,
+            dish.isDiit
+              ? normalizeDietCodes([dish.dietTag || ''])
+              : snapStapleContributors.length > 0
+                ? snapStapleContributors
+                : normalizeDietCodes([dish.code || dish.dietTag || '']),
+          );
         }
       }
     }
@@ -1246,12 +1452,23 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
 
         totalPorsi += activeCount;
 
+        // Rincian produksi pakai data live bila ada, kalau kosong pakai baseline.
+        // Ini agar kartu tetap tampil RL: x walau live 0 tapi snapshot ada isi.
+        const sourceBreakdown =
+          liveInfo && Object.keys(liveInfo.breakdown || {}).length > 0
+            ? liveInfo.breakdown
+            : snapshotInfo?.breakdown || {};
+        const dietBreakdown = Object.entries(sourceBreakdown)
+          .map(([diet, count]) => ({ diet, count }))
+          .sort((a, b) => a.diet.localeCompare(b.diet));
+
         return {
           code: meta?.code || key,
           name: meta?.name || key,
           category: meta?.category || 'LAINNYA',
           kelas: meta?.kelas,
           dietTag: meta?.dietTag,
+          dietBreakdown,
           catatan: meta?.catatan,
           isDiit: meta?.isDiit,
           baseline: baselineCount,

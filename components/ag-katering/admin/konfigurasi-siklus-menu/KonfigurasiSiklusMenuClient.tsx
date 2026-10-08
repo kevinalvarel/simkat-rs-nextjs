@@ -161,7 +161,6 @@ export default function KonfigurasiSiklusMenuClient({
   // Menggantikan kolom `tanggal` statis agar tab otomatis reset tiap putaran.
   const rollingDates = useMemo(
     () => getRollingCycleDates(masterSiklusList, new Date()),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [masterSiklusList],
   );
 
@@ -723,6 +722,7 @@ export default function KonfigurasiSiklusMenuClient({
         <div className="flex items-center gap-1.5 overflow-x-auto min-w-0 max-w-full pb-1">
           {[
             { id: "ALL", label: "Semua Lauk" },
+            { id: "KARBOHIDRAT", label: "🍚 Karbo" },
             { id: "HEWANI", label: "🍗 Hewani" },
             { id: "NABATI", label: "🫘 Nabati" },
             { id: "SAYUR", label: "🥦 Sayur" },
@@ -753,7 +753,7 @@ export default function KonfigurasiSiklusMenuClient({
       <SiklusMenuMatrixTable
         items={filteredItems}
         activeSiklus={activeSiklus}
-        diitMap={diitMap}
+        dietOptions={dietOptions}
         onEditItem={handleEditItem}
         onAddItemToSlot={handleAddItemToSlot}
         onEditSlot={handleEditSlot}

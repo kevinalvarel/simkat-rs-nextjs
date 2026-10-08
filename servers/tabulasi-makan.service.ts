@@ -19,6 +19,8 @@ import type {
   TabulasiHospitalCategoryGroup,
   TabulasiHospitalData,
   TabulasiHospitalItem,
+  TabulasiTktpGabungan,
+  TabulasiTktpKelasRincian,
 } from '@/types/tabulasitypes';
 import {
   getDefaultMealtime,
@@ -148,10 +150,12 @@ export async function getTabulasiDashboardData(
     }
 
     // Tabulasi makan hanya untuk hidangan utama (pokok/hewani/nabati/sayur/extra).
-    // Buah dikecualikan: porsinya dihitung dari mapping pasien di tabulasi snack & buah.
-    slotMenuItems = slotMenuItems.filter(
-      (item) => (item.jenis_makanan || '').toUpperCase().trim() !== 'BUAH',
-    );
+    // Karbohidrat dikecualikan: porsinya mengikuti alur overview produksi.
+    // Buah dan snack dikecualikan: porsinya dihitung dari mapping pasien di tabulasi snack & buah.
+    slotMenuItems = slotMenuItems.filter((item) => {
+      const jenis = (item.jenis_makanan || '').toUpperCase().trim();
+      return jenis !== 'BUAH' && jenis !== 'SNACK' && jenis !== 'KARBOHIDRAT';
+    });
 
     // 5. Analyze patient diet tags
     const totalPatients = patientRecords.length;
@@ -246,16 +250,34 @@ export async function getTabulasiDashboardData(
     const matchedJenisByPatient = new Map<AnalyzedPatient, Set<string>>();
     const hospitalItemByDish = new Map<object, TabulasiHospitalItem>();
 
+    // Rincian per kelas khusus TKTP (1 pasien = 1 hitung per hidangan yang cocok).
+    const tktpRincianLama: TabulasiTktpKelasRincian = { kelas_1: 0, kelas_2: 0, kelas_3: 0 };
+    const tktpRincianBaru: TabulasiTktpKelasRincian = { kelas_1: 0, kelas_2: 0, kelas_3: 0 };
+
     for (const m of consolidatedMenuItems) {
       let porsiLama = 0;
       let porsiBaru = 0;
+
+      const isTktpDish =
+        (m.kategori_menu || '').toUpperCase().includes('TKTP') ||
+        (m.nama_makanan || '').toUpperCase().includes('TKTP');
 
       for (const ap of analyzed) {
         if (matchPatientToDish(ap, m)) {
           if (ap.gedungType === 'GEDUNG BARU') {
             porsiBaru++;
+            if (isTktpDish) {
+              if (ap.kelasType === 'KELAS_1') tktpRincianBaru.kelas_1++;
+              else if (ap.kelasType === 'KELAS_2') tktpRincianBaru.kelas_2++;
+              else tktpRincianBaru.kelas_3++;
+            }
           } else {
             porsiLama++;
+            if (isTktpDish) {
+              if (ap.kelasType === 'KELAS_1') tktpRincianLama.kelas_1++;
+              else if (ap.kelasType === 'KELAS_2') tktpRincianLama.kelas_2++;
+              else tktpRincianLama.kelas_3++;
+            }
           }
           let covered = matchedJenisByPatient.get(ap);
           if (!covered) {
@@ -272,10 +294,6 @@ export async function getTabulasiDashboardData(
         categoryGroupMap.set(groupTitle, []);
       }
 
-      const isTktpItem =
-        (m.kategori_menu || '').toUpperCase().includes('TKTP') ||
-        (m.nama_makanan || '').toUpperCase().includes('TKTP');
-
       const hospitalItem: TabulasiHospitalItem = {
         id: `m-${m.id}`,
         kategori: groupTitle,
@@ -284,7 +302,7 @@ export async function getTabulasiDashboardData(
         porsi_gedung_lama: porsiLama,
         porsi_gedung_baru: porsiBaru,
         total_porsi: porsiLama + porsiBaru,
-        is_tktp: isTktpItem,
+        is_tktp: isTktpDish,
         catatan: m.catatan || undefined,
       };
       categoryGroupMap.get(groupTitle)!.push(hospitalItem);
@@ -325,30 +343,6 @@ export async function getTabulasiDashboardData(
       }
     }
 
-    // Add dedicated TKTP line if TKTP patients exist and not yet covered
-    const tktpPatients = analyzed.filter((a) => a.isTktp && !a.isNpo);
-    if (tktpPatients.length > 0 && !categoryGroupMap.has('TKTP (EXTRA)')) {
-      const tLama = tktpPatients.filter(
-        (a) => a.gedungType === 'GEDUNG LAMA',
-      ).length;
-      const tBaru = tktpPatients.filter(
-        (a) => a.gedungType === 'GEDUNG BARU',
-      ).length;
-      categoryGroupMap.set('TKTP (EXTRA)', [
-        {
-          id: 'tktp-extra',
-          kategori: 'TKTP (EXTRA)',
-          nama_menu: 'Extra Telur Rebus / Putih Telur (TKTP)',
-          kode_diet: 'TKTP',
-          porsi_gedung_lama: tLama,
-          porsi_gedung_baru: tBaru,
-          total_porsi: tLama + tBaru,
-          is_tktp: true,
-          catatan: 'Porsi tambahan tinggi protein pasien TKTP',
-        },
-      ]);
-    }
-
     let totalPortionsLama = 0;
     let totalPortionsBaru = 0;
 
@@ -377,8 +371,68 @@ export async function getTabulasiDashboardData(
       return a.kategori.localeCompare(b.kategori);
     });
 
-    const allItems = categoryGroups.flatMap((g) => g.items);
-    const grandTotalPorsi = totalPortionsLama + totalPortionsBaru;
+    let allItems = categoryGroups.flatMap((g) => g.items);
+    let grandTotalPorsi = totalPortionsLama + totalPortionsBaru;
+
+    // Baris baru TKTP GABUNGAN: satu baris total semua kelas.
+    // Pemicu varian adalah nama menu beda per kelas hari itu.
+    // Baris ini ringkasan saja, tidak menambah grand total di atas.
+    let tktpGabungan: TabulasiTktpGabungan | null = null;
+    {
+      const tktpItems = allItems.filter((it) => it.is_tktp);
+      const gabLama = tktpItems.reduce((s, it) => s + it.porsi_gedung_lama, 0);
+      const gabBaru = tktpItems.reduce((s, it) => s + it.porsi_gedung_baru, 0);
+      if (tktpItems.length > 0 && gabLama + gabBaru > 0) {
+        const normName = (s: string) => (s || '').trim().toUpperCase();
+        const seen = new Map<string, { nama_menu: string; kelas: string; kode_diet: string }>();
+        for (const it of tktpItems) {
+          const key = normName(it.nama_menu);
+          if (!key) continue;
+          if (!seen.has(key)) {
+            seen.set(key, { nama_menu: it.nama_menu, kelas: it.kategori, kode_diet: it.kode_diet });
+          }
+        }
+        const varian = Array.from(seen.values()).sort((a, b) =>
+          a.nama_menu.localeCompare(b.nama_menu),
+        );
+        const is_uniform = varian.length <= 1;
+        tktpGabungan = {
+          kategori: 'TKTP GABUNGAN',
+          nama_menu: is_uniform
+            ? (varian[0]?.nama_menu || 'TKTP')
+            : varian.map((v) => v.nama_menu).join(' / '),
+          kode_diet: 'TKTP',
+          porsi_gedung_lama: gabLama,
+          porsi_gedung_baru: gabBaru,
+          total_porsi: gabLama + gabBaru,
+          is_uniform,
+          varian,
+          rincian_lama: { ...tktpRincianLama },
+          rincian_baru: { ...tktpRincianBaru },
+        };
+      }
+    }
+
+    // Baris TKTP per kelas tidak ditampilkan: hanya baris TKTP GABUNGAN yang dipakai.
+    // Total tetap sertakan porsi TKTP lewat gabungan agar angka dapur tidak berubah.
+    for (const group of categoryGroups) {
+      group.items = group.items.filter((it) => !it.is_tktp);
+      group.subtotalGedungLama = group.items.reduce((s, it) => s + it.porsi_gedung_lama, 0);
+      group.subtotalGedungBaru = group.items.reduce((s, it) => s + it.porsi_gedung_baru, 0);
+      group.subtotalSemua = group.subtotalGedungLama + group.subtotalGedungBaru;
+      if (group.items.length === 0) group.isTktp = false;
+    }
+    for (let i = categoryGroups.length - 1; i >= 0; i--) {
+      if (categoryGroups[i].items.length === 0) categoryGroups.splice(i, 1);
+    }
+    allItems = categoryGroups.flatMap((g) => g.items);
+    totalPortionsLama =
+      categoryGroups.reduce((s, g) => s + g.subtotalGedungLama, 0) +
+      (tktpGabungan?.porsi_gedung_lama ?? 0);
+    totalPortionsBaru =
+      categoryGroups.reduce((s, g) => s + g.subtotalGedungBaru, 0) +
+      (tktpGabungan?.porsi_gedung_baru ?? 0);
+    grandTotalPorsi = totalPortionsLama + totalPortionsBaru;
 
     // 7. Location & Diet breakdowns (feeding patients only)
     const lamaPatients = analyzed.filter(
@@ -538,6 +592,7 @@ export async function getTabulasiDashboardData(
       totalDietKhusus: specialDietCount,
       categoryGroups,
       allItems,
+      tktpGabungan,
     };
 
     const summary: TabulasiPatientSummary = {
@@ -583,6 +638,7 @@ export async function getTabulasiDashboardData(
       totalDietKhusus: 0,
       categoryGroups: [],
       allItems: [],
+      tktpGabungan: null,
     };
 
     return {

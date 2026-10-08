@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   Table,
   TableBody,
@@ -31,7 +31,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import type { SiklusMenuItem } from "@/servers/siklus-menu.service";
-import type { DiitWaktuKey } from "@/helper/siklus-menu/diit-helpers";
+import { computeDiitForSel } from "@/helper/siklus-menu/diit-helpers";
 import type { MenuTagOption } from "@/lib/siklus-menu-tags";
 import { deleteSiklusMenuItem } from "@/servers/siklus-menu.service";
 import { toast } from "sonner";
@@ -40,7 +40,7 @@ import { cn } from "@/lib/utils";
 interface SiklusMenuMatrixTableProps {
   items: SiklusMenuItem[];
   activeSiklus: number;
-  diitMap?: Record<DiitWaktuKey, MenuTagOption[]>;
+  dietOptions?: MenuTagOption[];
   onEditItem: (item: SiklusMenuItem) => void;
   onAddItemToSlot: (slot: {
     siklus_ke: number;
@@ -59,6 +59,8 @@ interface SiklusMenuMatrixTableProps {
 }
 
 const JENIS_BADGE_STYLE: Record<string, string> = {
+  KARBOHIDRAT:
+    "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-300",
   HEWANI:
     "bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 border-indigo-300",
   NABATI:
@@ -87,6 +89,11 @@ interface MatrixRowDefinition {
 
 // Baris matriks kanonis KELAS I/II/III (tanpa VIP; legacy II-III tetap dibaca di matcher)
 const STANDARD_ROWS: MatrixRowDefinition[] = [
+  {
+    id: "SEMUA-KARBOHIDRAT",
+    kelas: "Semua Kelas",
+    jenis_makanan: "KARBOHIDRAT",
+  },
   { id: "KELAS-I-HEWANI", kelas: "KELAS I", jenis_makanan: "HEWANI" },
   { id: "KELAS-II-HEWANI", kelas: "KELAS II", jenis_makanan: "HEWANI" },
   { id: "KELAS-III-HEWANI", kelas: "KELAS III", jenis_makanan: "HEWANI" },
@@ -110,7 +117,7 @@ const STANDARD_ROWS: MatrixRowDefinition[] = [
 export default function SiklusMenuMatrixTable({
   items,
   activeSiklus,
-  diitMap,
+  dietOptions = [],
   onEditItem,
   onAddItemToSlot,
   onEditSlot,
@@ -119,83 +126,99 @@ export default function SiklusMenuMatrixTable({
   const [itemToDelete, setItemToDelete] = useState<SiklusMenuItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  function renderDiitCell(waktu: DiitWaktuKey) {
-    const list = diitMap?.[waktu];
-    if (!list) return null;
-    if (waktu === "SARING") {
-      return (
-        <div className="flex flex-col items-center justify-center gap-1 py-1 text-center">
-          <span className="text-[10px] leading-tight text-muted-foreground/70 italic">
-            Saring jalur khusus
-            <br />
-            (NPO/TKTP/SARING dikecualikan)
-          </span>
-        </div>
-      );
-    }
-    if (list.length === 0) {
-      return (
-        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
-          ✓ Semua diet tercover
-        </span>
-      );
-    }
+  // Chip sisa diet per sel (tidak ada tulisan bila tertutup semua).
+  function renderDiitChipList(
+    list: MenuTagOption[] | null | undefined,
+    waktu: "PAGI" | "SIANG" | "SORE",
+  ) {
+    if (!list || list.length === 0) return null;
     return (
-      <div className="flex flex-wrap items-center justify-center gap-1">
-        {list.map((d) => (
-          <span
-            key={d.kode}
-            title={`${d.kode} · ${d.label} (${d.kategori}) — tidak ada hidangan ${waktu} dengan tag ini, otomatis masuk DIIT`}
-            className="inline-flex items-center rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 font-mono text-[10px] font-bold text-amber-800 dark:text-amber-300"
-          >
-            {d.kode}
-          </span>
-        ))}
+      <div className="pt-1.5 mt-1.5 border-t border-dashed border-amber-500/40">
+        <p
+          className="text-[9px] font-extrabold uppercase tracking-wider text-amber-700 dark:text-amber-400 pb-1"
+          title="DIIT = sisa tag diet aktif Konfigurasi Diet yang tidak dipakai hidangan pada jam tersebut. B/NPO/TKTP/SARING/DIIT dikecualikan."
+        >
+          Diet otomatis
+        </p>
+        <div className="flex flex-wrap items-center gap-1">
+          {list.map((d) => (
+            <span
+              key={d.kode}
+              title={`${d.kode} · ${d.label} (${d.kategori}) — tidak ada hidangan ${waktu} dengan tag ini, otomatis masuk DIIT`}
+              className="inline-flex items-center rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 font-mono text-[10px] font-bold text-amber-800 dark:text-amber-300"
+            >
+              {d.kode}
+            </span>
+          ))}
+        </div>
       </div>
     );
   }
 
   // Discover all distinct [kelas, jenis_makanan] pairs in items to ensure custom rows are shown too
-  const rowKeys = new Set<string>();
-  const matrixRows: MatrixRowDefinition[] = [];
+  const matrixRows: MatrixRowDefinition[] = useMemo(() => {
+    const rowKeys = new Set<string>();
+    const rows: MatrixRowDefinition[] = [];
 
-  // Add standard rows first
-  for (const std of STANDARD_ROWS) {
-    const key = `${std.kelas}__${std.jenis_makanan}`;
-    rowKeys.add(key);
-    matrixRows.push(std);
-  }
-
-  // Add any dynamic rows present in database items
-  for (const item of items) {
-    // Treat SARING & SNACK as special rows (sudah punya baris baku)
-    if (item.jenis_makanan === "SARING" || item.jenis_makanan === "SNACK")
-      continue;
-    // Skip 'Semua Kelas' items — they are shared data, not separate rows
-    if (
-      item.kelas === "Semua Kelas" ||
-      item.kelas === "ALL" ||
-      item.kelas === "Umum"
-    )
-      continue;
-
-    const key = `${item.kelas}__${item.jenis_makanan}`;
-    if (!rowKeys.has(key)) {
+    // Add standard rows first
+    for (const std of STANDARD_ROWS) {
+      const key = `${std.kelas}__${std.jenis_makanan}`;
       rowKeys.add(key);
-      matrixRows.push({
-        id: key,
-        kelas: item.kelas,
-        jenis_makanan: item.jenis_makanan,
-        hanyaSiangSore: item.jenis_makanan === "BUAH",
-        hanyaPagiSiang: item.jenis_makanan === "SNACK",
-      });
+      rows.push(std);
     }
-  }
+
+    // Add any dynamic rows present in database items
+    for (const item of items) {
+      // Treat SARING & SNACK as special rows (sudah punya baris baku)
+      if (item.jenis_makanan === "SARING" || item.jenis_makanan === "SNACK")
+        continue;
+      // Skip 'Semua Kelas' items — they are shared data, not separate rows
+      if (
+        item.kelas === "Semua Kelas" ||
+        item.kelas === "ALL" ||
+        item.kelas === "Umum"
+      )
+        continue;
+
+      const key = `${item.kelas}__${item.jenis_makanan}`;
+      if (!rowKeys.has(key)) {
+        rowKeys.add(key);
+        rows.push({
+          id: key,
+          kelas: item.kelas,
+          jenis_makanan: item.jenis_makanan,
+          hanyaSiangSore: item.jenis_makanan === "BUAH",
+          hanyaPagiSiang: item.jenis_makanan === "SNACK",
+        });
+      }
+    }
+    return rows;
+  }, [items]);
 
   // Items dedicated to SARING (SIANG)
   const saringSiangItems = items.filter(
     (i) => i.waktu_makan === "SARING" || i.jenis_makanan === "SARING",
   );
+
+  // Peta sisa diet per sel (kelas + jenis + jam). Sel tanpa sisa tidak tampil apa pun.
+  const diitSelMap = useMemo(() => {
+    const map = new Map<string, MenuTagOption[]>();
+    for (const row of matrixRows) {
+      for (const waktu of ["PAGI", "SIANG", "SORE"] as const) {
+        const leftover = computeDiitForSel(
+          row.jenis_makanan,
+          row.kelas,
+          waktu,
+          dietOptions,
+          items,
+        );
+        if (leftover.length > 0) {
+          map.set(`${row.kelas}__${row.jenis_makanan}__${waktu}`, leftover);
+        }
+      }
+    }
+    return map;
+  }, [matrixRows, dietOptions, items]);
 
   async function handleDeleteConfirm() {
     if (!itemToDelete) return;
@@ -262,6 +285,7 @@ export default function SiklusMenuMatrixTable({
     jenis_makanan: string,
     waktu_makan: string,
     customItems?: SiklusMenuItem[],
+    diitTags?: MenuTagOption[] | null,
   ) {
     const dishes =
       customItems || getCellDishes(kelas, jenis_makanan, waktu_makan);
@@ -339,6 +363,9 @@ export default function SiklusMenuMatrixTable({
             })
           )}
         </div>
+
+        {/* Chip DIIT otomatis per sel (tidak tampil bila tertutup semua) */}
+        {renderDiitChipList(diitTags, waktu_makan as "PAGI" | "SIANG" | "SORE")}
 
         {/* Slot Bottom Toolbar */}
         <div className="opacity-0 group-hover/slot:opacity-100 flex items-center justify-end gap-1 pt-2 transition-opacity">
@@ -427,31 +454,6 @@ export default function SiklusMenuMatrixTable({
                   </div>
                 </TableHead>
               </TableRow>
-              {diitMap && (
-                <TableRow className="bg-amber-500/5 hover:bg-amber-500/5 border-b">
-                  <TableHead
-                    colSpan={3}
-                    className="text-center border-r align-middle"
-                    title="DIIT = sisa tag diet aktif Konfigurasi Diet yang tidak dipakai hidangan pada jam tersebut. B/NPO/TKTP/SARING/DIIT dikecualikan."
-                  >
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-700 dark:text-amber-400">
-                      DIIT otomatis
-                    </span>
-                  </TableHead>
-                  <TableHead className="border-r align-middle p-1.5 min-w-[200px]">
-                    {renderDiitCell("PAGI")}
-                  </TableHead>
-                  <TableHead className="border-r align-middle p-1.5 min-w-[200px]">
-                    {renderDiitCell("SIANG")}
-                  </TableHead>
-                  <TableHead className="border-r align-middle p-1.5 min-w-[200px]">
-                    {renderDiitCell("SORE")}
-                  </TableHead>
-                  <TableHead className="align-middle p-1.5 min-w-[180px] bg-primary/5">
-                    {renderDiitCell("SARING")}
-                  </TableHead>
-                </TableRow>
-              )}
             </TableHeader>
 
             <TableBody>
@@ -523,13 +525,13 @@ export default function SiklusMenuMatrixTable({
                       </TableCell>
                     ) : (
                       <TableCell className="border-r align-top p-1 bg-background">
-                        {renderSlotCell(row.kelas, row.jenis_makanan, "PAGI")}
+                        {renderSlotCell(row.kelas, row.jenis_makanan, "PAGI", undefined, diitSelMap.get(`${row.kelas}__${row.jenis_makanan}__PAGI`))}
                       </TableCell>
                     )}
 
                     {/* MAKAN SIANG */}
                     <TableCell className="border-r align-top p-1 bg-background">
-                      {renderSlotCell(row.kelas, row.jenis_makanan, "SIANG")}
+                      {renderSlotCell(row.kelas, row.jenis_makanan, "SIANG", undefined, diitSelMap.get(`${row.kelas}__${row.jenis_makanan}__SIANG`))}
                     </TableCell>
 
                     {/* MAKAN SORE — Snack hanya tersedia Pagi & Siang */}
@@ -548,7 +550,7 @@ export default function SiklusMenuMatrixTable({
                       </TableCell>
                     ) : (
                       <TableCell className="border-r align-top p-1 bg-background">
-                        {renderSlotCell(row.kelas, row.jenis_makanan, "SORE")}
+                        {renderSlotCell(row.kelas, row.jenis_makanan, "SORE", undefined, diitSelMap.get(`${row.kelas}__${row.jenis_makanan}__SORE`))}
                       </TableCell>
                     )}
 

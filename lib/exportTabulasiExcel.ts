@@ -12,7 +12,7 @@ export function exportTabulasiToExcel(
   const wb = XLSX.utils.book_new();
 
   // 1. Construct Rows matching the physical paper sheet
-  const rows: any[][] = [];
+  const rows: (string | number)[][] = [];
 
   // Title / Blank
   rows.push(['TABULASI KEBUTUHAN MAKANAN PASIEN INSTALASI GIZI RS']);
@@ -72,6 +72,28 @@ export function exportTabulasiToExcel(
         item.nama_menu,
         item.kode_diet,
         item.porsi_gedung_baru,
+      ]);
+    }
+
+    // Baris baru TKTP GABUNGAN: satu baris total semua kelas, plus rincian
+    // Kelas I/II/III di nama bila varian beda hari itu.
+    const gab = data.hospitalData.tktpGabungan;
+    if (gab && gab.total_porsi > 0) {
+      const namaLama = gab.is_uniform
+        ? gab.nama_menu
+        : `${gab.nama_menu} (Lama I:${gab.rincian_lama.kelas_1} II:${gab.rincian_lama.kelas_2} III:${gab.rincian_lama.kelas_3})`;
+      const namaBaru = gab.is_uniform
+        ? gab.nama_menu
+        : `${gab.nama_menu} (Baru I:${gab.rincian_baru.kelas_1} II:${gab.rincian_baru.kelas_2} III:${gab.rincian_baru.kelas_3})`;
+      rows.push([
+        'TKTP GABUNGAN',
+        namaLama,
+        'TKTP',
+        gab.porsi_gedung_lama,
+        'TKTP GABUNGAN',
+        namaBaru,
+        'TKTP',
+        gab.porsi_gedung_baru,
       ]);
     }
 
@@ -173,6 +195,43 @@ export function exportTabulasiToHtmlExcel(
   dateStr: string = '30/06/2026',
   mealTime: string = 'PAGI'
 ) {
+  // Tabel tengah dibuat dinamis dari data nyata (bukan contoh statis),
+  // agar baris TKTP GABUNGAN ikut tercetak.
+  const escHtml = (v: string | number) =>
+    String(v)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  const excelItems = data.hospitalData?.allItems ?? [];
+  const excelGab = data.hospitalData?.tktpGabungan ?? null;
+  const gabLamaLabel =
+    excelGab && !excelGab.is_uniform
+      ? ` (Lama I:${excelGab.rincian_lama.kelas_1} II:${excelGab.rincian_lama.kelas_2} III:${excelGab.rincian_lama.kelas_3})`
+      : '';
+  const gabBaruLabel =
+    excelGab && !excelGab.is_uniform
+      ? ` (Baru I:${excelGab.rincian_baru.kelas_1} II:${excelGab.rincian_baru.kelas_2} III:${excelGab.rincian_baru.kelas_3})`
+      : '';
+  const middleLamaRows =
+    excelItems
+      .map(
+        (it) =>
+          `<tr><td class="text-left">${escHtml(it.nama_menu)} (${escHtml(it.kode_diet)})</td><td class="bold">${it.porsi_gedung_lama}</td></tr>`,
+      )
+      .join('') +
+    (excelGab && excelGab.total_porsi > 0
+      ? `<tr class="bg-yellow-light bold"><td class="text-left">TKTP GABUNGAN: ${escHtml(excelGab.nama_menu)}${escHtml(gabLamaLabel)}</td><td>${excelGab.porsi_gedung_lama}</td></tr>`
+      : '');
+  const middleBaruRows =
+    excelItems
+      .map(
+        (it) =>
+          `<tr><td class="text-left">${escHtml(it.nama_menu)} (${escHtml(it.kode_diet)})</td><td class="bold">${it.porsi_gedung_baru}</td></tr>`,
+      )
+      .join('') +
+    (excelGab && excelGab.total_porsi > 0
+      ? `<tr class="bg-yellow-light bold"><td class="text-left">TKTP GABUNGAN: ${escHtml(excelGab.nama_menu)}${escHtml(gabBaruLabel)}</td><td>${excelGab.porsi_gedung_baru}</td></tr>`
+      : '');
   const htmlContent = `
     <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
     <head>
@@ -257,21 +316,7 @@ export function exportTabulasiToHtmlExcel(
                 </tr>
               </thead>
               <tbody>
-                <tr><td class="text-left">Otak-Otak Ayam Panggang (B)</td><td class="bold">5</td></tr>
-                <tr><td class="text-left">Otak-Otak Ayam Panggang (RG)</td><td class="bold">11</td></tr>
-                <tr><td class="text-left">Telur Ceplok Asam Manis (B)</td><td class="bold">132</td></tr>
-                <tr><td class="text-left">Telur Ceplok Cetak Mawar Bumbu Merah Daun Jeruk (Diit,DM)</td><td class="bold">2</td></tr>
-                <tr><td class="text-left">Telur Ceplok Cetak Mawar Bumbu Merah Daun Jeruk (RG)</td><td class="bold">29</td></tr>
-                <tr><td class="text-left">Putih Telur Bumbu Merah Daun Jeruk (DJ, RL, RKOL)</td><td class="bold">26</td></tr>
-                <tr><td class="text-left">Oseng Tempe Buncis (B, Diit)</td><td class="bold">153</td></tr>
-                <tr><td class="text-left">Oseng Tempe Buncis Basah (RG, DM) *PAKE KECAP DM</td><td class="bold">52</td></tr>
-                <tr><td class="text-left">Sup Cocktail (Buncis, Wortel, Jg.Manis) (B)</td><td class="bold">116</td></tr>
-                <tr><td class="text-left">Sup Cocktail (Buncis, Wortel, Jg.Manis) (RG)</td><td class="bold">38</td></tr>
-                <tr><td class="text-left">Sup Cocktail (Buncis, Wortel) (DM)</td><td class="bold">14</td></tr>
-                <tr><td class="text-left">Sup Cocktail (Wortel) (RP, RS)</td><td class="bold">37</td></tr>
-                <tr class="bg-yellow-light bold"><td class="text-left">Telur Puyuh BB Rendang</td><td>45</td></tr>
-                <tr class="bg-yellow-light bold"><td class="text-left">BSS MANIS (TELUR+KINCA)</td><td>19</td></tr>
-                <tr class="bg-yellow-light bold"><td class="text-left">PUTEL CETAK</td><td>6</td></tr>
+                ${middleLamaRows}
               </tbody>
             </table>
           </td>
@@ -286,20 +331,7 @@ export function exportTabulasiToHtmlExcel(
                 </tr>
               </thead>
               <tbody>
-                <tr><td class="text-left">Otak-Otak Ayam Panggang (RG)</td><td class="bold">1</td></tr>
-                <tr><td class="text-left">Telur Ceplok Asam Manis (B)</td><td class="bold">29</td></tr>
-                <tr><td class="text-left">Telur Ceplok Cetak Mawar Bumbu Merah Daun Jeruk (Diit,DM)</td><td class="bold">8</td></tr>
-                <tr><td class="text-left">Telur Ceplok Cetak Mawar Bumbu Merah Daun Jeruk (RG)</td><td class="bold">9</td></tr>
-                <tr><td class="text-left">Putih Telur Bumbu Merah Daun Jeruk (DJ, RL, RKOL)</td><td class="bold">3</td></tr>
-                <tr><td class="text-left">Oseng Tempe Buncis (B, Diit)</td><td class="bold">36</td></tr>
-                <tr><td class="text-left">Oseng Tempe Buncis Basah (RG, DM) *PAKE KECAP DM</td><td class="bold">14</td></tr>
-                <tr><td class="text-left">Sup Cocktail (Buncis, Wortel, Jg.Manis) (B)</td><td class="bold">31</td></tr>
-                <tr><td class="text-left">Sup Cocktail (Buncis, Wortel, Jg.Manis) (RG)</td><td class="bold">12</td></tr>
-                <tr><td class="text-left">Sup Cocktail (Buncis, Wortel) (DM)</td><td class="bold">2</td></tr>
-                <tr><td class="text-left">Sup Cocktail (Wortel) (RP, RS)</td><td class="bold">5</td></tr>
-                <tr class="bg-yellow-light bold"><td class="text-left">Telur Puyuh BB Rendang</td><td>13</td></tr>
-                <tr class="bg-yellow-light bold"><td class="text-left">BSS MANIS (TELUR+KINCA)</td><td>5</td></tr>
-                <tr class="bg-yellow-light bold"><td class="text-left">PUTEL CETAK</td><td>3</td></tr>
+                ${middleBaruRows}
               </tbody>
             </table>
           </td>

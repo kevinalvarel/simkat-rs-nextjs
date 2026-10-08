@@ -188,6 +188,38 @@ export interface TabulasiHospitalItem {
   catatan?: string;
 }
 
+/** Satu varian hidangan TKTP yang muncul di hari itu (beda nama per kelas). */
+export interface TabulasiTktpVarian {
+  nama_menu: string;
+  kelas: string;
+  kode_diet: string;
+}
+
+/** Rincian porsi per kelas untuk baris TKTP gabungan. */
+export interface TabulasiTktpKelasRincian {
+  kelas_1: number;
+  kelas_2: number;
+  kelas_3: number;
+}
+
+/**
+ * Baris baru TKTP GABUNGAN: satu baris total semua kelas.
+ * Bila nama menu sama semua kelas -> tampil total saja.
+ * Bila nama menu beda per kelas -> tampil satu baris plus rincian Kelas I/II/III.
+ */
+export interface TabulasiTktpGabungan {
+  kategori: string; // selalu "TKTP GABUNGAN"
+  nama_menu: string;
+  kode_diet: string; // selalu "TKTP"
+  porsi_gedung_lama: number;
+  porsi_gedung_baru: number;
+  total_porsi: number;
+  is_uniform: boolean;
+  varian: TabulasiTktpVarian[];
+  rincian_lama: TabulasiTktpKelasRincian;
+  rincian_baru: TabulasiTktpKelasRincian;
+}
+
 export interface TabulasiHospitalCategoryGroup {
   kategori: string;
   items: TabulasiHospitalItem[];
@@ -220,6 +252,8 @@ export interface TabulasiHospitalData {
   // Grouped by Category for Hospital Table
   categoryGroups: TabulasiHospitalCategoryGroup[];
   allItems: TabulasiHospitalItem[];
+  /** Baris TKTP GABUNGAN (null bila hari itu tidak ada porsi TKTP). */
+  tktpGabungan: TabulasiTktpGabungan | null;
 }
 
 export interface TabulasiDashboardData {

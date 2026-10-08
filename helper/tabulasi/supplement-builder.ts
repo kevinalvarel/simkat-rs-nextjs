@@ -147,9 +147,11 @@ export function buildSupplementResult(
         hasDiitTag(item.kategori_menu),
       );
 
-      const item = tagged || dietMatched || diitFallback || generic;
+      const item = tagged || dietMatched || generic || diitFallback;
+      // Tanpa diet: satu baris per hidangan (bukan per kode) agar tidak
+      // hitung ganda saat pasien punya beberapa kode untuk hidangan sama.
       const rowId = item
-        ? `${kindLabel}-${item.id}-${code}`
+        ? `${kindLabel}-${item.id}`
         : `missing-${kindLabel}-${slot}-${code}`;
       const category = item
         ? `${kind} ${slot}`
@@ -256,6 +258,7 @@ export function buildSupplementResult(
       totalDietKhusus: specialDietCount,
       categoryGroups,
       allItems,
+      tktpGabungan: null,
     },
   };
 }

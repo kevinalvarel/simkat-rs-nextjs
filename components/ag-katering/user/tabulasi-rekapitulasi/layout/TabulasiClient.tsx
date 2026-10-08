@@ -1,17 +1,17 @@
-'use client';
+"use client";
 
-import React, { useState, useTransition } from 'react';
-import type { TabulasiDashboardData } from '@/types/tabulasitypes';
-import { getTabulasiDashboardData } from '@/servers/tabulasi.service';
-import TabulasiHeader from './TabulasiHeader';
-import TabulasiStatsCards from './TabulasiStatsCards';
-import TabulasiHospitalTable from './TabulasiHospitalTable';
-import TabulasiPrintModal from './TabulasiPrintModal';
-import TabulasiGenerateModal from './TabulasiGenerateModal';
-import TabulasiExportModal from './TabulasiExportModal';
-import { RefreshCw, FileQuestion, Sparkles } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { toast } from 'sonner';
+import React, { useState, useTransition } from "react";
+import type { TabulasiDashboardData } from "@/types/tabulasitypes";
+import { getTabulasiDashboardData } from "@/servers/tabulasi.service";
+import TabulasiHeader from "./TabulasiHeader";
+import TabulasiStatsCards from "./TabulasiStatsCards";
+import TabulasiHospitalTable from "./TabulasiHospitalTable";
+import TabulasiPrintModal from "./TabulasiPrintModal";
+import TabulasiGenerateModal from "./TabulasiGenerateModal";
+import TabulasiExportModal from "./TabulasiExportModal";
+import { RefreshCw, FileQuestion, Sparkles } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 interface TabulasiClientProps {
   initialData: TabulasiDashboardData;
@@ -27,7 +27,7 @@ export default function TabulasiClient({ initialData }: TabulasiClientProps) {
   const [selectedMeal, setSelectedMeal] = useState<string>(
     initialData.hospitalData?.waktuMakan ||
       initialData.batch?.waktu_makan ||
-      'Siang',
+      "Siang",
   );
 
   // Modals state
@@ -50,11 +50,11 @@ export default function TabulasiClient({ initialData }: TabulasiClientProps) {
         );
         setData(refreshed);
         toast.success(
-          `Data tabulasi ${targetMeal} (${targetDate}) - ${refreshed.hospitalData?.siklusNama || 'Siklus Otomatis'} berhasil dimuat.`,
+          `Data tabulasi ${targetMeal} (${targetDate}) - ${refreshed.hospitalData?.siklusNama || "Siklus Otomatis"} berhasil dimuat.`,
         );
       } catch (err) {
-        console.error('Error refreshing tabulation data:', err);
-        toast.error('Gagal memuat data tabulasi.');
+        console.error("Error refreshing tabulation data:", err);
+        toast.error("Gagal memuat data tabulasi.");
       }
     });
   }
@@ -75,7 +75,7 @@ export default function TabulasiClient({ initialData }: TabulasiClientProps) {
   const hospitalData = data?.hospitalData;
 
   return (
-    <div className='flex flex-1 flex-col gap-6 p-3.5 sm:p-5 md:p-6 lg:p-8 max-w-7xl mx-auto w-full min-w-0 overflow-x-hidden'>
+    <div className="flex flex-1 flex-col gap-6 p-3.5 sm:p-5 md:p-6 lg:p-8 max-w-7xl mx-auto w-full min-w-0 overflow-x-hidden">
       {/* 1. Header with Actions, Date Filter, Automatic Cycle Badge, & Meal Selector */}
       {hospitalData && (
         <TabulasiHeader
@@ -94,18 +94,18 @@ export default function TabulasiClient({ initialData }: TabulasiClientProps) {
 
       {/* Loading Overlay */}
       {isPending ? (
-        <div className='flex flex-col items-center justify-center p-16 space-y-3 border border-border/80 rounded-2xl bg-card shadow-2xs'>
-          <RefreshCw className='w-8 h-8 animate-spin text-primary' />
-          <p className='text-sm font-bold text-foreground'>
+        <div className="flex flex-col items-center justify-center p-16 space-y-3 border border-border/80 rounded-2xl bg-card shadow-2xs">
+          <RefreshCw className="w-8 h-8 animate-spin text-primary" />
+          <p className="text-sm font-bold text-foreground">
             Menghitung ulang porsi hidangan dari siklus menu realtime...
           </p>
-          <p className='text-xs text-muted-foreground'>
+          <p className="text-xs text-muted-foreground">
             Menyelaraskan data pasien Gedung Lama & Gedung Baru dengan standar
             diet RS.
           </p>
         </div>
-      ) : hospitalData && hospitalData.allItems.length > 0 ? (
-        <div className='space-y-6'>
+      ) : hospitalData && (hospitalData.allItems.length > 0 || hospitalData.tktpGabungan) ? (
+        <div className="space-y-6">
           {/* 2. Key KPI Stats Cards (Porsi, Gedung Lama, Gedung Baru, Pasien Makan, Diet Khusus) */}
           <TabulasiStatsCards hospitalData={hospitalData} />
 
@@ -114,15 +114,15 @@ export default function TabulasiClient({ initialData }: TabulasiClientProps) {
         </div>
       ) : (
         /* Empty State */
-        <div className='text-center p-16 border border-dashed border-border rounded-2xl bg-card space-y-4'>
-          <div className='p-4 rounded-full bg-primary/10 text-primary w-fit mx-auto'>
-            <FileQuestion className='w-10 h-10' />
+        <div className="text-center p-16 border border-dashed border-border rounded-2xl bg-card space-y-4">
+          <div className="p-4 rounded-full bg-primary/10 text-primary w-fit mx-auto">
+            <FileQuestion className="w-10 h-10" />
           </div>
-          <div className='space-y-1 max-w-md mx-auto'>
-            <h3 className='text-base font-bold text-foreground'>
+          <div className="space-y-1 max-w-md mx-auto">
+            <h3 className="text-base font-bold text-foreground">
               Belum Ada Tabulasi untuk Waktu Makan Ini
             </h3>
-            <p className='text-xs text-muted-foreground'>
+            <p className="text-xs text-muted-foreground">
               Belum ada data porsi makanan untuk tanggal dan waktu makan yang
               dipilih. Silakan generate tabulasi baru untuk memulai
               rekapitulasi.
@@ -130,9 +130,9 @@ export default function TabulasiClient({ initialData }: TabulasiClientProps) {
           </div>
           <Button
             onClick={() => setIsGenerateOpen(true)}
-            className='gap-2 text-xs font-bold rounded-xl bg-primary text-primary-foreground cursor-pointer'
+            className="gap-2 text-xs font-bold rounded-xl bg-primary text-primary-foreground cursor-pointer"
           >
-            <Sparkles className='w-4 h-4 text-yellow-300' />
+            <Sparkles className="w-4 h-4 text-yellow-300" />
             Generate Tabulasi Sekarang
           </Button>
         </div>

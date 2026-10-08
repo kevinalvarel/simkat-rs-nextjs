@@ -19,11 +19,9 @@ import {
   RefreshCw,
   Filter,
   ArrowUpDown,
-  Notebook,
-  Utensils,
 } from "lucide-react";
 
-import { FaBowlRice, FaStethoscope, FaUtensils } from "react-icons/fa6";
+import { FaBowlRice, FaUtensils } from "react-icons/fa6";
 import {
   GiBanana,
   GiBroccoli,
@@ -49,12 +47,12 @@ const CATEGORY_TABS: Array<{
   icon: React.ReactNode;
 }> = [
   { id: "ALL", label: "Semua Kategori", icon: <GiNotebook size="14" /> },
+  { id: "KARBOHIDRAT", label: "Karbohidrat", icon: <FaBowlRice size="14" /> },
   {
     id: "BENTUK_MAKANAN",
     label: "Bentuk Makanan",
     icon: <FaUtensils size="14" />,
   },
-  { id: "KARBOHIDRAT", label: "Karbohidrat", icon: <FaBowlRice size="14" /> },
   { id: "HEWANI", label: "Lauk Hewani", icon: <GiMeat size="14" /> },
   { id: "NABATI", label: "Lauk Nabati", icon: <GiPlantSeed size="14" /> },
   { id: "SAYUR", label: "Sayur", icon: <GiBroccoli size="14" /> },
@@ -104,7 +102,7 @@ export default function KonfigurasiMenuClient({
     }
   }
 
-  // Filter & Sort items
+  // Filter & Sort items (Karbohidrat selalu paling atas)
   const filteredAndSortedItems = useMemo(() => {
     const filtered = items.filter((item) => {
       // Category filter
@@ -126,6 +124,11 @@ export default function KonfigurasiMenuClient({
     });
 
     return [...filtered].sort((a, b) => {
+      // Karbohidrat selalu paling atas apa pun mode urutnya
+      const aIsKarbo = a.nama_kategori === "KARBOHIDRAT" ? 0 : 1;
+      const bIsKarbo = b.nama_kategori === "KARBOHIDRAT" ? 0 : 1;
+      if (aIsKarbo !== bIsKarbo) return aIsKarbo - bIsKarbo;
+
       let comparison = 0;
       if (sortBy === "kategori") {
         comparison = a.nama_kategori.localeCompare(b.nama_kategori);
@@ -185,8 +188,9 @@ export default function KonfigurasiMenuClient({
             </Badge>
           </div>
           <p className="text-xs sm:text-sm text-muted-foreground">
-            Kelola master data item menu katering (Bentuk Makanan, Hewani,
-            Nabati, Sayur, Buah, Snack) untuk standarisasi etiket & laporan.
+            Kelola master data item menu katering (Karbohidrat, Bentuk Makanan,
+            Hewani, Nabati, Sayur, Buah, Snack) untuk standarisasi etiket &
+            laporan.
           </p>
         </div>
 

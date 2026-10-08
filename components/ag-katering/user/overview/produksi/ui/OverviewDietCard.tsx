@@ -96,7 +96,15 @@ export default function OverviewDietCard({ card }: OverviewDietCardProps) {
   const isDiitCard =
     card.isDiit === true || code.startsWith('DIIT-MENU-');
 
-  const showDietTag = card.dietTag && card.dietTag !== '-';
+  // Makanan pokok / saring tidak perlu rincian diet, cukup total porsi.
+  const hideDietDetail = categoryKey === 'POKOK' || categoryKey === 'SARING';
+
+  const showDietTag =
+    !hideDietDetail && card.dietTag && card.dietTag !== '-';
+  const breakdown = (card.dietBreakdown || [])
+    .filter((b) => b && b.count > 0 && (b.diet || '').trim() !== '')
+    .sort((a, b) => (a.diet || '').localeCompare(b.diet || ''));
+  const showBreakdown = !hideDietDetail && breakdown.length > 0;
 
   return (
     <Card className='border bg-card flex flex-col justify-between overflow-hidden rounded-2xl shadow-xs'>
@@ -138,9 +146,26 @@ export default function OverviewDietCard({ card }: OverviewDietCardProps) {
         )}
       </div>
 
-      {/* Keterangan diet */}
+      {/* Rincian diet per kode agar produksi jelas: RL: 2 DJ: 1.
+          Makanan pokok / saring sengaja tanpa tag, cukup total porsi. */}
       <div className='px-4 pb-2 text-center min-h-[1.75rem]'>
-        {showDietTag ? (
+        {hideDietDetail ? (
+          <span className='inline-block min-h-[1.75rem]' aria-hidden='true' />
+        ) : showBreakdown ? (
+          <div className='flex flex-wrap items-center justify-center gap-1.5'>
+            {breakdown.map((item) => (
+              <span
+                key={item.diet}
+                title={`${item.diet}: ${item.count} porsi`}
+                className='inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-sm font-mono font-bold bg-emerald-600/10 text-emerald-800 dark:text-emerald-200 border border-emerald-600/20'
+              >
+                <span>{item.diet}</span>
+                <span className='opacity-60'>:</span>
+                <span>{item.count}</span>
+              </span>
+            ))}
+          </div>
+        ) : showDietTag ? (
           <span className='inline-flex items-center px-2.5 py-1 rounded-lg text-sm font-mono font-bold bg-primary/10 text-primary border border-primary/20'>
             {card.dietTag}
           </span>

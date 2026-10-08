@@ -189,6 +189,32 @@ export default function TabulasiPrintModal({
                         </React.Fragment>
                       );
                     })}
+                    {hospitalData.tktpGabungan && hospitalData.tktpGabungan.total_porsi > 0 && (
+                      <tr className='border-b border-black bg-[#ffec8b] font-bold'>
+                        <td className='border-r border-black p-1 font-bold align-top'>
+                          TKTP GABUNGAN
+                        </td>
+                        <td className='border-r border-black p-1'>
+                          {hospitalData.tktpGabungan.nama_menu}
+                          {!hospitalData.tktpGabungan.is_uniform && (
+                            <span className='block font-normal'>
+                              {hospitalData.tktpGabungan.varian
+                                .map((v) => `${v.nama_menu} (${v.kelas})`)
+                                .join(' / ')}
+                              {' '}— Lama I:{hospitalData.tktpGabungan.rincian_lama.kelas_1} II:
+                              {hospitalData.tktpGabungan.rincian_lama.kelas_2} III:
+                              {hospitalData.tktpGabungan.rincian_lama.kelas_3}
+                            </span>
+                          )}
+                        </td>
+                        <td className='border-r border-black p-1 text-center font-bold'>
+                          TKTP
+                        </td>
+                        <td className='p-1 text-center font-bold font-mono'>
+                          {hospitalData.tktpGabungan.porsi_gedung_lama}
+                        </td>
+                      </tr>
+                    )}
                     <tr className='bg-[#b4d330] text-black font-bold border-t-2 border-black'>
                       <td
                         colSpan={3}
@@ -252,6 +278,32 @@ export default function TabulasiPrintModal({
                         </React.Fragment>
                       );
                     })}
+                    {hospitalData.tktpGabungan && hospitalData.tktpGabungan.total_porsi > 0 && (
+                      <tr className='border-b border-black bg-[#ffec8b] font-bold'>
+                        <td className='border-r border-black p-1 font-bold align-top'>
+                          TKTP GABUNGAN
+                        </td>
+                        <td className='border-r border-black p-1'>
+                          {hospitalData.tktpGabungan.nama_menu}
+                          {!hospitalData.tktpGabungan.is_uniform && (
+                            <span className='block font-normal'>
+                              {hospitalData.tktpGabungan.varian
+                                .map((v) => `${v.nama_menu} (${v.kelas})`)
+                                .join(' / ')}
+                              {' '}— Baru I:{hospitalData.tktpGabungan.rincian_baru.kelas_1} II:
+                              {hospitalData.tktpGabungan.rincian_baru.kelas_2} III:
+                              {hospitalData.tktpGabungan.rincian_baru.kelas_3}
+                            </span>
+                          )}
+                        </td>
+                        <td className='border-r border-black p-1 text-center font-bold'>
+                          TKTP
+                        </td>
+                        <td className='p-1 text-center font-bold font-mono'>
+                          {hospitalData.tktpGabungan.porsi_gedung_baru}
+                        </td>
+                      </tr>
+                    )}
                     <tr className='bg-[#b4d330] text-black font-bold border-t-2 border-black'>
                       <td
                         colSpan={3}

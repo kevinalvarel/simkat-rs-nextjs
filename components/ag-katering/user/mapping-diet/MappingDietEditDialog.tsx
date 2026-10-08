@@ -55,7 +55,8 @@ export default function MappingDietEditDialog({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Group options strictly from DB kategori_menu table
-  // Bentuk makanan dan karbohidrat dari Konfigurasi Diet; hewani–snack dari siklus menu.
+  // Bentuk makanan dan karbohidrat dari Konfigurasi Diet; hewani dari siklus menu.
+  // Nabati, sayur, buah, snack tanpa diet sehingga opsinya dari Konfigurasi Diet.
   const bentukOptions = useMemo(
     () =>
       options.filter(
@@ -75,23 +76,23 @@ export default function MappingDietEditDialog({
   );
 
   const nabatiOptions = useMemo(
-    () => siklusDietOptionsForKind(siklusDietOptions, 'NABATI'),
-    [siklusDietOptions],
+    () => options.filter((o) => o.namaKategori === 'NABATI'),
+    [options],
   );
 
   const sayurOptions = useMemo(
-    () => siklusDietOptionsForKind(siklusDietOptions, 'SAYUR'),
-    [siklusDietOptions],
+    () => options.filter((o) => o.namaKategori === 'SAYUR'),
+    [options],
   );
 
   const buahOptions = useMemo(
-    () => siklusDietOptionsForKind(siklusDietOptions, 'BUAH'),
-    [siklusDietOptions],
+    () => options.filter((o) => o.namaKategori === 'BUAH'),
+    [options],
   );
 
   const snackOptions = useMemo(
-    () => siklusDietOptionsForKind(siklusDietOptions, 'SNACK'),
-    [siklusDietOptions],
+    () => options.filter((o) => o.namaKategori === 'SNACK'),
+    [options],
   );
 
   // Kode bentuk yang berflag tugas AG Katering → otomatis masuk Live Katering

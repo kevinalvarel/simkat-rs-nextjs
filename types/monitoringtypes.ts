@@ -13,12 +13,19 @@ export type MenuCategoryGroup =
   | 'NPO'
   | 'LAINNYA';
 
+export interface DietBreakdownItem {
+  diet: string;
+  count: number;
+}
+
 export interface MonitoringCardData {
   code: string; // Unique dish key or identifier
   name: string; // Display name (e.g. "Ayam Bumbu Kecap", "Nasi Putih", "Sayur Bayam")
   category?: MenuCategoryGroup | string; // e.g. "HEWANI", "NABATI", "SAYUR", "POKOK", "EXTRA", "BUAH", "SNACK", "NPO"
   kelas?: string; // e.g. "Semua Kelas", "KELAS I", "KELAS II", "KELAS III"
   dietTag?: string; // e.g. "Biasa", "RG", "DM", "TKTP"
+  /** Rincian per diet untuk produksi, mis. [{ diet: 'RL', count: 2 }, { diet: 'DJ', count: 1 }] */
+  dietBreakdown?: DietBreakdownItem[];
   catatan?: string;
   /** True bila kartu penampung DIIT (nama = hidangan DIIT, dietTag = kode diet mapping). */
   isDiit?: boolean;
