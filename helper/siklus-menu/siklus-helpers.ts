@@ -191,7 +191,8 @@ export function buildSiklusDietOptions(
     const seen = new Set<string>();
     for (const tag of parseMenuTags(row.kategori_menu)) {
       const key = tag.trim().toUpperCase();
-      if (!key || seen.has(key)) continue;
+      // DIIT adalah penampung fallback, bukan pilihan diet mapping.
+      if (!key || key === "DIIT" || seen.has(key)) continue;
       seen.add(key);
       const mapKey = `${jenis}__${key}`;
       if (!singles.has(mapKey)) {

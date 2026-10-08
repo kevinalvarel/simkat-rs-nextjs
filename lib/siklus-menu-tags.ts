@@ -4,6 +4,25 @@ export interface MenuTagOption {
   kategori: string;
 }
 
+/**
+ * Kode tag fallback universal: hidangan penampung untuk diet yang tidak
+ * terdaftar spesifik di slot jam tersebut (mis. DH tidak ada hidangannya
+ * di Siang → pasien DH memakai hidangan DIIT slot itu).
+ * Selalu tersedia di semua jenis makanan tanpa perlu baris master khusus.
+ */
+export const DIIT_TAG_CODE = "DIIT";
+export const DIIT_TAG_LABEL = "DIIT (fallback diet tak terdaftar)";
+
+/**
+ * True bila nilai kategori_menu (CSV multi-tag) memuat token DIIT
+ * (case-insensitive) — hidangan penampung diet tak terdaftar spesifik.
+ */
+export function hasDiitTag(value: string | null | undefined): boolean {
+  return parseMenuTags(value).some(
+    (tag) => tag.trim().toUpperCase() === DIIT_TAG_CODE,
+  );
+}
+
 export function parseMenuTags(value: string | null | undefined): string[] {
   return (value || '')
     .split(',')
@@ -18,7 +37,7 @@ export function getMenuTagOptions(
   const category = (jenisMakanan || '').trim().toUpperCase();
   const seen = new Set<string>();
 
-  return options.filter((option) => {
+  const result = options.filter((option) => {
     const code = option.kode.trim().toUpperCase();
     if (!code || option.kategori.trim().toUpperCase() !== category || seen.has(code)) {
       return false;
@@ -26,6 +45,13 @@ export function getMenuTagOptions(
     seen.add(code);
     return true;
   });
+
+  // Tag DIIT selalu tersedia sebagai fallback universal di semua jenis.
+  if (category && !seen.has(DIIT_TAG_CODE)) {
+    result.push({ kode: DIIT_TAG_CODE, label: DIIT_TAG_LABEL, kategori: category });
+  }
+
+  return result;
 }
 
 export function normalizeMenuTags(

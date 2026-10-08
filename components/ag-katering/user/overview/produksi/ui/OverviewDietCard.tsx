@@ -93,18 +93,30 @@ export default function OverviewDietCard({ card }: OverviewDietCardProps) {
     (card.name || '').toLowerCase().includes('tidak ada di siklus menu') ||
     code.startsWith('MISSING-');
 
+  const isDiitCard =
+    card.isDiit === true || code.startsWith('DIIT-MENU-');
+
   const showDietTag = card.dietTag && card.dietTag !== '-';
 
   return (
     <Card className='border bg-card flex flex-col justify-between overflow-hidden rounded-2xl shadow-xs'>
       {/* Kategori */}
-      <div className='pt-4 pb-2 px-4 text-center'>
+      <div className='pt-4 pb-2 px-4 text-center flex items-center justify-center gap-1.5 flex-wrap'>
         <Badge
           variant='outline'
           className={`text-xs font-bold px-3 py-1 ${categoryStyle.bgBadge} ${categoryStyle.borderBadge}`}
         >
           {categoryStyle.label}
         </Badge>
+        {isDiitCard && (
+          <Badge
+            variant='outline'
+            title='Menu penampung DIIT: diet ini tidak punya hidangan spesifik di slot jam ini'
+            className='text-[10px] font-extrabold px-2 py-0.5 bg-amber-500/10 text-amber-800 dark:text-amber-300 border-amber-500/40'
+          >
+            DIIT
+          </Badge>
+        )}
       </div>
 
       {/* Nama hidangan */}

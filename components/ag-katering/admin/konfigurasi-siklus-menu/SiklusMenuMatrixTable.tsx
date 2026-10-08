@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   Table,
   TableBody,
@@ -8,9 +8,9 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Edit2,
   Trash2,
@@ -21,7 +21,7 @@ import {
   Sunset,
   Coffee,
   AlertTriangle,
-} from 'lucide-react';
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -29,15 +29,18 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-} from '@/components/ui/dialog';
-import type { SiklusMenuItem } from '@/servers/siklus-menu.service';
-import { deleteSiklusMenuItem } from '@/servers/siklus-menu.service';
-import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
+} from "@/components/ui/dialog";
+import type { SiklusMenuItem } from "@/servers/siklus-menu.service";
+import type { DiitWaktuKey } from "@/helper/siklus-menu/diit-helpers";
+import type { MenuTagOption } from "@/lib/siklus-menu-tags";
+import { deleteSiklusMenuItem } from "@/servers/siklus-menu.service";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 interface SiklusMenuMatrixTableProps {
   items: SiklusMenuItem[];
   activeSiklus: number;
+  diitMap?: Record<DiitWaktuKey, MenuTagOption[]>;
   onEditItem: (item: SiklusMenuItem) => void;
   onAddItemToSlot: (slot: {
     siklus_ke: number;
@@ -57,18 +60,18 @@ interface SiklusMenuMatrixTableProps {
 
 const JENIS_BADGE_STYLE: Record<string, string> = {
   HEWANI:
-    'bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 border-indigo-300',
+    "bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 border-indigo-300",
   NABATI:
-    'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300 border-teal-300',
+    "bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300 border-teal-300",
   SAYUR:
-    'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300 border-green-300',
+    "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300 border-green-300",
   SARING:
-    'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-300',
-  BUAH: 'bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300 border-orange-300',
+    "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border-amber-300",
+  BUAH: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300 border-orange-300",
   SNACK:
-    'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border-purple-300',
+    "bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border-purple-300",
   EXTRA:
-    'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border-rose-300',
+    "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300 border-rose-300",
 };
 
 interface MatrixRowDefinition {
@@ -84,22 +87,22 @@ interface MatrixRowDefinition {
 
 // Baris matriks kanonis KELAS I/II/III (tanpa VIP; legacy II-III tetap dibaca di matcher)
 const STANDARD_ROWS: MatrixRowDefinition[] = [
-  { id: 'KELAS-I-HEWANI', kelas: 'KELAS I', jenis_makanan: 'HEWANI' },
-  { id: 'KELAS-II-HEWANI', kelas: 'KELAS II', jenis_makanan: 'HEWANI' },
-  { id: 'KELAS-III-HEWANI', kelas: 'KELAS III', jenis_makanan: 'HEWANI' },
-  { id: 'SEMUA-NABATI', kelas: 'Semua Kelas', jenis_makanan: 'NABATI' },
-  { id: 'SEMUA-SAYUR', kelas: 'Semua Kelas', jenis_makanan: 'SAYUR' },
+  { id: "KELAS-I-HEWANI", kelas: "KELAS I", jenis_makanan: "HEWANI" },
+  { id: "KELAS-II-HEWANI", kelas: "KELAS II", jenis_makanan: "HEWANI" },
+  { id: "KELAS-III-HEWANI", kelas: "KELAS III", jenis_makanan: "HEWANI" },
+  { id: "SEMUA-NABATI", kelas: "Semua Kelas", jenis_makanan: "NABATI" },
+  { id: "SEMUA-SAYUR", kelas: "Semua Kelas", jenis_makanan: "SAYUR" },
   {
-    id: 'SEMUA-BUAH',
-    kelas: 'Semua Kelas',
-    jenis_makanan: 'BUAH',
+    id: "SEMUA-BUAH",
+    kelas: "Semua Kelas",
+    jenis_makanan: "BUAH",
     hanyaSiangSore: true,
   },
   // Baris snack — hanya ada 2 waktu: Pagi dan Siang (Sore dinonaktifkan)
   {
-    id: 'SEMUA-SNACK',
-    kelas: 'Semua Kelas',
-    jenis_makanan: 'SNACK',
+    id: "SEMUA-SNACK",
+    kelas: "Semua Kelas",
+    jenis_makanan: "SNACK",
     hanyaPagiSiang: true,
   },
 ];
@@ -107,6 +110,7 @@ const STANDARD_ROWS: MatrixRowDefinition[] = [
 export default function SiklusMenuMatrixTable({
   items,
   activeSiklus,
+  diitMap,
   onEditItem,
   onAddItemToSlot,
   onEditSlot,
@@ -114,6 +118,42 @@ export default function SiklusMenuMatrixTable({
 }: SiklusMenuMatrixTableProps) {
   const [itemToDelete, setItemToDelete] = useState<SiklusMenuItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  function renderDiitCell(waktu: DiitWaktuKey) {
+    const list = diitMap?.[waktu];
+    if (!list) return null;
+    if (waktu === "SARING") {
+      return (
+        <div className="flex flex-col items-center justify-center gap-1 py-1 text-center">
+          <span className="text-[10px] leading-tight text-muted-foreground/70 italic">
+            Saring jalur khusus
+            <br />
+            (NPO/TKTP/SARING dikecualikan)
+          </span>
+        </div>
+      );
+    }
+    if (list.length === 0) {
+      return (
+        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+          ✓ Semua diet tercover
+        </span>
+      );
+    }
+    return (
+      <div className="flex flex-wrap items-center justify-center gap-1">
+        {list.map((d) => (
+          <span
+            key={d.kode}
+            title={`${d.kode} · ${d.label} (${d.kategori}) — tidak ada hidangan ${waktu} dengan tag ini, otomatis masuk DIIT`}
+            className="inline-flex items-center rounded-md border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 font-mono text-[10px] font-bold text-amber-800 dark:text-amber-300"
+          >
+            {d.kode}
+          </span>
+        ))}
+      </div>
+    );
+  }
 
   // Discover all distinct [kelas, jenis_makanan] pairs in items to ensure custom rows are shown too
   const rowKeys = new Set<string>();
@@ -129,13 +169,13 @@ export default function SiklusMenuMatrixTable({
   // Add any dynamic rows present in database items
   for (const item of items) {
     // Treat SARING & SNACK as special rows (sudah punya baris baku)
-    if (item.jenis_makanan === 'SARING' || item.jenis_makanan === 'SNACK')
+    if (item.jenis_makanan === "SARING" || item.jenis_makanan === "SNACK")
       continue;
     // Skip 'Semua Kelas' items — they are shared data, not separate rows
     if (
-      item.kelas === 'Semua Kelas' ||
-      item.kelas === 'ALL' ||
-      item.kelas === 'Umum'
+      item.kelas === "Semua Kelas" ||
+      item.kelas === "ALL" ||
+      item.kelas === "Umum"
     )
       continue;
 
@@ -146,15 +186,15 @@ export default function SiklusMenuMatrixTable({
         id: key,
         kelas: item.kelas,
         jenis_makanan: item.jenis_makanan,
-        hanyaSiangSore: item.jenis_makanan === 'BUAH',
-        hanyaPagiSiang: item.jenis_makanan === 'SNACK',
+        hanyaSiangSore: item.jenis_makanan === "BUAH",
+        hanyaPagiSiang: item.jenis_makanan === "SNACK",
       });
     }
   }
 
   // Items dedicated to SARING (SIANG)
   const saringSiangItems = items.filter(
-    (i) => i.waktu_makan === 'SARING' || i.jenis_makanan === 'SARING',
+    (i) => i.waktu_makan === "SARING" || i.jenis_makanan === "SARING",
   );
 
   async function handleDeleteConfirm() {
@@ -171,7 +211,7 @@ export default function SiklusMenuMatrixTable({
       }
     } catch (err) {
       console.error(err);
-      toast.error('Gagal menghapus hidangan.');
+      toast.error("Gagal menghapus hidangan.");
     } finally {
       setIsDeleting(false);
     }
@@ -189,28 +229,30 @@ export default function SiklusMenuMatrixTable({
 
       // Keep class-specific fruit in its own row, so slot edits do not copy it
       // into the shared "Semua Kelas" slot.
-      if (jenis_makanan === 'BUAH') {
-        if (kelas === 'Semua Kelas') {
-          return i.kelas === 'Semua Kelas' || i.kelas === 'ALL' || i.kelas === 'Umum';
+      if (jenis_makanan === "BUAH") {
+        if (kelas === "Semua Kelas") {
+          return (
+            i.kelas === "Semua Kelas" || i.kelas === "ALL" || i.kelas === "Umum"
+          );
         }
         return i.kelas === kelas;
       }
 
       // For shared rows like 'Semua Kelas', match either exact or general
-      if (kelas === 'Semua Kelas') {
+      if (kelas === "Semua Kelas") {
         return (
-          i.kelas === 'Semua Kelas' ||
-          i.kelas === 'ALL' ||
-          i.kelas === 'Umum' ||
-          i.kelas === 'I' ||
-          i.kelas === 'II-III' ||
-          i.kelas === 'KELAS I' ||
-          i.kelas === 'KELAS II' ||
-          i.kelas === 'KELAS III'
+          i.kelas === "Semua Kelas" ||
+          i.kelas === "ALL" ||
+          i.kelas === "Umum" ||
+          i.kelas === "I" ||
+          i.kelas === "II-III" ||
+          i.kelas === "KELAS I" ||
+          i.kelas === "KELAS II" ||
+          i.kelas === "KELAS III"
         );
       }
 
-      return i.kelas === kelas || i.kelas === 'Semua Kelas';
+      return i.kelas === kelas || i.kelas === "Semua Kelas";
     });
   }
 
@@ -225,65 +267,85 @@ export default function SiklusMenuMatrixTable({
       customItems || getCellDishes(kelas, jenis_makanan, waktu_makan);
 
     return (
-      <div className='group/slot min-h-[90px] p-2 flex flex-col justify-between rounded-lg transition-colors hover:bg-muted/40 relative'>
+      <div className="group/slot min-h-[90px] p-2 flex flex-col justify-between rounded-lg transition-colors hover:bg-muted/40 relative">
         {/* Dish entries */}
-        <div className='space-y-1.5'>
+        <div className="space-y-1.5">
           {dishes.length === 0 ? (
-            <div className='text-[11px] text-muted-foreground/60 italic py-2'>
+            <div className="text-[11px] text-muted-foreground/60 italic py-2">
               - Belum ada menu -
             </div>
           ) : (
-            dishes.map((dish) => (
-              <div
-                key={dish.id}
-                className={cn('text-xs text-foreground border border-border/80 rounded-md p-1.5 shadow-2xs group/item hover:border-primary/50 transition-all flex items-start justify-between gap-1.5', dish.kategori_menu === 'TKTP' && 'bg-primary/10')}
-              >
-                <div className='leading-tight'>
-                  <span className='font-medium text-foreground'>
-                    {dish.nama_makanan}
-                  </span>
-                  {dish.kategori_menu && (
-                    <span className='ml-1 font-bold text-primary text-[11px]'>
-                      ({dish.kategori_menu})
-                    </span>
+            dishes.map((dish) => {
+              const isDiitDish = (dish.kategori_menu || "")
+                .split(",")
+                .some((t) => t.trim().toUpperCase() === "DIIT");
+              return (
+                <div
+                  key={dish.id}
+                  title={
+                    isDiitDish
+                      ? "Hidangan penampung DIIT: dipakai pasien yang dietnya tidak punya hidangan spesifik di jam ini"
+                      : undefined
+                  }
+                  className={cn(
+                    "text-xs text-foreground border border-border/80 rounded-md p-1.5 shadow-2xs group/item hover:border-primary/50 transition-all flex items-start justify-between gap-1.5",
+                    dish.kategori_menu === "TKTP" && "bg-primary/10",
+                    isDiitDish &&
+                      "border-dashed border-amber-500/60 bg-amber-500/5",
                   )}
-                  {dish.catatan && (
-                    <span className='ml-1 text-[10px] text-amber-700 dark:text-amber-400 font-mono italic'>
-                      {dish.catatan}
+                >
+                  <div className="leading-tight">
+                    {isDiitDish && (
+                      <span className="mr-1 inline-flex items-center rounded border border-amber-500/40 bg-amber-500/10 px-1 py-px font-mono text-[9px] font-extrabold text-amber-800 dark:text-amber-300 align-middle">
+                        DIIT
+                      </span>
+                    )}
+                    <span className="font-medium text-foreground">
+                      {dish.nama_makanan}
                     </span>
-                  )}
-                </div>
+                    {dish.kategori_menu && (
+                      <span className="ml-1 font-bold text-primary text-[11px]">
+                        ({dish.kategori_menu})
+                      </span>
+                    )}
+                    {dish.catatan && (
+                      <span className="ml-1 text-[10px] text-amber-700 dark:text-amber-400 font-mono italic">
+                        {dish.catatan}
+                      </span>
+                    )}
+                  </div>
 
-                {/* Quick actions per dish */}
-                <div className='opacity-0 group-hover/item:opacity-100 flex items-center gap-0.5 shrink-0 transition-opacity'>
-                  <button
-                    type='button'
-                    onClick={() => onEditItem(dish)}
-                    className='h-5 w-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer'
-                    title='Edit hidangan'
-                  >
-                    <Edit2 className='w-2.5 h-2.5' />
-                  </button>
-                  <button
-                    type='button'
-                    onClick={() => setItemToDelete(dish)}
-                    className='h-5 w-5 rounded flex items-center justify-center text-rose-500 hover:text-rose-700 hover:bg-rose-500/10 cursor-pointer'
-                    title='Hapus hidangan'
-                  >
-                    <Trash2 className='w-2.5 h-2.5' />
-                  </button>
+                  {/* Quick actions per dish */}
+                  <div className="opacity-0 group-hover/item:opacity-100 flex items-center gap-0.5 shrink-0 transition-opacity">
+                    <button
+                      type="button"
+                      onClick={() => onEditItem(dish)}
+                      className="h-5 w-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
+                      title="Edit hidangan"
+                    >
+                      <Edit2 className="w-2.5 h-2.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setItemToDelete(dish)}
+                      className="h-5 w-5 rounded flex items-center justify-center text-rose-500 hover:text-rose-700 hover:bg-rose-500/10 cursor-pointer"
+                      title="Hapus hidangan"
+                    >
+                      <Trash2 className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 
         {/* Slot Bottom Toolbar */}
-        <div className='opacity-0 group-hover/slot:opacity-100 flex items-center justify-end gap-1 pt-2 transition-opacity'>
+        <div className="opacity-0 group-hover/slot:opacity-100 flex items-center justify-end gap-1 pt-2 transition-opacity">
           <Button
-            type='button'
-            variant='ghost'
-            size='xs'
+            type="button"
+            variant="ghost"
+            size="xs"
             onClick={() =>
               onAddItemToSlot({
                 siklus_ke: activeSiklus,
@@ -292,30 +354,31 @@ export default function SiklusMenuMatrixTable({
                 waktu_makan,
               })
             }
-            className='h-6 px-1.5 text-[10px] font-semibold text-primary hover:bg-primary/10'
-            title='Tambah satu hidangan ke slot ini'
+            className="h-6 px-1.5 text-[10px] font-semibold text-primary hover:bg-primary/10"
+            title="Tambah satu hidangan ke slot ini"
           >
-            <Plus className='w-3 h-3 mr-0.5' /> Tambah
+            <Plus className="w-3 h-3 mr-0.5" /> Tambah
           </Button>
 
-          {(jenis_makanan !== 'BUAH' || dishes.every((dish) => dish.kelas === kelas)) && (
+          {(jenis_makanan !== "BUAH" ||
+            dishes.every((dish) => dish.kelas === kelas)) && (
             <Button
-            type='button'
-            variant='outline'
-            size='xs'
-            onClick={() =>
-              onEditSlot({
-                siklus_ke: activeSiklus,
-                kelas,
-                jenis_makanan,
-                waktu_makan,
-                existingItems: dishes,
-              })
-            }
-            className='h-6 px-1.5 text-[10px] font-semibold text-muted-foreground hover:text-foreground'
-            title='Kelola / edit seluruh hidangan dalam slot ini'
-          >
-            <Layers className='w-3 h-3 mr-0.5' /> Edit Slot
+              type="button"
+              variant="outline"
+              size="xs"
+              onClick={() =>
+                onEditSlot({
+                  siklus_ke: activeSiklus,
+                  kelas,
+                  jenis_makanan,
+                  waktu_makan,
+                  existingItems: dishes,
+                })
+              }
+              className="h-6 px-1.5 text-[10px] font-semibold text-muted-foreground hover:text-foreground"
+              title="Kelola / edit seluruh hidangan dalam slot ini"
+            >
+              <Layers className="w-3 h-3 mr-0.5" /> Edit Slot
             </Button>
           )}
         </div>
@@ -325,71 +388,96 @@ export default function SiklusMenuMatrixTable({
 
   return (
     <>
-      <div className='border rounded-2xl bg-card overflow-hidden shadow-xs'>
-        <div className='overflow-x-auto'>
-          <Table className='border-collapse min-w-[980px]'>
-            <TableHeader className='bg-muted/60 border-b select-none'>
-              <TableRow className='hover:bg-transparent'>
-                <TableHead className='w-20 text-center text-xs font-bold uppercase tracking-wider text-foreground border-r'>
+      <div className="border rounded-2xl bg-card overflow-hidden shadow-xs">
+        <div className="overflow-x-auto">
+          <Table className="border-collapse min-w-[980px]">
+            <TableHeader className="bg-muted/60 border-b select-none">
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="w-20 text-center text-xs font-bold uppercase tracking-wider text-foreground border-r">
                   Menu
                 </TableHead>
-                <TableHead className='w-28 text-center text-xs font-bold uppercase tracking-wider text-foreground border-r'>
+                <TableHead className="w-28 text-center text-xs font-bold uppercase tracking-wider text-foreground border-r">
                   Kelas
                 </TableHead>
-                <TableHead className='w-32 text-center text-xs font-bold uppercase tracking-wider text-foreground border-r'>
+                <TableHead className="w-32 text-center text-xs font-bold uppercase tracking-wider text-foreground border-r">
                   Jenis Makanan
                 </TableHead>
-                <TableHead className='min-w-[200px] text-xs font-bold uppercase tracking-wider text-foreground border-r'>
-                  <div className='flex items-center gap-1.5 justify-center'>
-                    <Sunrise className='w-4 h-4 text-amber-500' />
+                <TableHead className="min-w-[200px] text-xs font-bold uppercase tracking-wider text-foreground border-r">
+                  <div className="flex items-center gap-1.5 justify-center">
+                    <Sunrise className="w-4 h-4 text-amber-500" />
                     Makan Pagi
                   </div>
                 </TableHead>
-                <TableHead className='min-w-[200px] text-xs font-bold uppercase tracking-wider text-foreground border-r'>
-                  <div className='flex items-center gap-1.5 justify-center'>
-                    <Sun className='w-4 h-4 text-orange-500' />
+                <TableHead className="min-w-[200px] text-xs font-bold uppercase tracking-wider text-foreground border-r">
+                  <div className="flex items-center gap-1.5 justify-center">
+                    <Sun className="w-4 h-4 text-orange-500" />
                     Makan Siang
                   </div>
                 </TableHead>
-                <TableHead className='min-w-[200px] text-xs font-bold uppercase tracking-wider text-foreground border-r'>
-                  <div className='flex items-center gap-1.5 justify-center'>
-                    <Sunset className='w-4 h-4 text-indigo-500' />
+                <TableHead className="min-w-[200px] text-xs font-bold uppercase tracking-wider text-foreground border-r">
+                  <div className="flex items-center gap-1.5 justify-center">
+                    <Sunset className="w-4 h-4 text-indigo-500" />
                     Makan Sore
                   </div>
                 </TableHead>
-                <TableHead className='min-w-[180px] text-xs font-bold uppercase tracking-wider text-foreground bg-primary/5'>
-                  <div className='flex items-center gap-1.5 justify-center text-primary'>
-                    <Coffee className='w-4 h-4' />
+                <TableHead className="min-w-[180px] text-xs font-bold uppercase tracking-wider text-foreground bg-primary/5">
+                  <div className="flex items-center gap-1.5 justify-center text-primary">
+                    <Coffee className="w-4 h-4" />
                     Saring
                   </div>
                 </TableHead>
               </TableRow>
+              {diitMap && (
+                <TableRow className="bg-amber-500/5 hover:bg-amber-500/5 border-b">
+                  <TableHead
+                    colSpan={3}
+                    className="text-center border-r align-middle"
+                    title="DIIT = sisa tag diet aktif Konfigurasi Diet yang tidak dipakai hidangan pada jam tersebut. B/NPO/TKTP/SARING/DIIT dikecualikan."
+                  >
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-700 dark:text-amber-400">
+                      DIIT otomatis
+                    </span>
+                  </TableHead>
+                  <TableHead className="border-r align-middle p-1.5 min-w-[200px]">
+                    {renderDiitCell("PAGI")}
+                  </TableHead>
+                  <TableHead className="border-r align-middle p-1.5 min-w-[200px]">
+                    {renderDiitCell("SIANG")}
+                  </TableHead>
+                  <TableHead className="border-r align-middle p-1.5 min-w-[200px]">
+                    {renderDiitCell("SORE")}
+                  </TableHead>
+                  <TableHead className="align-middle p-1.5 min-w-[180px] bg-primary/5">
+                    {renderDiitCell("SARING")}
+                  </TableHead>
+                </TableRow>
+              )}
             </TableHeader>
 
             <TableBody>
               {matrixRows.map((row, idx) => {
                 const badgeStyle =
                   JENIS_BADGE_STYLE[row.jenis_makanan] ||
-                  'bg-gray-100 text-gray-800 border-gray-300';
+                  "bg-gray-100 text-gray-800 border-gray-300";
 
                 return (
                   <TableRow
                     key={row.id}
                     className={`hover:bg-muted/20 transition-colors ${
-                      idx !== matrixRows.length - 1 ? 'border-b' : ''
+                      idx !== matrixRows.length - 1 ? "border-b" : ""
                     }`}
                   >
                     {/* MENU Cycle column (Shown once with rowSpan on top row) */}
                     {idx === 0 && (
                       <TableCell
                         rowSpan={matrixRows.length}
-                        className='text-center align-middle border-r bg-muted/20 font-mono font-extrabold text-2xl text-foreground'
+                        className="text-center align-middle border-r bg-muted/20 font-mono font-extrabold text-2xl text-foreground"
                       >
-                        <div className='space-y-1'>
-                          <span className='text-3xl font-black text-primary'>
+                        <div className="space-y-1">
+                          <span className="text-3xl font-black text-primary">
                             {activeSiklus}
                           </span>
-                          <p className='text-[10px] font-semibold text-muted-foreground uppercase tracking-wider'>
+                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
                             Siklus
                           </p>
                         </div>
@@ -397,22 +485,22 @@ export default function SiklusMenuMatrixTable({
                     )}
 
                     {/* KELAS column */}
-                    <TableCell className='text-center align-middle border-r font-bold text-xs text-foreground bg-muted/10'>
+                    <TableCell className="text-center align-middle border-r font-bold text-xs text-foreground bg-muted/10">
                       <Badge
-                        variant='secondary'
-                        className='text-xs font-bold px-2.5 py-1 uppercase tracking-wide'
+                        variant="secondary"
+                        className="text-xs font-bold px-2.5 py-1 uppercase tracking-wide"
                       >
-                        {row.kelas.toUpperCase().startsWith('KELAS') ||
-                        row.kelas === 'Semua Kelas'
+                        {row.kelas.toUpperCase().startsWith("KELAS") ||
+                        row.kelas === "Semua Kelas"
                           ? row.kelas
                           : `Kelas ${row.kelas}`}
                       </Badge>
                     </TableCell>
 
                     {/* JENIS MAKANAN column */}
-                    <TableCell className='text-center align-middle border-r bg-muted/5'>
+                    <TableCell className="text-center align-middle border-r bg-muted/5">
                       <Badge
-                        variant='outline'
+                        variant="outline"
                         className={`text-[11px] font-extrabold px-2.5 py-1 uppercase tracking-wider ${badgeStyle}`}
                       >
                         {row.jenis_makanan}
@@ -421,12 +509,12 @@ export default function SiklusMenuMatrixTable({
 
                     {/* MAKAN PAGI — Buah hanya tersedia Siang & Sore */}
                     {row.hanyaSiangSore ? (
-                      <TableCell className='border-r align-top p-1 bg-muted/40'>
-                        <div className='min-h-[90px] p-2 flex flex-col items-center justify-center gap-1 rounded-lg text-center select-none'>
-                          <span className='text-[11px] font-semibold text-muted-foreground'>
+                      <TableCell className="border-r align-top p-1 bg-muted/40">
+                        <div className="min-h-[90px] p-2 flex flex-col items-center justify-center gap-1 rounded-lg text-center select-none">
+                          <span className="text-[11px] font-semibold text-muted-foreground">
                             —
                           </span>
-                          <span className='text-[10px] leading-tight text-muted-foreground/70 italic'>
+                          <span className="text-[10px] leading-tight text-muted-foreground/70 italic">
                             Buah hanya
                             <br />
                             Siang & Sore
@@ -434,24 +522,24 @@ export default function SiklusMenuMatrixTable({
                         </div>
                       </TableCell>
                     ) : (
-                      <TableCell className='border-r align-top p-1 bg-background'>
-                        {renderSlotCell(row.kelas, row.jenis_makanan, 'PAGI')}
+                      <TableCell className="border-r align-top p-1 bg-background">
+                        {renderSlotCell(row.kelas, row.jenis_makanan, "PAGI")}
                       </TableCell>
                     )}
 
                     {/* MAKAN SIANG */}
-                    <TableCell className='border-r align-top p-1 bg-background'>
-                      {renderSlotCell(row.kelas, row.jenis_makanan, 'SIANG')}
+                    <TableCell className="border-r align-top p-1 bg-background">
+                      {renderSlotCell(row.kelas, row.jenis_makanan, "SIANG")}
                     </TableCell>
 
                     {/* MAKAN SORE — Snack hanya tersedia Pagi & Siang */}
                     {row.hanyaPagiSiang ? (
-                      <TableCell className='border-r align-top p-1 bg-muted/40'>
-                        <div className='min-h-[90px] p-2 flex flex-col items-center justify-center gap-1 rounded-lg text-center select-none'>
-                          <span className='text-[11px] font-semibold text-muted-foreground'>
+                      <TableCell className="border-r align-top p-1 bg-muted/40">
+                        <div className="min-h-[90px] p-2 flex flex-col items-center justify-center gap-1 rounded-lg text-center select-none">
+                          <span className="text-[11px] font-semibold text-muted-foreground">
                             —
                           </span>
-                          <span className='text-[10px] leading-tight text-muted-foreground/70 italic'>
+                          <span className="text-[10px] leading-tight text-muted-foreground/70 italic">
                             Snack hanya
                             <br />
                             Pagi & Siang
@@ -459,8 +547,8 @@ export default function SiklusMenuMatrixTable({
                         </div>
                       </TableCell>
                     ) : (
-                      <TableCell className='border-r align-top p-1 bg-background'>
-                        {renderSlotCell(row.kelas, row.jenis_makanan, 'SORE')}
+                      <TableCell className="border-r align-top p-1 bg-background">
+                        {renderSlotCell(row.kelas, row.jenis_makanan, "SORE")}
                       </TableCell>
                     )}
 
@@ -468,12 +556,12 @@ export default function SiklusMenuMatrixTable({
                     {idx === 0 && (
                       <TableCell
                         rowSpan={matrixRows.length}
-                        className='align-top p-1.5 bg-primary/2'
+                        className="align-top p-1.5 bg-primary/2"
                       >
                         {renderSlotCell(
-                          'Semua Kelas',
-                          'SARING',
-                          'SARING',
+                          "Semua Kelas",
+                          "SARING",
+                          "SARING",
                           saringSiangItems,
                         )}
                       </TableCell>
@@ -491,40 +579,40 @@ export default function SiklusMenuMatrixTable({
         open={Boolean(itemToDelete)}
         onOpenChange={(open) => !open && setItemToDelete(null)}
       >
-        <DialogContent className='sm:max-w-md p-6'>
-          <DialogHeader className='gap-2'>
-            <div className='p-3 rounded-full bg-rose-500/10 text-rose-600 w-fit'>
-              <AlertTriangle className='w-6 h-6' />
+        <DialogContent className="sm:max-w-md p-6">
+          <DialogHeader className="gap-2">
+            <div className="p-3 rounded-full bg-rose-500/10 text-rose-600 w-fit">
+              <AlertTriangle className="w-6 h-6" />
             </div>
-            <DialogTitle className='text-base font-bold'>
+            <DialogTitle className="text-base font-bold">
               Hapus Hidangan dari Siklus Menu?
             </DialogTitle>
-            <DialogDescription className='text-xs text-muted-foreground'>
-              Apakah Anda yakin ingin menghapus hidangan{' '}
-              <strong className='text-foreground'>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Apakah Anda yakin ingin menghapus hidangan{" "}
+              <strong className="text-foreground">
                 &quot;{itemToDelete?.nama_makanan}&quot;
                 {itemToDelete?.kategori_menu &&
                   ` (${itemToDelete.kategori_menu})`}
-              </strong>{' '}
+              </strong>{" "}
               dari Siklus #{itemToDelete?.siklus_ke}?
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className='gap-2 pt-2 border-t'>
+          <DialogFooter className="gap-2 pt-2 border-t">
             <Button
-              variant='outline'
-              size='sm'
+              variant="outline"
+              size="sm"
               onClick={() => setItemToDelete(null)}
               disabled={isDeleting}
             >
               Batal
             </Button>
             <Button
-              variant='destructive'
-              size='sm'
+              variant="destructive"
+              size="sm"
               onClick={handleDeleteConfirm}
               disabled={isDeleting}
             >
-              {isDeleting ? 'Menghapus...' : 'Ya, Hapus Hidangan'}
+              {isDeleting ? "Menghapus..." : "Ya, Hapus Hidangan"}
             </Button>
           </DialogFooter>
         </DialogContent>

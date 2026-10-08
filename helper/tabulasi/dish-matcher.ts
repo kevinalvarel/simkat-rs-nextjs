@@ -9,13 +9,15 @@ import type { AnalyzedPatient, MasterMenuItemRow } from '@/types/tabulasitypes';
  *    Legacy "KELAS 1/2/3" and "KELAS 2 - 3" are still read for backward compat.
  * 3. Clinical diet tag matching — see tag rules below.
  */
-export function matchPatientToDish( 
-  patient: AnalyzedPatient,
-  item: Pick<MasterMenuItemRow, 'kelas' | 'kategori_menu'>,
+/**
+ * Class matching — kanonis KELAS I/II/III + wildcard "Semua Kelas".
+ * Legacy "KELAS 1/2/3" and "KELAS 2 - 3" are still read for backward compat.
+ * Diekspor agar pencarian hidangan DIIT memakai aturan kelas yang identik.
+ */
+export function matchesDishKelas(
+  patient: Pick<AnalyzedPatient, 'kelasType'>,
+  item: Pick<MasterMenuItemRow, 'kelas'>,
 ): boolean {
-  if (patient.isNpo) return false;
-
-  // 1. Class Matching
   const iKelas = (item.kelas || '').toUpperCase();
   const isSemuaKelas = iKelas.includes('SEMUA') || !iKelas;
   const isKelas1 =
@@ -41,6 +43,18 @@ export function matchPatientToDish(
       if (!isKelas3 && !isLegacyGabungan23) return false;
     }
   }
+
+  return true;
+}
+
+export function matchPatientToDish( 
+  patient: AnalyzedPatient,
+  item: Pick<MasterMenuItemRow, 'kelas' | 'kategori_menu'>,
+): boolean {
+  if (patient.isNpo) return false;
+
+  // 1. Class Matching
+  if (!matchesDishKelas(patient, item)) return false;
 
   // 2. Clinical Diet Tag Matching
   const tag = (item.kategori_menu || '').toUpperCase();

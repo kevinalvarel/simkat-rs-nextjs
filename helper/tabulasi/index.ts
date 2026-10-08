@@ -30,7 +30,7 @@ export {
 } from './patient-resolver';
 
 // Pure dish matching
-export { matchPatientToDish } from './dish-matcher';
+export { matchPatientToDish, matchesDishKelas } from './dish-matcher';
 
 // Supplement (snack/buah) aggregation
 export { buildSupplementResult } from './supplement-builder';

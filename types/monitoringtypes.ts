@@ -20,6 +20,8 @@ export interface MonitoringCardData {
   kelas?: string; // e.g. "Semua Kelas", "KELAS I", "KELAS II", "KELAS III"
   dietTag?: string; // e.g. "Biasa", "RG", "DM", "TKTP"
   catatan?: string;
+  /** True bila kartu penampung DIIT (nama = hidangan DIIT, dietTag = kode diet mapping). */
+  isDiit?: boolean;
   baseline: number; // Count before revision
   active: number; // Current count (baseline + change)
   change: number; // Net change (+1, -1, 0, etc.)

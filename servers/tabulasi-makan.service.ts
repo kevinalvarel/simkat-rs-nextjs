@@ -30,7 +30,9 @@ import {
   resolvePatientBuilding,
   resolveTabulasiPatients,
   matchPatientToDish,
+  matchesDishKelas,
 } from '@/helper/tabulasi';
+import { hasDiitTag } from '@/lib/siklus-menu-tags';
 import type { AnalyzedPatient } from '@/helper/tabulasi';
 import { formatIndoFull, getWibTodayKey, WIB_TIMEZONE } from '@/lib/wib';
 
@@ -230,6 +232,20 @@ export async function getTabulasiDashboardData(
     const consolidatedMenuItems = consolidateSlotMenuItems(slotMenuItems);
     const categoryGroupMap = new Map<string, TabulasiHospitalItem[]>();
 
+    /** Jenis dasar yang dicakup satu baris hidangan (gabungan mencakup keduanya). */
+    function baseJenisOf(jenisMakanan: string): string[] {
+      const j = (jenisMakanan || '').toUpperCase().trim();
+      if (j === 'HEWANI & NABATI') return ['HEWANI', 'NABATI'];
+      if (j === 'NABATI & SAYUR') return ['NABATI', 'SAYUR'];
+      if (j === 'HEWANI & SAYUR') return ['HEWANI', 'SAYUR'];
+      if (j === 'HEWANI' || j === 'NABATI' || j === 'SAYUR') return [j];
+      return [];
+    }
+
+    // Pass 1: pencocokan eksak seperti semula + catat jenis yang tercover per pasien.
+    const matchedJenisByPatient = new Map<AnalyzedPatient, Set<string>>();
+    const hospitalItemByDish = new Map<object, TabulasiHospitalItem>();
+
     for (const m of consolidatedMenuItems) {
       let porsiLama = 0;
       let porsiBaru = 0;
@@ -241,6 +257,12 @@ export async function getTabulasiDashboardData(
           } else {
             porsiLama++;
           }
+          let covered = matchedJenisByPatient.get(ap);
+          if (!covered) {
+            covered = new Set<string>();
+            matchedJenisByPatient.set(ap, covered);
+          }
+          for (const j of baseJenisOf(m.jenis_makanan)) covered.add(j);
         }
       }
 
@@ -254,7 +276,7 @@ export async function getTabulasiDashboardData(
         (m.kategori_menu || '').toUpperCase().includes('TKTP') ||
         (m.nama_makanan || '').toUpperCase().includes('TKTP');
 
-      categoryGroupMap.get(groupTitle)!.push({
+      const hospitalItem: TabulasiHospitalItem = {
         id: `m-${m.id}`,
         kategori: groupTitle,
         nama_menu: m.nama_makanan,
@@ -264,7 +286,43 @@ export async function getTabulasiDashboardData(
         total_porsi: porsiLama + porsiBaru,
         is_tktp: isTktpItem,
         catatan: m.catatan || undefined,
-      });
+      };
+      categoryGroupMap.get(groupTitle)!.push(hospitalItem);
+      hospitalItemByDish.set(m, hospitalItem);
+    }
+
+    // Pass 2: DIIT fallback (logika jumlah porsi saja).
+    // Pasien diet khusus yang nol cocok di suatu jenis (mis. DH tanpa
+    // hidangan DH di slot ini) dialihkan ke hidangan DIIT yang se-jenis +
+    // se-kelas. Baris & kode_diet tetap milik hidangan (base on siklus menu).
+    const DIIT_JENIS = ['HEWANI', 'NABATI', 'SAYUR'] as const;
+    for (const ap of analyzed) {
+      if (ap.isNpo) continue;
+      const isDiitEligible =
+        ap.isDm || ap.isRg || ap.isRs || ap.isRp || ap.isDj || ap.isRl || ap.isRkol;
+      if (!isDiitEligible) continue;
+
+      const covered = matchedJenisByPatient.get(ap);
+      const creditedRows = new Set<object>();
+      for (const jenis of DIIT_JENIS) {
+        if (covered?.has(jenis)) continue;
+        const fallback = consolidatedMenuItems.find(
+          (m) =>
+            baseJenisOf(m.jenis_makanan).includes(jenis) &&
+            hasDiitTag(m.kategori_menu) &&
+            matchesDishKelas(ap, m),
+        );
+        if (!fallback || creditedRows.has(fallback)) continue;
+        creditedRows.add(fallback);
+        const target = hospitalItemByDish.get(fallback);
+        if (!target) continue;
+        if (ap.gedungType === 'GEDUNG BARU') {
+          target.porsi_gedung_baru++;
+        } else {
+          target.porsi_gedung_lama++;
+        }
+        target.total_porsi++;
+      }
     }
 
     // Add dedicated TKTP line if TKTP patients exist and not yet covered

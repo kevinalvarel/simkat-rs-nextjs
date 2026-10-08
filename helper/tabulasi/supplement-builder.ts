@@ -1,4 +1,5 @@
 import { isNpoPatient } from '@/lib/npo-utils';
+import { hasDiitTag } from '@/lib/siklus-menu-tags';
 import { dietMappingTable } from '@/db/schemas/master/mapping-diet';
 import type {
   TabulasiDashboardData,
@@ -140,8 +141,13 @@ export function buildSupplementResult(
           ) &&
             item.kategori_menu.trim().toUpperCase() === 'B'),
       );
+      // Hidangan DIIT se-slot + se-kelas menampung kode tanpa hidangan
+      // spesifik (jumlah porsi saja; baris & kode_diet tetap milik hidangan).
+      const diitFallback = candidates.find((item) =>
+        hasDiitTag(item.kategori_menu),
+      );
 
-      const item = tagged || dietMatched || generic;
+      const item = tagged || dietMatched || diitFallback || generic;
       const rowId = item
         ? `${kindLabel}-${item.id}-${code}`
         : `missing-${kindLabel}-${slot}-${code}`;

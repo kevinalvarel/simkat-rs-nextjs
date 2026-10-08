@@ -44,6 +44,7 @@ import { format, isValid } from "date-fns";
 import { id } from "date-fns/locale";
 import { getWibTodayKey, parseCalendarDate, wibKeyToSafeDate } from "@/lib/wib";
 import type { MenuTagOption } from "@/lib/siklus-menu-tags";
+import { computeDiitPerWaktu } from "@/helper/siklus-menu/diit-helpers";
 import {
   getCycleNumForDate,
   getRollingCycleDates,
@@ -352,6 +353,13 @@ export default function KonfigurasiSiklusMenuClient({
     }
   }
 
+  // DIIT otomatis: sisa tag diet aktif yang tidak dipakai hidangan per jam.
+  // Dihitung dari `items` penuh (bukan hasil filter pencarian) agar stabil.
+  const diitMap = useMemo(
+    () => computeDiitPerWaktu(dietOptions, items),
+    [dietOptions, items],
+  );
+
   // Filter items based on search and jenis makanan
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
@@ -416,7 +424,7 @@ export default function KonfigurasiSiklusMenuClient({
     setIsSlotDialogOpen(true);
   }
 
-  // Export current cycle to Excel (matching format)
+  // Export current cycle to Excel (matching format + sheet DIIT per waktu)
   function handleExportExcel() {
     try {
       const rows = items.map((item) => ({
@@ -437,6 +445,22 @@ export default function KonfigurasiSiklusMenuClient({
         workbook,
         worksheet,
         `Siklus ${activeSiklus}`,
+      );
+
+      const diitRows = (["PAGI", "SIANG", "SORE", "SARING"] as const).map(
+        (waktu) => ({
+          "Waktu Makan": waktu,
+          "DIIT (sisa tag)":
+            diitMap[waktu].length > 0
+              ? diitMap[waktu].map((d) => d.kode).join(", ")
+              : "Semua diet tercover",
+          Keterangan: "Otomatis: tag aktif Konfigurasi Diet yang tidak dipakai hidangan jam ini (B/NPO/TKTP/SARING dikecualikan).",
+        }),
+      );
+      XLSX.utils.book_append_sheet(
+        workbook,
+        XLSX.utils.json_to_sheet(diitRows),
+        "DIIT per Waktu",
       );
 
       XLSX.writeFile(workbook, `Siklus_Menu_${activeSiklus}_Rumah_Sakit.xlsx`);
@@ -729,6 +753,7 @@ export default function KonfigurasiSiklusMenuClient({
       <SiklusMenuMatrixTable
         items={filteredItems}
         activeSiklus={activeSiklus}
+        diitMap={diitMap}
         onEditItem={handleEditItem}
         onAddItemToSlot={handleAddItemToSlot}
         onEditSlot={handleEditSlot}

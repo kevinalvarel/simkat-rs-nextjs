@@ -14,6 +14,7 @@ import {
 } from '@/db/schemas/master/siklus-menu';
 import { otorisasiPerubahanDietTable } from '@/db/schemas/snapshot/perizinan-revisi';
 import { isNpoPatient } from '@/lib/npo-utils';
+import { hasDiitTag } from '@/lib/siklus-menu-tags';
 import {
   addCalendarDays,
   formatIndoFull,
@@ -253,6 +254,8 @@ interface DishCounter {
   kelas?: string;
   dietTag?: string;
   catatan?: string;
+  /** True bila hidangan penampung DIIT (tag tampil = kode diet mapping pasien). */
+  isDiit?: boolean;
 }
 
 /**
@@ -297,6 +300,37 @@ function buildMissingCycleMenuSlotDish(
   };
 }
 
+/**
+ * True bila hidangan ditag kode DIIT (penampung fallback diet tak terdaftar
+ * spesifik di slot ini). Perbandingan case-insensitive.
+ */
+function isDiitDish(
+  item: Pick<typeof masterSiklusMenuTable.$inferSelect, 'kategori_menu'>,
+): boolean {
+  return hasDiitTag(item.kategori_menu);
+}
+
+/**
+ * Bungkus hidangan DIIT sebagai porsi diet yang diminta: nama hidangan
+ * mengikuti menu DIIT slot itu, tapi tag yang ditampilkan tetap kode diet
+ * hasil mapping pasien (mis. DH tetap DH, RL tetap RL).
+ */
+function buildDiitFallbackDish(
+  matched: typeof masterSiklusMenuTable.$inferSelect,
+  requestedCode: string,
+): DishCounter {
+  const displayCode = (requestedCode || '').trim() || 'DIIT';
+  return {
+    code: `DIIT-MENU-${matched.id}`,
+    name: matched.nama_makanan,
+    category: mapCategoryGroup(matched.jenis_makanan),
+    kelas: matched.kelas,
+    dietTag: displayCode,
+    catatan: matched.catatan || `Menu DIIT fallback untuk diet ${displayCode}`,
+    isDiit: true,
+  };
+}
+
 function resolveSupplementDishes(
   activeSlotMenuItems: Array<typeof masterSiklusMenuTable.$inferSelect>,
   category: 'BUAH' | 'SNACK',
@@ -313,6 +347,9 @@ function resolveSupplementDishes(
 
   if (category === 'BUAH' && candidates.length === 0) return [];
 
+  // Penampung DIIT slot ini (dipakai bila kode tidak punya hidangan spesifik).
+  const diitFallback = candidates.find((item) => isDiitDish(item));
+
   return [...new Set(codes.map((code) => code.trim().toUpperCase()))]
     .filter((code) => {
       if (category !== 'SNACK') return true;
@@ -327,9 +364,12 @@ function resolveSupplementDishes(
         extractCodes(item.kategori_menu).some((tag) =>
           dietCodes.some((dietCode) => dietCode.toUpperCase() === tag.toUpperCase()),
         ),
-      ) || candidates.find((item) => !item.kategori_menu?.trim());
+      ) || diitFallback || candidates.find((item) => !item.kategori_menu?.trim());
 
       if (!matched) return buildMissingCycleMenuDish(code, category, patientKelas);
+
+      // Hidangan DIIT: tag tampil tetap kode diet yang diminta (mis. DH tetap DH).
+      if (isDiitDish(matched)) return buildDiitFallbackDish(matched, code);
 
       return {
         code: `MENU-${matched.id}`,
@@ -387,29 +427,61 @@ function resolvePatientMainDishes(
       });
 
       if (exactMatch) {
-        resolvedCategories.push({
-          jenis,
-          dish: {
-            code: `MENU-${exactMatch.id}`,
-            name: exactMatch.nama_makanan,
-            category: mapCategoryGroup(exactMatch.jenis_makanan),
-            kelas: exactMatch.kelas,
-            dietTag: exactMatch.kategori_menu || undefined,
-            catatan: exactMatch.catatan || undefined,
-          },
-        });
+        // Hidangan DIIT yang kebetulan ikut ter-tag kode spesifik:
+        // tag tampil tetap kode diet yang diminta (mis. DH tetap DH).
+        if (isDiitDish(exactMatch)) {
+          const matchedCode = targetCodes.find((kc) =>
+            extractCodes(exactMatch.kategori_menu).some(
+              (dt) => dt.toUpperCase() === kc.toUpperCase(),
+            ),
+          );
+          if (matchedCode) {
+            resolvedCategories.push({
+              jenis,
+              dish: buildDiitFallbackDish(exactMatch, matchedCode),
+            });
+          } else {
+            resolvedCategories.push({
+              jenis,
+              dish: {
+                code: `MENU-${exactMatch.id}`,
+                name: exactMatch.nama_makanan,
+                category: mapCategoryGroup(exactMatch.jenis_makanan),
+                kelas: exactMatch.kelas,
+                dietTag: exactMatch.kategori_menu || undefined,
+                catatan: exactMatch.catatan || undefined,
+              },
+            });
+          }
+        } else {
+          resolvedCategories.push({
+            jenis,
+            dish: {
+              code: `MENU-${exactMatch.id}`,
+              name: exactMatch.nama_makanan,
+              category: mapCategoryGroup(exactMatch.jenis_makanan),
+              kelas: exactMatch.kelas,
+              dietTag: exactMatch.kategori_menu || undefined,
+              catatan: exactMatch.catatan || undefined,
+            },
+          });
+        }
       } else {
-        // Tag terisi tapi tidak tertera di siklus menu slot ini:
+        // Tag terisi tapi tidak ada hidangan spesifik di slot ini:
+        // arahkan ke hidangan penampung DIIT (tag tampil tetap kode mapping).
+        const diitMatch = candidates.find((dish) => isDiitDish(dish));
         for (const tc of targetCodes) {
           resolvedCategories.push({
             jenis,
-            dish: buildMissingCycleMenuDish(
-              tc,
-              jenis,
-              pKelas,
-              labelMap,
-              defaultLabels,
-            ),
+            dish: diitMatch
+              ? buildDiitFallbackDish(diitMatch, tc)
+              : buildMissingCycleMenuDish(
+                  tc,
+                  jenis,
+                  pKelas,
+                  labelMap,
+                  defaultLabels,
+                ),
           });
         }
       }
@@ -442,9 +514,12 @@ function resolvePatientMainDishes(
   const handled = new Set<string>();
 
   // 1. Check Hewani + Nabati match (e.g. LOAF AYAM TAHU)
+  // Hidangan DIIT tidak digabung lintas jenis agar tag diet per kartu tetap jelas.
   if (
     hewaniEntry &&
     nabatiEntry &&
+    !hewaniEntry.dish.isDiit &&
+    !nabatiEntry.dish.isDiit &&
     normHewani &&
     normNabati &&
     normHewani === normNabati &&
@@ -467,6 +542,8 @@ function resolvePatientMainDishes(
     !handled.has('NABATI') &&
     nabatiEntry &&
     sayurEntry &&
+    !nabatiEntry.dish.isDiit &&
+    !sayurEntry.dish.isDiit &&
     normNabati &&
     normSayur &&
     normNabati === normSayur &&
@@ -490,6 +567,8 @@ function resolvePatientMainDishes(
     !handled.has('SAYUR') &&
     hewaniEntry &&
     sayurEntry &&
+    !hewaniEntry.dish.isDiit &&
+    !sayurEntry.dish.isDiit &&
     normHewani &&
     normSayur &&
     normHewani === normSayur &&
@@ -761,13 +840,20 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
       kelas?: string;
       dietTag?: string;
       catatan?: string;
+      isDiit?: boolean;
     }
 
     const liveDishes: Record<string, { count: number; meta: DishCounter }> = {};
 
+    function dishKey(item: DishCounter): string {
+      const base = `${item.category}:${item.name.trim()}`;
+      // Hidangan DIIT dipakai banyak diet: bedakan kartu per kode diet (DH tetap DH).
+      return item.isDiit ? `${base}:DIIT:${(item.dietTag || '-').toUpperCase()}` : base;
+    }
+
     function addLiveDish(item: DishCounter, amount = 1) {
       if (!item.name || !item.name.trim()) return;
-      const key = `${item.category}:${item.name.trim()}`;
+      const key = dishKey(item);
       if (!liveDishes[key]) {
         liveDishes[key] = { count: 0, meta: item };
       }
@@ -935,7 +1021,7 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
 
     function addSnapshotDish(item: DishCounter, amount = 1) {
       if (!item.name || !item.name.trim()) return;
-      const key = `${item.category}:${item.name.trim()}`;
+      const key = dishKey(item);
       if (!snapshotDishes[key]) {
         snapshotDishes[key] = { count: 0, meta: item };
       }
@@ -1167,6 +1253,7 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
           kelas: meta?.kelas,
           dietTag: meta?.dietTag,
           catatan: meta?.catatan,
+          isDiit: meta?.isDiit,
           baseline: baselineCount,
           active: activeCount,
           change: changeCount,
