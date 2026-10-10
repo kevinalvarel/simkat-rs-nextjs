@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useForm, Controller, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { mappingDietFormSchema, type MappingDietFormValues } from '@/lib/mapping-diet-schema';
-import { hasFormFoodMapping, selectBentukMakanan, getTugasKateringCodes, isBentukTugasKatering, siklusDietOptionsForKind } from '@/lib/mapping-diet-fields';
+import { hasFormFoodMapping, applyBentukSaringTransition, getTugasKateringCodes, isBentukTugasKatering, isBentukSaring, getMasterOptionsForKind, getSaringDietCodes, hewaniMappingOptions, validateSaringPartition } from '@/lib/mapping-diet-fields';
 import type {
   UnmappedDietItem,
   KategoriMenuOption,
@@ -54,10 +54,7 @@ export default function MappingDietEditDialog({
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Group options strictly from DB kategori_menu table
-  // Bentuk makanan dan karbohidrat dari Konfigurasi Diet; hewani dari siklus menu.
-  // Nabati, sayur, buah, snack memakai diet; opsinya dari Konfigurasi Diet
-  // (kode yang sama dipakai sebagai tag hidangan di Konfigurasi Siklus Menu).
+  // Opsi dengan partisi Saring ketat (lihat MappingDietTable untuk penjelasan).
   const bentukOptions = useMemo(
     () =>
       options.filter(
@@ -66,28 +63,45 @@ export default function MappingDietEditDialog({
       ),
     [options],
   );
-  const karbohidratOptions = useMemo(
-    () => options.filter((o) => o.namaKategori === 'KARBOHIDRAT'),
+  const saringCodes = useMemo(() => getSaringDietCodes(options), [options]);
+  const regulerKarbohidratOptions = useMemo(
+    () => getMasterOptionsForKind(options, 'KARBOHIDRAT', false),
     [options],
   );
-
-  const hewaniOptions = useMemo(
-    () => siklusDietOptionsForKind(siklusDietOptions, 'HEWANI'),
-    [siklusDietOptions],
-  );
-
-  const nabatiOptions = useMemo(
-    () => options.filter((o) => o.namaKategori === 'NABATI'),
+  const saringKarbohidratOptions = useMemo(
+    () => getMasterOptionsForKind(options, 'KARBOHIDRAT', true),
     [options],
   );
-
-  const sayurOptions = useMemo(
-    () => options.filter((o) => o.namaKategori === 'SAYUR'),
+  const regulerHewaniOptions = useMemo(
+    () => hewaniMappingOptions(options, siklusDietOptions, false),
+    [options, siklusDietOptions],
+  );
+  const saringHewaniOptions = useMemo(
+    () => hewaniMappingOptions(options, siklusDietOptions, true),
+    [options, siklusDietOptions],
+  );
+  const regulerNabatiOptions = useMemo(
+    () => getMasterOptionsForKind(options, 'NABATI', false),
     [options],
   );
-
-  const buahOptions = useMemo(
-    () => options.filter((o) => o.namaKategori === 'BUAH'),
+  const saringNabatiOptions = useMemo(
+    () => getMasterOptionsForKind(options, 'NABATI', true),
+    [options],
+  );
+  const regulerSayurOptions = useMemo(
+    () => getMasterOptionsForKind(options, 'SAYUR', false),
+    [options],
+  );
+  const saringSayurOptions = useMemo(
+    () => getMasterOptionsForKind(options, 'SAYUR', true),
+    [options],
+  );
+  const regulerBuahOptions = useMemo(
+    () => getMasterOptionsForKind(options, 'BUAH', false),
+    [options],
+  );
+  const saringBuahOptions = useMemo(
+    () => getMasterOptionsForKind(options, 'BUAH', true),
     [options],
   );
 
@@ -178,8 +192,44 @@ export default function MappingDietEditDialog({
     }
   }, [item, open, reset]);
 
+  const isSaring = isBentukSaring(bentukMakanan);
+  const karbohidratOptions = isSaring ? saringKarbohidratOptions : regulerKarbohidratOptions;
+  const hewaniOptions = isSaring ? saringHewaniOptions : regulerHewaniOptions;
+  const nabatiOptions = isSaring ? saringNabatiOptions : regulerNabatiOptions;
+  const sayurOptions = isSaring ? saringSayurOptions : regulerSayurOptions;
+  const buahOptions = isSaring ? saringBuahOptions : regulerBuahOptions;
+
+  function handleFieldChange(
+    field: 'karbohidrat' | 'hewani' | 'nabati' | 'sayur' | 'buah' | 'snack',
+    value: string,
+  ) {
+    const next = { karbohidrat, hewani, nabati, sayur, buah, snack, [field]: value };
+    const errors = validateSaringPartition(
+      {
+        karbohidrat: next.karbohidrat,
+        hewani: next.hewani,
+        nabati: next.nabati,
+        sayur: next.sayur,
+        buah: next.buah,
+      },
+      saringCodes,
+      isBentukSaring(bentukMakanan),
+    );
+    if (errors.length > 0) {
+      toast.error(errors[0]);
+      return;
+    }
+    setValue(field, value, { shouldValidate: true });
+  }
+
   function handleBentukMakananChange(value: string) {
-    const next = selectBentukMakanan({ karbohidrat, hewani, nabati, sayur, buah, snack }, value);
+    const wasSaring = isBentukSaring(bentukMakanan);
+    const next = applyBentukSaringTransition({ karbohidrat, hewani, nabati, sayur, buah, snack }, value, bentukMakanan);
+    const cleared =
+      wasSaring !== next.isSaring &&
+      (karbohidrat || hewani || nabati || sayur || buah) &&
+      !next.karbohidrat && !next.hewani && !next.nabati && !next.sayur && !next.buah &&
+      next.mode === 'STANDARD';
     setValue('mode', next.mode);
     setValue('bentukMakanan', next.bentukMakanan, { shouldValidate: true });
     setValue('karbohidrat', next.karbohidrat);
@@ -188,9 +238,25 @@ export default function MappingDietEditDialog({
     setValue('sayur', next.sayur);
     setValue('buah', next.buah);
     setValue('snack', next.snack);
+    if (cleared) {
+      toast.info(
+        next.isSaring
+          ? 'Mode Saring: kolom Karbo/Hewani/Nabati/Sayur/Buah dikosongkan, pilih diet Saring.'
+          : 'Keluar mode Saring: kolom Saring dikosongkan, pilih diet standar.',
+      );
+    }
   }
 
   const onValidSubmit = () => {
+    const errors = validateSaringPartition(
+      { karbohidrat, hewani, nabati, sayur, buah },
+      saringCodes,
+      isSaring,
+    );
+    if (errors.length > 0) {
+      toast.error(errors[0]);
+      return;
+    }
     setIsConfirmOpen(true);
   };
 
@@ -305,6 +371,17 @@ export default function MappingDietEditDialog({
                 </div>
               )}
 
+              {isSaring && mode === 'STANDARD' && (
+                <div className='flex items-start gap-2.5 p-3 rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-500/10 text-amber-900 dark:text-amber-200 text-xs'>
+                  <Sparkles className='w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5' />
+                  <p>
+                    <strong>Mode Saring Aktif:</strong> Karbohidrat, Lauk Hewani,
+                    Nabati, Sayur, dan Buah hanya menampilkan diet berflag Saring.
+                    Snack tetap normal.
+                  </p>
+                </div>
+              )}
+
               {isTugasKatering && (
                 <div className='flex items-start gap-2.5 p-3 rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-500/10 text-blue-900 dark:text-blue-200 text-xs'>
                   <Send className='w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5' />
@@ -344,10 +421,11 @@ export default function MappingDietEditDialog({
                       <SelectField
                         label={KATEGORI_LABEL['KARBOHIDRAT']}
                         value={field.value || ''}
-                        onChange={field.onChange}
-                        placeholder='Pilih Karbohidrat...'
+                        onChange={(v) => handleFieldChange('karbohidrat', v)}
+                        placeholder={isSaring ? 'Pilih Karbohidrat Saring...' : 'Pilih Karbohidrat...'}
                         options={karbohidratOptions}
                         disabled={mode !== 'STANDARD'}
+                        saringMode={isSaring}
                         error={errors.karbohidrat?.message}
                       />
                     )}
@@ -361,10 +439,11 @@ export default function MappingDietEditDialog({
                       <SelectField
                         label={KATEGORI_LABEL['HEWANI']}
                         value={field.value || ''}
-                        onChange={field.onChange}
-                        placeholder='Pilih Lauk Hewani...'
+                        onChange={(v) => handleFieldChange('hewani', v)}
+                        placeholder={isSaring ? 'Pilih Lauk Hewani Saring...' : 'Pilih Lauk Hewani...'}
                         options={hewaniOptions}
                         disabled={mode !== 'STANDARD'}
+                        saringMode={isSaring}
                         error={errors.hewani?.message}
                       />
                     )}
@@ -378,10 +457,11 @@ export default function MappingDietEditDialog({
                       <SelectField
                         label={KATEGORI_LABEL['NABATI']}
                         value={field.value || ''}
-                        onChange={field.onChange}
-                        placeholder='Pilih Lauk Nabati...'
+                        onChange={(v) => handleFieldChange('nabati', v)}
+                        placeholder={isSaring ? 'Pilih Lauk Nabati Saring...' : 'Pilih Lauk Nabati...'}
                         options={nabatiOptions}
                         disabled={mode !== 'STANDARD'}
+                        saringMode={isSaring}
                         error={errors.nabati?.message}
                       />
                     )}
@@ -395,10 +475,11 @@ export default function MappingDietEditDialog({
                       <SelectField
                         label={KATEGORI_LABEL['SAYUR']}
                         value={field.value || ''}
-                        onChange={field.onChange}
-                        placeholder='Pilih Sayur...'
+                        onChange={(v) => handleFieldChange('sayur', v)}
+                        placeholder={isSaring ? 'Pilih Sayur Saring...' : 'Pilih Sayur...'}
                         options={sayurOptions}
                         disabled={mode !== 'STANDARD'}
+                        saringMode={isSaring}
                         error={errors.sayur?.message}
                       />
                     )}
@@ -412,10 +493,11 @@ export default function MappingDietEditDialog({
                       <SelectField
                         label={KATEGORI_LABEL['BUAH']}
                         value={field.value || ''}
-                        onChange={field.onChange}
-                        placeholder='Pilih Buah...'
+                        onChange={(v) => handleFieldChange('buah', v)}
+                        placeholder={isSaring ? 'Pilih Buah Saring...' : 'Pilih Buah...'}
                         options={buahOptions}
                         disabled={mode !== 'STANDARD'}
+                        saringMode={isSaring}
                         error={errors.buah?.message}
                       />
                     )}

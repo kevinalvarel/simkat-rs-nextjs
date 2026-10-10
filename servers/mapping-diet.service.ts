@@ -7,7 +7,64 @@ import { pasienTable } from '@/db/schemas/patient/pasien';
 import { dietMappingTable } from '@/db/schemas/master/mapping-diet';
 import { kategoriMenuTable } from '@/db/schemas/master/kategori-menu';
 import { otorisasiPerubahanDietTable } from '@/db/schemas/snapshot/perizinan-revisi';
-import { hasFoodMapping, mergeFoodMapping } from '@/lib/mapping-diet-fields';
+import { hasFoodMapping, mergeFoodMapping, isBentukSaring } from '@/lib/mapping-diet-fields';
+
+/**
+ * Set kode diet (uppercase) berflag Diet Makanan Saring yang aktif.
+ * Tahan terhadap DB belum migrate: kembalikan set kosong (validasi dilewati).
+ */
+async function getActiveSaringDietCodes(): Promise<Set<string>> {
+  try {
+    const rows = await db
+      .select({ kode_item: kategoriMenuTable.kode_item })
+      .from(kategoriMenuTable)
+      .where(
+        and(
+          eq(kategoriMenuTable.is_active, true),
+          eq(kategoriMenuTable.is_diet_saring, true),
+        ),
+      );
+    return new Set(
+      rows.map((r) => (r.kode_item || '').trim().toUpperCase()).filter(Boolean),
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+function splitDietTokens(value: string | null): string[] {
+  return (value || '')
+    .split(/[,;/]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Validasi partisi Saring ketat (tanpa snack): mode Saring hanya menerima
+ * kode berflag Saring; mode reguler menolak kode berflag Saring.
+ * Kembalikan pesan error atau null bila valid / tidak ada data pembanding.
+ */
+function validateSaringPartitionServer(
+  fields: Record<string, string | null>,
+  saringCodes: Set<string>,
+  isSaring: boolean,
+): string | null {
+  if (saringCodes.size === 0) return null;
+  for (const [label, value] of Object.entries(fields)) {
+    for (const token of splitDietTokens(value)) {
+      const upper = token.toUpperCase();
+      if (upper === 'NPO') continue;
+      const flagged = saringCodes.has(upper);
+      if (isSaring && !flagged) {
+        return `${label} "${token}" bukan diet Saring aktif.`;
+      }
+      if (!isSaring && flagged) {
+        return `${label} "${token}" adalah diet Saring; pilih Bentuk SARING.`;
+      }
+    }
+  }
+  return null;
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -532,6 +589,21 @@ export async function saveDietMapping(
     }
     if (!hasFoodMapping({ bentuk_makanan, karbohidrat, kategori_diet, nabati, sayur, buah, snack })) {
       return { success: false, message: 'Isi minimal satu jenis makanan sebelum menyimpan mapping.' };
+    }
+    const saringCodes = await getActiveSaringDietCodes();
+    const saringError = validateSaringPartitionServer(
+      {
+        Karbohidrat: karbohidrat,
+        Hewani: kategori_diet,
+        Nabati: nabati,
+        Sayur: sayur,
+        Buah: buah,
+      },
+      saringCodes,
+      isBentukSaring(bentuk_makanan),
+    );
+    if (saringError) {
+      return { success: false, message: saringError };
     }
     status_mapping = 'MAPPED';
   }

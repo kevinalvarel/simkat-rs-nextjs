@@ -22,6 +22,8 @@ export interface SelectFieldProps {
   error?: string;
   allowClear?: boolean;
   includeSpecial?: boolean;
+  saringMode?: boolean;
+  emptyHint?: string;
 }
 
 const CLEAR_SENTINEL = '__CLEAR__';
@@ -51,6 +53,8 @@ export function SelectField({
   error,
   allowClear = true,
   includeSpecial = false,
+  saringMode = false,
+  emptyHint,
 }: SelectFieldProps) {
   const hasValue = Boolean(value && value !== CLEAR_SENTINEL);
 
@@ -107,12 +111,15 @@ export function SelectField({
             )}
 
             <div className='px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider bg-muted/40 rounded-sm mb-1'>
-              Pilihan Standar Menu
+              {saringMode ? 'Pilihan Saring' : 'Pilihan Standar Menu'}
             </div>
 
             {options.length === 0 ? (
               <div className='p-2 text-xs text-muted-foreground italic text-center'>
-                Tidak ada pilihan standar
+                {emptyHint ||
+                  (saringMode
+                    ? 'Tidak ada diet saring aktif di kategori ini — daftarkan di Konfigurasi Diet + centang Saring.'
+                    : 'Tidak ada pilihan standar')}
               </div>
             ) : (
               options.filter((opt) => opt.kodeItem !== 'NPO').map((opt) => (
