@@ -454,6 +454,8 @@ export async function getKategoriMenuDietList(): Promise<MenuTagOption[]> {
       kode: item.kode_item,
       label: item.label_item,
       kategori: item.nama_kategori,
+      isSaring:
+        (item as { is_diet_saring?: boolean | null }).is_diet_saring ?? false,
     }));
   } catch (error) {
     console.error('Error fetching kategori menu for diet options:', error);

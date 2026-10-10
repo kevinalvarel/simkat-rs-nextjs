@@ -12,6 +12,7 @@ export interface KategoriMenuItem {
   label_item: string;
   is_active: boolean;
   is_tugas_ag_katering: boolean;
+  is_diet_saring: boolean;
 }
 
 export interface MutationResult {
@@ -25,6 +26,7 @@ export type CreateKategoriMenuPayload = {
   label_item: string;
   is_active?: boolean;
   is_tugas_ag_katering?: boolean;
+  is_diet_saring?: boolean;
 };
 
 export type UpdateKategoriMenuPayload = Partial<CreateKategoriMenuPayload>;
@@ -36,6 +38,18 @@ export type UpdateKategoriMenuPayload = Partial<CreateKategoriMenuPayload>;
 function isMissingColumnError(error: unknown): boolean {
   if (typeof error === 'object' && error !== null && 'code' in error) {
     if ((error as { code?: unknown }).code === '42703') return true;
+  }
+  // Driver Neon membungkus Postgres error di `cause` — kode 42703 ada di sana.
+  if (typeof error === 'object' && error !== null && 'cause' in error) {
+    const cause = (error as { cause?: unknown }).cause;
+    if (
+      typeof cause === 'object' &&
+      cause !== null &&
+      'code' in cause &&
+      (cause as { code?: unknown }).code === '42703'
+    ) {
+      return true;
+    }
   }
   const message =
     error instanceof Error
@@ -49,8 +63,9 @@ function isMissingColumnError(error: unknown): boolean {
 /**
  * Fetch all kategori menu items ordered by nama_kategori & kode_item ascending.
  *
- * Tahan terhadap DB yang belum di-migrate (`is_tugas_ag_katering` belum ada):
- * fallback ke 6 kolom lama dengan nilai default false.
+ * Tahan terhadap DB yang belum di-migrate (`is_tugas_ag_katering` /
+ * `is_diet_saring` belum ada): fallback ke kolom lama dengan nilai
+ * default false.
  */
 export async function getKategoriMenuAll(): Promise<KategoriMenuItem[]> {
   const toItems = (rows: {
@@ -60,6 +75,7 @@ export async function getKategoriMenuAll(): Promise<KategoriMenuItem[]> {
     label_item: string;
     is_active: boolean;
     is_tugas_ag_katering?: boolean | null;
+    is_diet_saring?: boolean | null;
   }[]): KategoriMenuItem[] =>
     rows.map((item) => ({
       id: item.id,
@@ -68,6 +84,7 @@ export async function getKategoriMenuAll(): Promise<KategoriMenuItem[]> {
       label_item: item.label_item,
       is_active: item.is_active,
       is_tugas_ag_katering: item.is_tugas_ag_katering ?? false,
+      is_diet_saring: item.is_diet_saring ?? false,
     }));
 
   try {
@@ -86,7 +103,7 @@ export async function getKategoriMenuAll(): Promise<KategoriMenuItem[]> {
       return [];
     }
     console.warn(
-      'kategori_menu.is_tugas_ag_katering belum ada di DB — pakai fallback tanpa kolom itu. Jalankan migrasi 0007.',
+      'kategori_menu.is_tugas_ag_katering/is_diet_saring belum ada di DB — pakai fallback tanpa kolom itu. Jalankan migrasi 0007/0015.',
     );
   }
 
@@ -102,7 +119,7 @@ export async function getKategoriMenuAll(): Promise<KategoriMenuItem[]> {
       .from(kategoriMenuTable)
       .orderBy(asc(kategoriMenuTable.nama_kategori), asc(kategoriMenuTable.kode_item));
 
-    return toItems(legacyResults.map((item) => ({ ...item, is_tugas_ag_katering: false })));
+    return toItems(legacyResults.map((item) => ({ ...item, is_tugas_ag_katering: false, is_diet_saring: false })));
   } catch (fallbackError) {
     console.error('Error fetching kategori_menu from database:', fallbackError);
     return [];
@@ -130,6 +147,10 @@ export async function createKategoriMenuItem(
       is_tugas_ag_katering: isBentukMakanan
         ? (payload.is_tugas_ag_katering ?? false)
         : false,
+      // Diet Saring hanya berlaku di luar Bentuk Makanan; kategori Bentuk dipaksa false.
+      is_diet_saring: isBentukMakanan
+        ? false
+        : (payload.is_diet_saring ?? false),
     });
 
     revalidatePath('/dashboard/ag-katering/admin/konfigurasi-menu');
@@ -175,6 +196,17 @@ export async function updateKategoriMenuItem(
             }
           : payload.is_tugas_ag_katering !== undefined
             ? { is_tugas_ag_katering: payload.is_tugas_ag_katering }
+            : {}),
+        // Diet Saring hanya berlaku di luar Bentuk Makanan; Bentuk Makanan dipaksa false.
+        ...(normalizedKategori
+          ? {
+              is_diet_saring:
+                normalizedKategori === 'BENTUK_MAKANAN'
+                  ? false
+                  : (payload.is_diet_saring ?? false),
+            }
+          : payload.is_diet_saring !== undefined
+            ? { is_diet_saring: payload.is_diet_saring }
             : {}),
       })
       .where(eq(kategoriMenuTable.id, id));

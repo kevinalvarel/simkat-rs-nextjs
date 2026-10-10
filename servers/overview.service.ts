@@ -392,27 +392,59 @@ function resolveSupplementDishes(
   });
   if (valid.length === 0) return [];
 
-  // Tanpa diet: satu hidangan biasa untuk semua kode (1 pasien = 1 porsi).
-  const hidangan =
-    candidates.find((item) => !isDiitDish(item)) ||
-    candidates.find((item) => isDiitDish(item)) ||
-    null;
-  if (!hidangan) {
-    return valid.map((code) => buildMissingCycleMenuDish(code, category, patientKelas));
+  // Diet per tag (BUAH/SNACK kini sama seperti jenis lain).
+  // Prioritas: tag persis kode pasien → hidangan wildcard tanpa tag
+  // (kompatibilitas data lama, 1 porsi) → DIIT per kode → missing per kode.
+  const exactAny = candidates.find((dish) => {
+    if (isDiitDish(dish) || !dish.kategori_menu) return false;
+    const dishTags = extractCodes(dish.kategori_menu);
+    return valid.some((code) =>
+      dishTags.some((dt) => dt.toUpperCase() === code.toUpperCase()),
+    );
+  });
+  if (exactAny) {
+    if (isDiitDish(exactAny)) {
+      const matchedCode =
+        valid.find((code) =>
+          extractCodes(exactAny.kategori_menu).some(
+            (dt) => dt.toUpperCase() === code.toUpperCase(),
+          ),
+        ) || valid[0];
+      return [buildDiitFallbackDish(exactAny, matchedCode)];
+    }
+    return [
+      {
+        code: `MENU-${exactAny.id}`,
+        name: exactAny.nama_makanan,
+        category,
+        kelas: exactAny.kelas,
+        dietTag: exactAny.kategori_menu || undefined,
+        catatan: exactAny.catatan || undefined,
+      },
+    ];
   }
-  if (isDiitDish(hidangan)) {
-    return valid.map((code) => buildDiitFallbackDish(hidangan, code));
+  const wildcard = candidates.find(
+    (dish) => !isDiitDish(dish) && extractCodes(dish.kategori_menu).length === 0,
+  );
+  if (wildcard) {
+    return [
+      {
+        code: `MENU-${wildcard.id}`,
+        name: wildcard.nama_makanan,
+        category,
+        kelas: wildcard.kelas,
+        dietTag: wildcard.kategori_menu || undefined,
+        catatan: wildcard.catatan || undefined,
+      },
+    ];
   }
-  return [
-    {
-      code: `MENU-${hidangan.id}`,
-      name: hidangan.nama_makanan,
-      category,
-      kelas: hidangan.kelas,
-      dietTag: hidangan.kategori_menu || undefined,
-      catatan: hidangan.catatan || undefined,
-    },
-  ];
+  const diitOnly = candidates.find((dish) => isDiitDish(dish));
+  if (diitOnly) {
+    return valid.map((code) => buildDiitFallbackDish(diitOnly, code));
+  }
+  // Tidak ada hidangan cocok/tag/wildcard/DIIT: tandai missing per kode
+  // (kasus BUAH tanpa kandidat sudah return [] di atas).
+  return valid.map((code) => buildMissingCycleMenuDish(code, category, patientKelas));
 }
 
 /**
@@ -449,35 +481,9 @@ function resolvePatientMainDishes(
     );
 
     if (candidates.length > 0) {
-      // Jenis tanpa diet: ambil hidangan biasa pertama di slot,
-      // kode pasien diabaikan (1 pasien = 1 porsi).
-      if (jenis === 'NABATI' || jenis === 'SAYUR') {
-        const plain = candidates.find((dish) => !isDiitDish(dish));
-        if (plain) {
-          resolvedCategories.push({
-            jenis,
-            dish: {
-              code: `MENU-${plain.id}`,
-              name: plain.nama_makanan,
-              category: mapCategoryGroup(plain.jenis_makanan),
-              kelas: plain.kelas,
-              dietTag: plain.kategori_menu || undefined,
-              catatan: plain.catatan || undefined,
-            },
-          });
-        } else {
-          const diitOnly = candidates.find((dish) => isDiitDish(dish));
-          const fallbackCode = targetCodes[0] || '-';
-          resolvedCategories.push({
-            jenis,
-            dish: diitOnly
-              ? buildDiitFallbackDish(diitOnly, fallbackCode)
-              : buildMissingCycleMenuDish(fallbackCode, jenis, pKelas),
-          });
-        }
-        continue;
-      }
-
+      // Semua jenis (HEWANI/NABATI/SAYUR) memakai diet per tag.
+      // Prioritas: tag persis kode pasien → wildcard tanpa tag
+      // (kompatibilitas data lama) → DIIT/missing per kode.
       const exactMatch = candidates.find((dish) => {
         if (!dish.kategori_menu) return false;
         const dishTags = extractCodes(dish.kategori_menu);
@@ -527,27 +533,38 @@ function resolvePatientMainDishes(
           });
         }
       } else {
-        // Tag terisi tapi tidak ada hidangan spesifik di slot ini:
-        // arahkan ke hidangan penampung DIIT (tag tampil tetap kode mapping).
-        const diitMatch = candidates.find((dish) => isDiitDish(dish));
-        for (const tc of targetCodes) {
+        // Tidak ada tag cocok: hidangan wildcard tanpa tag menampung
+        // semua diet (kompatibilitas data lama, 1 porsi).
+        const wildcard = candidates.find(
+          (dish) => !isDiitDish(dish) && extractCodes(dish.kategori_menu).length === 0,
+        );
+        if (wildcard) {
           resolvedCategories.push({
             jenis,
-            dish: diitMatch
-              ? buildDiitFallbackDish(diitMatch, tc)
-              : buildMissingCycleMenuDish(tc, jenis, pKelas),
+            dish: {
+              code: `MENU-${wildcard.id}`,
+              name: wildcard.nama_makanan,
+              category: mapCategoryGroup(wildcard.jenis_makanan),
+              kelas: wildcard.kelas,
+              dietTag: wildcard.kategori_menu || undefined,
+              catatan: wildcard.catatan || undefined,
+            },
           });
+        } else {
+          // Tag terisi tapi tidak ada hidangan spesifik di slot ini:
+          // arahkan ke hidangan penampung DIIT (tag tampil tetap kode mapping).
+          const diitMatch = candidates.find((dish) => isDiitDish(dish));
+          for (const tc of targetCodes) {
+            resolvedCategories.push({
+              jenis,
+              dish: diitMatch
+                ? buildDiitFallbackDish(diitMatch, tc)
+                : buildMissingCycleMenuDish(tc, jenis, pKelas),
+            });
+          }
         }
       }
     } else {
-      // Jenis tanpa diet: cukup 1 penanda missing per pasien.
-      if (jenis === 'NABATI' || jenis === 'SAYUR') {
-        resolvedCategories.push({
-          jenis,
-          dish: buildMissingCycleMenuDish(targetCodes[0] || '-', jenis, pKelas),
-        });
-        continue;
-      }
       for (const tc of targetCodes) {
         resolvedCategories.push({
           jenis,

@@ -28,16 +28,11 @@ export const DIIT_EXCLUDED_CODES = new Set([
 ]);
 
 /**
- * Kategori master tanpa diet: kodenya tidak pernah masuk DIIT karena
- * hidangannya dipakai semua pasien (bukan per kode diet).
+ * Kategori master yang kodenya tidak pernah masuk DIIT per waktu.
+ * KARBOHIDRAT dikecualikan (hidangan pokok dihitung terpisah).
+ * NABATI/SAYUR/BUAH/SNACK kini masuk DIIT seperti HEWANI/EXTRA.
  */
-const DIIT_NON_DIET_KATEGORI = new Set([
-  "KARBOHIDRAT",
-  "NABATI",
-  "SAYUR",
-  "BUAH",
-  "SNACK",
-]);
+const DIIT_NON_DIET_KATEGORI = new Set(["KARBOHIDRAT"]);
 
 /**
  * Kategori master (nama_kategori / jenis_makanan) yang relevan per waktu makan.
@@ -62,10 +57,17 @@ function applicableKategoriForWaktu(waktu: DiitWaktuKey): Set<string> | null {
 }
 
 /**
- * Jenis yang masih memakai diet (selisih dihitung per tag).
- * Jenis lain tanpa diet: ada hidangan berarti tertutup semua.
+ * Jenis yang memakai diet (selisih dihitung per tag).
+ * NABATI/SAYUR/BUAH/SNACK kini sama seperti HEWANI/EXTRA.
  */
-const DIIT_TAG_AWARE_JENIS = new Set(["HEWANI", "EXTRA"]);
+const DIIT_TAG_AWARE_JENIS = new Set([
+  "HEWANI",
+  "NABATI",
+  "SAYUR",
+  "BUAH",
+  "SNACK",
+  "EXTRA",
+]);
 
 /** Jenis yang tidak pernah menampilkan chip (tanpa konfigurasi diet). */
 const DIIT_NO_CHIP_JENIS = new Set([
@@ -101,8 +103,9 @@ function kelasCoversRow(
  * Tidak menggabungkan kelas: tiap baris kelas dihitung dari hidangan
  * kelasnya sendiri plus hidangan Semua Kelas.
  *
- * Jenis tanpa diet (nabati, sayur, buah, snack): kembalikan seluruh kode
- * master jenis itu bila slot kosong, atau kosong bila sudah ada hidangan.
+ * Semua jenis diet (hewani, nabati, sayur, buah, snack, extra):
+ * kembalikan kode master yang belum dipakai hidangan di slot itu.
+ * Hidangan tanpa tag dianggap wildcard (menutup semua kode).
  */
 export function computeDiitForSel(
   jenis: string | null | undefined,
@@ -147,8 +150,15 @@ export function computeDiitForSel(
   });
   if (slotItems.length === 0) return master;
 
-  // Jenis tanpa diet: ada hidangan berarti semua kode tertutup.
   if (!DIIT_TAG_AWARE_JENIS.has(jenisUpper)) return [];
+
+  // Hidangan tanpa tag = wildcard: menutup semua kode (kompatibilitas data lama).
+  for (const item of slotItems) {
+    const validTags = parseMenuTags(item.kategori_menu)
+      .map((t) => t.trim().toUpperCase())
+      .filter((key) => key && !DIIT_EXCLUDED_CODES.has(key));
+    if (validTags.length === 0) return [];
+  }
 
   const used = new Set<string>();
   for (const item of slotItems) {
@@ -191,10 +201,14 @@ export function computeDiitPerWaktu(
   >,
 ): Record<DiitWaktuKey, MenuTagOption[]> {
   const canonical = new Map<string, MenuTagOption>();
+  const codesByKategori = new Map<string, Set<string>>();
   for (const opt of activeTags || []) {
     const code = (opt.kode || "").trim().toUpperCase();
     if (!code || DIIT_EXCLUDED_CODES.has(code)) continue;
-    if (DIIT_NON_DIET_KATEGORI.has((opt.kategori || "").trim().toUpperCase())) continue;
+    const kategoriUpper = (opt.kategori || "").trim().toUpperCase();
+    if (DIIT_NON_DIET_KATEGORI.has(kategoriUpper)) continue;
+    if (!codesByKategori.has(kategoriUpper)) codesByKategori.set(kategoriUpper, new Set());
+    codesByKategori.get(kategoriUpper)!.add(code);
     if (!canonical.has(code)) {
       canonical.set(code, {
         kode: opt.kode.trim(),
@@ -219,7 +233,10 @@ export function computeDiitPerWaktu(
     }
 
     // Kumpulkan tag yang terpakai pada jam ini.
+    // Hidangan tanpa tag = wildcard: menutup semua kode kategorinya
+    // (kompatibilitas data lama sebelum aturan diet dihapus).
     const used = new Set<string>();
+    const wildcardKategori = new Set<string>();
     for (const item of items || []) {
       if (!isActiveItem(item as Pick<SiklusMenuItem, "is_active">)) continue;
       const waktuItem = ((item as { waktu_makan?: string }).waktu_makan || "")
@@ -235,15 +252,22 @@ export function computeDiitPerWaktu(
         // Hidangan saring ditampilkan di kolom SARING, bukan kolom reguler.
         if (jenisItem === "SARING" || waktuItem === "SARING") continue;
         if (waktuItem !== waktu) continue;
+        if (applicable && jenisItem && !applicable.has(jenisItem)) continue;
       }
 
-      for (const tag of parseMenuTags(
+      const validTags = parseMenuTags(
         (item as { kategori_menu?: string | null }).kategori_menu,
-      )) {
-        const key = tag.trim().toUpperCase();
-        if (!key || DIIT_EXCLUDED_CODES.has(key)) continue;
-        used.add(key);
+      )
+        .map((t) => t.trim().toUpperCase())
+        .filter((key) => key && !DIIT_EXCLUDED_CODES.has(key));
+      if (validTags.length === 0) {
+        if (jenisItem) wildcardKategori.add(jenisItem);
+        continue;
       }
+      for (const key of validTags) used.add(key);
+    }
+    for (const kategori of wildcardKategori) {
+      for (const code of codesByKategori.get(kategori) || []) used.add(code);
     }
 
     const missing: MenuTagOption[] = [];

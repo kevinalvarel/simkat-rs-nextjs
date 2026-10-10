@@ -63,6 +63,7 @@ const MenuSchema = z
     label_item: z.string().min(2, 'Label item minimal 2 karakter.'),
     is_active: z.boolean(),
     is_tugas_ag_katering: z.boolean(),
+    is_diet_saring: z.boolean(),
   })
   .superRefine((val, ctx) => {
     if (val.is_tugas_ag_katering && val.nama_kategori !== 'BENTUK_MAKANAN') {
@@ -70,6 +71,13 @@ const MenuSchema = z
         code: 'custom',
         path: ['is_tugas_ag_katering'],
         message: 'Tugas AG Katering hanya berlaku untuk Bentuk Makanan.',
+      });
+    }
+    if (val.is_diet_saring && val.nama_kategori === 'BENTUK_MAKANAN') {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['is_diet_saring'],
+        message: 'Diet Makanan Saring hanya berlaku di luar Bentuk Makanan.',
       });
     }
   });
@@ -99,11 +107,14 @@ export default function MenuFormDialog({
       label_item: '',
       is_active: true,
       is_tugas_ag_katering: false,
+      is_diet_saring: false,
     },
   });
 
   const watchedKategori = useWatch({ control, name: 'nama_kategori' });
   const isBentukMakanan = watchedKategori === 'BENTUK_MAKANAN';
+  const isSaringEligible =
+    Boolean(watchedKategori) && watchedKategori !== 'BENTUK_MAKANAN';
 
   useEffect(() => {
     if (open) {
@@ -114,6 +125,7 @@ export default function MenuFormDialog({
           label_item: itemToEdit.label_item,
           is_active: itemToEdit.is_active,
           is_tugas_ag_katering: itemToEdit.is_tugas_ag_katering ?? false,
+          is_diet_saring: itemToEdit.is_diet_saring ?? false,
         });
       } else {
         reset({
@@ -122,6 +134,7 @@ export default function MenuFormDialog({
           label_item: '',
           is_active: true,
           is_tugas_ag_katering: false,
+          is_diet_saring: false,
         });
       }
     }
@@ -134,6 +147,13 @@ export default function MenuFormDialog({
     }
   }, [isBentukMakanan, setValue]);
 
+  // Diet Makanan Saring hanya relevan di luar Bentuk Makanan — reset saat kategori diganti.
+  useEffect(() => {
+    if (!isSaringEligible) {
+      setValue('is_diet_saring', false, { shouldValidate: false });
+    }
+  }, [isSaringEligible, setValue]);
+
   async function onSubmit(data: MenuFormValues) {
     const payload = {
       ...data,
@@ -141,6 +161,10 @@ export default function MenuFormDialog({
         data.nama_kategori === 'BENTUK_MAKANAN'
           ? data.is_tugas_ag_katering
           : false,
+      is_diet_saring:
+        data.nama_kategori === 'BENTUK_MAKANAN'
+          ? false
+          : data.is_diet_saring,
     };
     try {
       if (isEdit && itemToEdit) {
@@ -254,6 +278,43 @@ export default function MenuFormDialog({
               {errors.is_tugas_ag_katering && (
                 <p className='text-[11px] text-destructive mt-1.5'>
                   {errors.is_tugas_ag_katering.message}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Diet Makanan Saring — semua kategori kecuali Bentuk Makanan */}
+          {isSaringEligible && (
+            <div className='rounded-lg border border-dashed border-amber-500/40 bg-amber-500/[0.06] p-3'>
+              <Controller
+                name='is_diet_saring'
+                control={control}
+                render={({ field }) => (
+                  <div className='flex items-start gap-2.5'>
+                    <Checkbox
+                      id='diet-saring'
+                      checked={field.value}
+                      onCheckedChange={(v) => field.onChange(v === true)}
+                      className='mt-0.5'
+                    />
+                    <div className='space-y-0.5'>
+                      <Label
+                        htmlFor='diet-saring'
+                        className='text-xs font-semibold cursor-pointer'
+                      >
+                        Diet Makanan Saring
+                      </Label>
+                      <p className='text-[11px] text-muted-foreground leading-snug'>
+                        Centang jika diet ini tersedia sebagai pilihan pada
+                        kolom Saring di Konfigurasi Siklus Menu.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              />
+              {errors.is_diet_saring && (
+                <p className='text-[11px] text-destructive mt-1.5'>
+                  {errors.is_diet_saring.message}
                 </p>
               )}
             </div>

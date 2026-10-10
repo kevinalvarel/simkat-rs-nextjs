@@ -240,6 +240,14 @@ export default function MenuTable({
                           Tugas AG
                         </Badge>
                       )}
+                    {item.is_diet_saring && (
+                      <Badge
+                        variant='outline'
+                        className='ml-2 text-[10px] font-bold px-2 py-0 bg-amber-500/10 text-amber-800 dark:text-amber-300 border-amber-500/40'
+                      >
+                        Saring
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell className='text-center'>
                     <button

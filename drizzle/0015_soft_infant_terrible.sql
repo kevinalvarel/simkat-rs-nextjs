@@ -1,0 +1,1 @@
+ALTER TABLE "kategori_menu" ADD COLUMN "is_diet_saring" boolean DEFAULT false NOT NULL;

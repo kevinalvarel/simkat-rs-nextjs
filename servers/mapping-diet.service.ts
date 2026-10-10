@@ -25,6 +25,7 @@ export type KategoriMenuOption = {
   kodeItem: string;
   labelItem: string;
   isTugasAgKatering?: boolean;
+  isDietSaring?: boolean;
 };
 
 export type KategoriMenuGrouped = {
@@ -322,6 +323,18 @@ function isMissingColumnError(error: unknown): boolean {
   if (typeof error === 'object' && error !== null && 'code' in error) {
     if ((error as { code?: unknown }).code === '42703') return true;
   }
+  // Driver Neon membungkus Postgres error di `cause` — kode 42703 ada di sana.
+  if (typeof error === 'object' && error !== null && 'cause' in error) {
+    const cause = (error as { cause?: unknown }).cause;
+    if (
+      typeof cause === 'object' &&
+      cause !== null &&
+      'code' in cause &&
+      (cause as { code?: unknown }).code === '42703'
+    ) {
+      return true;
+    }
+  }
   const message =
     error instanceof Error
       ? error.message
@@ -345,6 +358,7 @@ export async function getKategoriMenuOptions(): Promise<KategoriMenuOption[]> {
     kode_item: string;
     label_item: string;
     is_tugas_ag_katering?: boolean | null;
+    is_diet_saring?: boolean | null;
   }[]): KategoriMenuOption[] =>
     rows.map((i) => ({
       id: i.id,
@@ -352,6 +366,7 @@ export async function getKategoriMenuOptions(): Promise<KategoriMenuOption[]> {
       kodeItem: i.kode_item,
       labelItem: i.label_item,
       isTugasAgKatering: i.is_tugas_ag_katering ?? false,
+      isDietSaring: i.is_diet_saring ?? false,
     }));
 
   try {
@@ -367,6 +382,8 @@ export async function getKategoriMenuOptions(): Promise<KategoriMenuOption[]> {
           ...i,
           is_tugas_ag_katering: (i as { is_tugas_ag_katering?: boolean })
             .is_tugas_ag_katering ?? false,
+          is_diet_saring: (i as { is_diet_saring?: boolean })
+            .is_diet_saring ?? false,
         })),
       );
     }
@@ -377,7 +394,7 @@ export async function getKategoriMenuOptions(): Promise<KategoriMenuOption[]> {
       return [];
     }
     console.warn(
-      'kategori_menu.is_tugas_ag_katering belum ada di DB — pakai fallback tanpa kolom itu. Jalankan migrasi 0007.',
+      'kategori_menu.is_tugas_ag_katering/is_diet_saring belum ada di DB — pakai fallback tanpa kolom itu. Jalankan migrasi 0007/0015.',
     );
   }
 
@@ -395,7 +412,7 @@ export async function getKategoriMenuOptions(): Promise<KategoriMenuOption[]> {
       .orderBy(asc(kategoriMenuTable.nama_kategori), asc(kategoriMenuTable.kode_item));
 
     return toOptions(
-      legacyItems.map((i) => ({ ...i, is_tugas_ag_katering: false })),
+      legacyItems.map((i) => ({ ...i, is_tugas_ag_katering: false, is_diet_saring: false })),
     );
   } catch (fallbackError) {
     console.error('Error fetching kategori menu options from DB:', fallbackError);

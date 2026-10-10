@@ -104,7 +104,8 @@ export default function TabulasiClient({ initialData }: TabulasiClientProps) {
             diet RS.
           </p>
         </div>
-      ) : hospitalData && (hospitalData.allItems.length > 0 || hospitalData.tktpGabungan) ? (
+      ) : hospitalData &&
+        (hospitalData.allItems.length > 0 || hospitalData.tktpGabungan) ? (
         <div className="space-y-6">
           {/* 2. Key KPI Stats Cards (Porsi, Gedung Lama, Gedung Baru, Pasien Makan, Diet Khusus) */}
           <TabulasiStatsCards hospitalData={hospitalData} />

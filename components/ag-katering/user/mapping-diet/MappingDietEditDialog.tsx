@@ -56,7 +56,8 @@ export default function MappingDietEditDialog({
 
   // Group options strictly from DB kategori_menu table
   // Bentuk makanan dan karbohidrat dari Konfigurasi Diet; hewani dari siklus menu.
-  // Nabati, sayur, buah, snack tanpa diet sehingga opsinya dari Konfigurasi Diet.
+  // Nabati, sayur, buah, snack memakai diet; opsinya dari Konfigurasi Diet
+  // (kode yang sama dipakai sebagai tag hidangan di Konfigurasi Siklus Menu).
   const bentukOptions = useMemo(
     () =>
       options.filter(

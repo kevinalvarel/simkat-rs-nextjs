@@ -157,6 +157,17 @@ export default function KonfigurasiSiklusMenuClient({
     [masterSiklusList],
   );
 
+  const siklusFilter = [
+    { id: "ALL", label: "Semua Lauk" },
+    { id: "KARBOHIDRAT", label: "Karbo" },
+    { id: "HEWANI", label: "Hewani" },
+    { id: "NABATI", label: "Nabati" },
+    { id: "SAYUR", label: "Sayur" },
+    { id: "SARING", label: "Saring" },
+    { id: "BUAH", label: "Buah" },
+    { id: "SNACK", label: "Snack" },
+  ];
+
   // Tanggal tampilan rolling: jendela periode berjalan yang memuat hari ini.
   // Menggantikan kolom `tanggal` statis agar tab otomatis reset tiap putaran.
   const rollingDates = useMemo(
@@ -453,7 +464,8 @@ export default function KonfigurasiSiklusMenuClient({
             diitMap[waktu].length > 0
               ? diitMap[waktu].map((d) => d.kode).join(", ")
               : "Semua diet tercover",
-          Keterangan: "Otomatis: tag aktif Konfigurasi Diet yang tidak dipakai hidangan jam ini (B/NPO/TKTP/SARING dikecualikan).",
+          Keterangan:
+            "Otomatis: tag aktif Konfigurasi Diet yang tidak dipakai hidangan jam ini (B/NPO/TKTP/SARING dikecualikan).",
         }),
       );
       XLSX.utils.book_append_sheet(
@@ -720,16 +732,7 @@ export default function KonfigurasiSiklusMenuClient({
 
         {/* Quick Filter Buttons for Jenis */}
         <div className="flex items-center gap-1.5 overflow-x-auto min-w-0 max-w-full pb-1">
-          {[
-            { id: "ALL", label: "Semua Lauk" },
-            { id: "KARBOHIDRAT", label: "🍚 Karbo" },
-            { id: "HEWANI", label: "🍗 Hewani" },
-            { id: "NABATI", label: "🫘 Nabati" },
-            { id: "SAYUR", label: "🥦 Sayur" },
-            { id: "SARING", label: "🥣 Saring" },
-            { id: "BUAH", label: "🍎 Buah" },
-            { id: "SNACK", label: "🍪 Snack" },
-          ].map((tab) => {
+          {siklusFilter.map((tab) => {
             const isActive = selectedJenisFilter === tab.id;
             return (
               <button

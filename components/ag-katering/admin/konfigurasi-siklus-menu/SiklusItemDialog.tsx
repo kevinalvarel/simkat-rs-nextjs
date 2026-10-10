@@ -25,10 +25,12 @@ import {
 } from '@/components/ui/select';
 import { Save, UtensilsCrossed, Loader2, Tag, X } from 'lucide-react';
 import {
+  DIIT_TAG_CODE,
   getMenuTagOptions,
   normalizeMenuTags,
   parseMenuTags,
   countUniqueMenuTags,
+  hasDiitTag,
   type MenuTagOption,
 } from '@/lib/siklus-menu-tags';
 import type {
@@ -152,16 +154,34 @@ export default function SiklusItemDialog({
 
   const selectedTagsString = useWatch({ control, name: 'kategori_menu' }) || '';
   const selectedJenis = useWatch({ control, name: 'jenis_makanan' });
-  // Nabati, sayur, buah, snack, dan karbohidrat tidak memakai diet.
-  const isTanpaDietJenis = (jenis: string | null | undefined) =>
-    ['KARBOHIDRAT', 'NABATI', 'SAYUR', 'BUAH', 'SNACK'].includes(
-      (jenis || '').trim().toUpperCase(),
-    );
-  const isTanpaDiet = isTanpaDietJenis(selectedJenis);
+  // Semua jenis (termasuk NABATI/SAYUR/BUAH/SNACK) memakai tag diet.
+  // KARBOHIDRAT memakai tag diet dari Konfigurasi Master Menu (wajib min 1, tanpa DIIT).
+  // Jenis lain opsional: tag kosong berarti berlaku semua diet (kompatibilitas data lama).
+  const isKarbohidratJenis = (jenis: string | null | undefined) =>
+    (jenis || '').trim().toUpperCase() === 'KARBOHIDRAT';
+  const isKarbohidrat = isKarbohidratJenis(selectedJenis);
   const currentTags = parseMenuTags(selectedTagsString);
   const tagCount = countUniqueMenuTags(selectedTagsString);
   const availableTags = getMenuTagOptions(dietOptions, selectedJenis);
   const { invalid: invalidTags } = normalizeMenuTags(selectedTagsString, availableTags);
+  // Slot SARING: opsi berasal dari semua kategori berflag Saring — kelompokkan
+  // per kategori asal agar terlihat dietnya dari mana. Tag DIIT dirender terpisah.
+  const isSaringJenis = (selectedJenis || '').trim().toUpperCase() === 'SARING';
+  const saringTagGroups: Array<{ kategori: string; tags: MenuTagOption[] }> =
+    (() => {
+      if (!isSaringJenis) return [];
+      const map = new Map<string, MenuTagOption[]>();
+      for (const option of availableTags) {
+        if (option.kode.trim().toUpperCase() === DIIT_TAG_CODE) continue;
+        const key = (option.kategori || '').trim().toUpperCase() || 'LAINNYA';
+        const list = map.get(key);
+        if (list) list.push(option);
+        else map.set(key, [option]);
+      }
+      return [...map.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([kategori, tags]) => ({ kategori, tags }));
+    })();
 
   useEffect(() => {
     if (open) {
@@ -209,17 +229,23 @@ export default function SiklusItemDialog({
   }
 
   async function onSubmit(data: ItemFormValues) {
-    // Jenis tanpa diet: paksa tag kosong dan lewati validasi tag.
-    const payload =
-      isTanpaDietJenis(data.jenis_makanan)
-        ? { ...data, kategori_menu: '' }
-        : data;
+    const payload = data;
     if (
-      !isTanpaDietJenis(payload.jenis_makanan) &&
       normalizeMenuTags(payload.kategori_menu, getMenuTagOptions(dietOptions, payload.jenis_makanan)).invalid.length
     ) {
       toast.error('Hapus tag yang tidak tersedia untuk jenis makanan ini.');
       return;
+    }
+    // Karbohidrat: wajib minimal 1 tag diet spesifik, tanpa fallback DIIT.
+    if (isKarbohidratJenis(payload.jenis_makanan)) {
+      if (parseMenuTags(payload.kategori_menu).length === 0) {
+        toast.error('Karbohidrat wajib memakai minimal 1 tag diet dari Konfigurasi Master Menu.');
+        return;
+      }
+      if (hasDiitTag(payload.kategori_menu)) {
+        toast.error('Karbohidrat tidak memakai fallback DIIT. Pilih tag diet spesifik.');
+        return;
+      }
     }
     try {
       if (isEdit && itemToEdit) {
@@ -372,12 +398,6 @@ export default function SiklusItemDialog({
                     value={field.value}
                     onValueChange={(val) => {
                       if (!val || val === field.value) return;
-                      // Jenis tanpa diet: tag lama ikut dibuang.
-                      if (isTanpaDietJenis(val)) {
-                        field.onChange(val);
-                        setValue('kategori_menu', '', { shouldDirty: true, shouldValidate: true });
-                        return;
-                      }
                       const nextOptions = getMenuTagOptions(dietOptions, val);
                       const retained = normalizeMenuTags(selectedTagsString, nextOptions).codes;
                       const retainedValue = retained.join(', ');
@@ -420,50 +440,112 @@ export default function SiklusItemDialog({
             )}
           </div>
 
-          {/* Tag Kategori Menu / Diet (jenis tanpa diet menyembunyikan tag) */}
-          {isTanpaDiet ? (
-            <div className='space-y-1.5 bg-muted/40 p-3 rounded-xl border'>
-              <p className='text-[11px] text-muted-foreground leading-snug'>
-                Jenis ini tidak memakai tag diet. Hidangan ini otomatis
-                dipakai semua pasien yang butuh di jam ini.
-              </p>
-            </div>
-          ) : (
-            <div className='space-y-2 bg-muted/40 p-3 rounded-xl border'>
+          {/* Tag Kategori Menu / Diet */}
+          <div className='space-y-2 bg-muted/40 p-3 rounded-xl border'>
             <div className='flex items-center justify-between'>
               <Label className='text-xs font-semibold flex items-center gap-1.5'>
                 <Tag className='w-3.5 h-3.5 text-primary' />
                 Kategori Menu / Tag Diet Pasien
+                {isKarbohidrat && <span className='text-rose-500'>*</span>}
               </Label>
               <span className='text-[11px] text-muted-foreground'>
                 Klik tag untuk memilih
               </span>
             </div>
+            {isKarbohidrat && (
+              <p className='text-[11px] text-muted-foreground leading-snug'>
+                Karbohidrat wajib memakai minimal 1 tag diet dari Konfigurasi
+                Master Menu (tanpa fallback DIIT).
+              </p>
+            )}
 
-            {/* Quick Clickable Tag Chips */}
-            <div className='flex flex-wrap gap-1.5 max-h-28 overflow-y-auto py-1'>
-              {availableTags.map((option) => {
-                const isSelected = currentTags.some((tag) => tag.toUpperCase() === option.kode.toUpperCase());
-                return (
-                  <button
-                    key={option.kode}
-                    type='button'
-                    onClick={() => handleToggleTag(option.kode)}
-                    className={`text-xs px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer border ${
-                      isSelected
-                        ? 'bg-primary text-primary-foreground border-primary shadow-xs'
-                        : 'bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground'
-                    }`}
-                  >
-                    {option.kode} · {option.label}
-                  </button>
-                );
-              })}
-            </div>
+            {/* Quick Clickable Tag Chips (SARING: dikelompokkan per kategori asal) */}
+            {isSaringJenis ? (
+              <div className='space-y-2.5 max-h-44 overflow-y-auto py-1'>
+                {saringTagGroups.map((group) => (
+                  <div key={group.kategori} className='space-y-1'>
+                    <p className='text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground'>
+                      {group.kategori}
+                    </p>
+                    <div className='flex flex-wrap gap-1.5'>
+                      {group.tags.map((option) => {
+                        const isSelected = currentTags.some((tag) => tag.toUpperCase() === option.kode.toUpperCase());
+                        return (
+                          <button
+                            key={option.kode}
+                            type='button'
+                            onClick={() => handleToggleTag(option.kode)}
+                            className={`text-xs px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer border ${
+                              isSelected
+                                ? 'bg-primary text-primary-foreground border-primary shadow-xs'
+                                : 'bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground'
+                            }`}
+                          >
+                            {option.kode} · {option.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+                {(() => {
+                  const diit = availableTags.find(
+                    (option) => option.kode.trim().toUpperCase() === DIIT_TAG_CODE,
+                  );
+                  if (!diit) return null;
+                  const isSelected = currentTags.some(
+                    (tag) => tag.toUpperCase() === diit.kode.toUpperCase(),
+                  );
+                  return (
+                    <div className='space-y-1'>
+                      <p className='text-[10px] font-extrabold uppercase tracking-wider text-muted-foreground'>
+                        Fallback
+                      </p>
+                      <div className='flex flex-wrap gap-1.5'>
+                        <button
+                          key={diit.kode}
+                          type='button'
+                          onClick={() => handleToggleTag(diit.kode)}
+                          className={`text-xs px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer border ${
+                            isSelected
+                              ? 'bg-primary text-primary-foreground border-primary shadow-xs'
+                              : 'bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground'
+                          }`}
+                        >
+                          {diit.kode} · {diit.label}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            ) : (
+              <div className='flex flex-wrap gap-1.5 max-h-28 overflow-y-auto py-1'>
+                {availableTags.map((option) => {
+                  const isSelected = currentTags.some((tag) => tag.toUpperCase() === option.kode.toUpperCase());
+                  return (
+                    <button
+                      key={option.kode}
+                      type='button'
+                      onClick={() => handleToggleTag(option.kode)}
+                      className={`text-xs px-2.5 py-1 rounded-md font-semibold transition-all cursor-pointer border ${
+                        isSelected
+                          ? 'bg-primary text-primary-foreground border-primary shadow-xs'
+                          : 'bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground'
+                      }`}
+                    >
+                      {option.kode} · {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             {availableTags.length === 0 && (
               <p className='text-[11px] text-muted-foreground'>
-                Belum ada tag aktif untuk kategori {selectedJenis}. Tambahkan di Konfigurasi Master Menu.
+                {isSaringJenis
+                  ? 'Belum ada diet berflag Saring. Tandai diet di Konfigurasi Master Menu dengan checkbox Diet Makanan Saring.'
+                  : `Belum ada tag aktif untuk kategori ${selectedJenis}. Tambahkan di Konfigurasi Master Menu.`}
               </p>
             )}
             {invalidTags.length > 0 && (
@@ -481,16 +563,20 @@ export default function SiklusItemDialog({
                 </div>
               </div>
             )}
+            {isKarbohidrat && tagCount === 0 && (
+              <p className='text-[11px] text-destructive font-medium'>
+                Pilih minimal 1 tag diet untuk karbohidrat sebelum menyimpan.
+              </p>
+            )}
             <p className='text-[11px] text-muted-foreground'>
-              Kode tersimpan: {selectedTagsString || 'Tanpa tag'}
+              Kode tersimpan: {selectedTagsString || 'Tanpa tag (berlaku semua diet)'}
               {tagCount > 1
                 ? ` — ${tagCount} tag, otomatis dianggap diet gabungan.`
                 : tagCount === 1
                   ? ' — boleh tambah tag lain untuk diet gabungan.'
-                  : ''}
+                  : ' — kosongkan untuk hidangan umum semua diet.'}
             </p>
           </div>
-          )}
 
           {/* Catatan Khusus */}
           <div className='space-y-1.5'>

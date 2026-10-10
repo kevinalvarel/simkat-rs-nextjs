@@ -10,6 +10,8 @@ import {
   getMenuTagOptions,
   normalizeMenuTags,
   parseMenuTags,
+  hasDiitTag,
+  isNoDiitFallbackJenis,
   type MenuTagOption,
 } from "@/lib/siklus-menu-tags";
 import { getWibTodayKey, parseCalendarDate } from "@/lib/wib";
@@ -104,10 +106,41 @@ export function isInvalidFruitSlot(
 
 /**
  * Fetch active diet menu tag options from database for a specific food category.
+ *
+ * Slot SARING tidak punya kategori master sendiri: opsinya adalah diet dari
+ * semua kategori yang berflag Diet Makanan Saring (`is_diet_saring`).
  */
 export async function getActiveTagOptions(
   jenisMakanan: string,
 ): Promise<MenuTagOption[]> {
+  const normalized = jenisMakanan.trim().toUpperCase();
+  if (normalized === 'SARING') {
+    try {
+      const rows = await db
+        .select({
+          kode: kategoriMenuTable.kode_item,
+          label: kategoriMenuTable.label_item,
+          kategori: kategoriMenuTable.nama_kategori,
+        })
+        .from(kategoriMenuTable)
+        .where(
+          and(
+            eq(kategoriMenuTable.is_diet_saring, true),
+            eq(kategoriMenuTable.is_active, true),
+          ),
+        );
+      return getMenuTagOptions(
+        rows.map((row) => ({ ...row, isSaring: true })),
+        jenisMakanan,
+      );
+    } catch (error) {
+      console.warn(
+        'kategori_menu.is_diet_saring belum ada di DB — slot Saring tanpa opsi diet. Jalankan migrasi 0015.',
+        error,
+      );
+      return [];
+    }
+  }
   const rows = await db
     .select({
       kode: kategoriMenuTable.kode_item,
@@ -117,7 +150,7 @@ export async function getActiveTagOptions(
     .from(kategoriMenuTable)
     .where(
       and(
-        eq(kategoriMenuTable.nama_kategori, jenisMakanan.trim().toUpperCase()),
+        eq(kategoriMenuTable.nama_kategori, normalized),
         eq(kategoriMenuTable.is_active, true),
       ),
     );
@@ -126,6 +159,7 @@ export async function getActiveTagOptions(
 
 /**
  * Validate and normalize menu tags selection against active options.
+ * KARBOHIDRAT wajib minimal 1 tag spesifik dan menolak fallback DIIT.
  */
 export function validateMenuTagSelection(
   value: string | null | undefined,
@@ -138,6 +172,20 @@ export function validateMenuTagSelection(
       value: null,
       error: `Tag ${invalid.join(", ")} tidak tersedia pada kategori ${jenisMakanan.trim().toUpperCase()}. Pilih tag dari Konfigurasi Master Menu.`,
     };
+  }
+  if (isNoDiitFallbackJenis(jenisMakanan)) {
+    if (codes.length === 0) {
+      return {
+        value: null,
+        error: `Karbohidrat wajib memakai minimal 1 tag diet dari Konfigurasi Master Menu.`,
+      };
+    }
+    if (hasDiitTag(codes.join(", "))) {
+      return {
+        value: null,
+        error: `Karbohidrat tidak memakai fallback DIIT. Pilih tag diet spesifik.`,
+      };
+    }
   }
   return { value: codes.length > 0 ? codes.join(", ") : null };
 }

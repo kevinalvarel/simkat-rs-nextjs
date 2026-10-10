@@ -148,7 +148,7 @@ export function buildSupplementResult(
       );
 
       const item = tagged || dietMatched || generic || diitFallback;
-      // Tanpa diet: satu baris per hidangan (bukan per kode) agar tidak
+      // Satu baris per hidangan (bukan per kode) agar tidak
       // hitung ganda saat pasien punya beberapa kode untuk hidangan sama.
       const rowId = item
         ? `${kindLabel}-${item.id}`

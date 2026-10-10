@@ -57,16 +57,12 @@ export function matchPatientToDish(
   if (!matchesDishKelas(patient, item)) return false;
 
   // 2. Clinical Diet Tag Matching
-  const tag = (item.kategori_menu || '').toUpperCase();
-  const jenis = (item.jenis_makanan || '').toUpperCase();
-  // Jenis tanpa diet: hidangan tanpa tag dipakai semua pasien makan.
-  if (
-    (!tag || tag === 'B') &&
-    (jenis === 'NABATI' || jenis === 'SAYUR' || jenis === 'BUAH' || jenis === 'SNACK')
-  ) {
-    return true;
-  }
-  if (!tag || tag === 'B') {
+  // Semua jenis (termasuk NABATI/SAYUR/BUAH/SNACK) memakai diet per tag.
+  // Hidangan tanpa tag = wildcard semua diet (kompatibilitas data lama,
+  // selaras dengan resolver produksi overview). Tag B = khusus biasa.
+  const tag = (item.kategori_menu || '').trim().toUpperCase();
+  if (!tag || tag === '-') return true;
+  if (tag === 'B') {
     return (
       patient.isBiasa ||
       (!patient.isDm &&

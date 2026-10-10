@@ -7,4 +7,5 @@ export const kategoriMenuTable = pgTable('kategori_menu', {
   label_item: text('label_item').notNull(),
   is_active: boolean('is_active').notNull().default(true),
   is_tugas_ag_katering: boolean('is_tugas_ag_katering').notNull().default(false),
+  is_diet_saring: boolean('is_diet_saring').notNull().default(false),
 });
