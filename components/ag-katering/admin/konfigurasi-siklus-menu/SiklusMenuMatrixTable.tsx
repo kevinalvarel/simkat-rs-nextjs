@@ -19,7 +19,6 @@ import {
   Sun,
   Sunrise,
   Sunset,
-  Coffee,
   AlertTriangle,
 } from "lucide-react";
 import {
@@ -36,11 +35,17 @@ import type { MenuTagOption } from "@/lib/siklus-menu-tags";
 import { deleteSiklusMenuItem } from "@/servers/siklus-menu.service";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import SaringMatrixTable from "./SaringMatrixTable";
+
+/** Mode tampil matriks: menu umum saja atau tabel saring saja. */
+export type SiklusViewMode = "umum" | "saring";
 
 interface SiklusMenuMatrixTableProps {
   items: SiklusMenuItem[];
   activeSiklus: number;
   dietOptions?: MenuTagOption[];
+  /** Step-1: mode tampil kolom — gabungan (default), umum saja, saring saja. */
+  viewMode?: SiklusViewMode;
   onEditItem: (item: SiklusMenuItem) => void;
   onAddItemToSlot: (slot: {
     siklus_ke: number;
@@ -118,6 +123,7 @@ export default function SiklusMenuMatrixTable({
   items,
   activeSiklus,
   dietOptions = [],
+  viewMode = "umum",
   onEditItem,
   onAddItemToSlot,
   onEditSlot,
@@ -125,6 +131,9 @@ export default function SiklusMenuMatrixTable({
 }: SiklusMenuMatrixTableProps) {
   const [itemToDelete, setItemToDelete] = useState<SiklusMenuItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Umum saja = tabel Pagi/Siang/Sore; saring saja = tabel Saring terpisah.
+  const showUmum = viewMode !== "saring";
 
   // Chip sisa diet per sel (tidak ada tulisan bila tertutup semua).
   function renderDiitChipList(
@@ -195,10 +204,9 @@ export default function SiklusMenuMatrixTable({
     return rows;
   }, [items]);
 
-  // Items dedicated to SARING (SIANG)
-  const saringSiangItems = items.filter(
-    (i) => i.waktu_makan === "SARING" || i.jenis_makanan === "SARING",
-  );
+  // Step-2: hidangan Saring dirender di SaringMatrixTable
+  // (per jenis x Saring Pagi/Siang/Sore + Belum Terjadwal),
+  // bukan lagi kolom merge tunggal di tabel umum.
 
   // Peta sisa diet per sel (kelas + jenis + jam). Sel tanpa sisa tidak tampil apa pun.
   const diitSelMap = useMemo(() => {
@@ -413,48 +421,43 @@ export default function SiklusMenuMatrixTable({
     );
   }
 
-  return (
-    <>
-      <div className="border rounded-2xl bg-card overflow-hidden shadow-xs">
-        <div className="overflow-x-auto">
-          <Table className="border-collapse min-w-[980px]">
-            <TableHeader className="bg-muted/60 border-b select-none">
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="w-20 text-center text-xs font-bold uppercase tracking-wider text-foreground border-r">
-                  Menu
-                </TableHead>
-                <TableHead className="w-28 text-center text-xs font-bold uppercase tracking-wider text-foreground border-r">
-                  Kelas
-                </TableHead>
-                <TableHead className="w-32 text-center text-xs font-bold uppercase tracking-wider text-foreground border-r">
-                  Jenis Makanan
-                </TableHead>
-                <TableHead className="min-w-[200px] text-xs font-bold uppercase tracking-wider text-foreground border-r">
-                  <div className="flex items-center gap-1.5 justify-center">
-                    <Sunrise className="w-4 h-4 text-amber-500" />
-                    Makan Pagi
-                  </div>
-                </TableHead>
-                <TableHead className="min-w-[200px] text-xs font-bold uppercase tracking-wider text-foreground border-r">
-                  <div className="flex items-center gap-1.5 justify-center">
-                    <Sun className="w-4 h-4 text-orange-500" />
-                    Makan Siang
-                  </div>
-                </TableHead>
-                <TableHead className="min-w-[200px] text-xs font-bold uppercase tracking-wider text-foreground border-r">
-                  <div className="flex items-center gap-1.5 justify-center">
-                    <Sunset className="w-4 h-4 text-indigo-500" />
-                    Makan Sore
-                  </div>
-                </TableHead>
-                <TableHead className="min-w-[180px] text-xs font-bold uppercase tracking-wider text-foreground bg-primary/5">
-                  <div className="flex items-center gap-1.5 justify-center text-primary">
-                    <Coffee className="w-4 h-4" />
-                    Saring
-                  </div>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
+  // Tabel umum (Pagi / Siang / Sore). Tabel Saring dirender terpisah
+  // di SaringMatrixTable dan dipasang bersampingan di mode gabungan.
+  const umumTable = (
+    <div className="border rounded-2xl bg-card overflow-hidden shadow-xs">
+      <div className="overflow-x-auto">
+        <Table className="border-collapse min-w-[800px]">
+          <TableHeader className="bg-muted/60 border-b select-none">
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="w-20 text-center text-xs font-bold uppercase tracking-wider text-foreground border-r">
+                Menu
+              </TableHead>
+              <TableHead className="w-28 text-center text-xs font-bold uppercase tracking-wider text-foreground border-r">
+                Kelas
+              </TableHead>
+              <TableHead className="w-32 text-center text-xs font-bold uppercase tracking-wider text-foreground border-r">
+                Jenis Makanan
+              </TableHead>
+              <TableHead className="min-w-[200px] text-xs font-bold uppercase tracking-wider text-foreground border-r">
+                <div className="flex items-center gap-1.5 justify-center">
+                  <Sunrise className="w-4 h-4 text-amber-500" />
+                  Makan Pagi
+                </div>
+              </TableHead>
+              <TableHead className="min-w-[200px] text-xs font-bold uppercase tracking-wider text-foreground border-r">
+                <div className="flex items-center gap-1.5 justify-center">
+                  <Sun className="w-4 h-4 text-orange-500" />
+                  Makan Siang
+                </div>
+              </TableHead>
+              <TableHead className="min-w-[200px] text-xs font-bold uppercase tracking-wider text-foreground">
+                <div className="flex items-center gap-1.5 justify-center">
+                  <Sunset className="w-4 h-4 text-indigo-500" />
+                  Makan Sore
+                </div>
+              </TableHead>
+            </TableRow>
+          </TableHeader>
 
             <TableBody>
               {matrixRows.map((row, idx) => {
@@ -536,7 +539,7 @@ export default function SiklusMenuMatrixTable({
 
                     {/* MAKAN SORE — Snack hanya tersedia Pagi & Siang */}
                     {row.hanyaPagiSiang ? (
-                      <TableCell className="border-r align-top p-1 bg-muted/40">
+                      <TableCell className="align-top p-1 bg-muted/40">
                         <div className="min-h-[90px] p-2 flex flex-col items-center justify-center gap-1 rounded-lg text-center select-none">
                           <span className="text-[11px] font-semibold text-muted-foreground">
                             —
@@ -549,23 +552,8 @@ export default function SiklusMenuMatrixTable({
                         </div>
                       </TableCell>
                     ) : (
-                      <TableCell className="border-r align-top p-1 bg-background">
+                      <TableCell className="align-top p-1 bg-background">
                         {renderSlotCell(row.kelas, row.jenis_makanan, "SORE", undefined, diitSelMap.get(`${row.kelas}__${row.jenis_makanan}__SORE`))}
-                      </TableCell>
-                    )}
-
-                    {/* SARING (SIANG) (Shown on row 0 with rowSpan across all rows) */}
-                    {idx === 0 && (
-                      <TableCell
-                        rowSpan={matrixRows.length}
-                        className="align-top p-1.5 bg-primary/2"
-                      >
-                        {renderSlotCell(
-                          "Semua Kelas",
-                          "SARING",
-                          "SARING",
-                          saringSiangItems,
-                        )}
                       </TableCell>
                     )}
                   </TableRow>
@@ -575,6 +563,21 @@ export default function SiklusMenuMatrixTable({
           </Table>
         </div>
       </div>
+  );
+
+  return (
+    <>
+      {showUmum ? umumTable : (
+        <SaringMatrixTable
+          items={items}
+          activeSiklus={activeSiklus}
+          dietOptions={dietOptions}
+          onEditItem={onEditItem}
+          onAddItemToSlot={onAddItemToSlot}
+          onEditSlot={onEditSlot}
+          onRefresh={onRefresh}
+        />
+      )}
 
       {/* Delete Item Confirmation Dialog */}
       <Dialog

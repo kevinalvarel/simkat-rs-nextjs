@@ -61,7 +61,7 @@ import {
   applyStartDateRotation,
 } from "@/servers/siklus-menu.service";
 import SiklusStats from "./SiklusStats";
-import SiklusMenuMatrixTable from "./SiklusMenuMatrixTable";
+import SiklusMenuMatrixTable, { type SiklusViewMode } from "./SiklusMenuMatrixTable";
 import SiklusItemDialog from "./SiklusItemDialog";
 import SiklusSlotEditorDialog from "./SiklusSlotEditorDialog";
 import DuplicateSiklusDialog from "./DuplicateSiklusDialog";
@@ -214,6 +214,15 @@ export default function KonfigurasiSiklusMenuClient({
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedJenisFilter, setSelectedJenisFilter] = useState<string>("ALL");
+
+  // Mode tampil matriks — umum saja (default) atau saring saja.
+  // Murni filter tampilan, tanpa mengubah data / DB.
+  const [viewMode, setViewMode] = useState<SiklusViewMode>("umum");
+
+  const viewModeTabs: Array<{ id: SiklusViewMode; label: string }> = [
+    { id: "umum", label: "Umum saja" },
+    { id: "saring", label: "Saring saja" },
+  ];
 
   // Dialog States
   const [isTambahSiklusOpen, setIsTambahSiklusOpen] = useState(false);
@@ -506,7 +515,8 @@ export default function KonfigurasiSiklusMenuClient({
           </div>
           <p className="text-xs sm:text-sm text-muted-foreground">
             Kelola matriks hidangan per siklus menu, penentuan tanggal rotasi,
-            tingkatan kelas, waktu makan (Pagi, Siang, Sore, Saring Siang), dan
+            tingkatan kelas, waktu makan (Pagi, Siang, Sore, Saring
+            Pagi/Siang/Sore), dan
             tag diet pasien secara dinamis.
           </p>
         </div>
@@ -719,36 +729,80 @@ export default function KonfigurasiSiklusMenuClient({
       <SiklusStats items={items} activeSiklus={activeSiklus} />
 
       {/* Filter & Search Toolbar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-muted/40 p-3 rounded-xl border min-w-0 max-w-full overflow-hidden">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Cari hidangan (mis. Telur Puyuh, Ayam) atau tag diet (mis. B, RG, DM)..."
-            className="pl-9 h-9 text-xs bg-background"
-          />
+      <div className="flex flex-col gap-3 bg-muted/40 p-3 rounded-xl border min-w-0 max-w-full overflow-hidden">
+        {/* View Mode Toggle: Umum saja / Saring saja */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-bold text-foreground">
+            Tampilan Menu:
+          </span>
+          <div
+            role="tablist"
+            aria-label="Mode tampilan menu"
+            className="flex items-center gap-1 p-1 rounded-lg border bg-card w-fit"
+          >
+            {viewModeTabs.map((tab) => {
+              const isActive = viewMode === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => setViewMode(tab.id)}
+                  title={
+                    tab.id === "umum"
+                      ? "Tampilkan Pagi + Siang + Sore tanpa Saring"
+                      : "Tampilkan tabel Saring saja"
+                  }
+                  className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                    isActive
+                      ? "bg-primary text-primary-foreground shadow-2xs"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+          <span className="text-[11px] text-muted-foreground">
+            {viewMode === "umum"
+              ? "Menyembunyikan tabel Saring."
+              : "Menyembunyikan menu umum, hanya tabel Saring."}
+          </span>
         </div>
 
-        {/* Quick Filter Buttons for Jenis */}
-        <div className="flex items-center gap-1.5 overflow-x-auto min-w-0 max-w-full pb-1">
-          {siklusFilter.map((tab) => {
-            const isActive = selectedJenisFilter === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setSelectedJenisFilter(tab.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border shrink-0 ${
-                  isActive
-                    ? "bg-foreground text-background border-foreground shadow-2xs"
-                    : "bg-card text-muted-foreground border-border hover:bg-muted hover:text-foreground"
-                }`}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Cari hidangan (mis. Telur Puyuh, Ayam) atau tag diet (mis. B, RG, DM)..."
+              className="pl-9 h-9 text-xs bg-background"
+            />
+          </div>
+
+          {/* Quick Filter Buttons for Jenis */}
+          <div className="flex items-center gap-1.5 overflow-x-auto min-w-0 max-w-full pb-1">
+            {siklusFilter.map((tab) => {
+              const isActive = selectedJenisFilter === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setSelectedJenisFilter(tab.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border shrink-0 ${
+                    isActive
+                      ? "bg-foreground text-background border-foreground shadow-2xs"
+                      : "bg-card text-muted-foreground border-border hover:bg-muted hover:text-foreground"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -757,6 +811,7 @@ export default function KonfigurasiSiklusMenuClient({
         items={filteredItems}
         activeSiklus={activeSiklus}
         dietOptions={dietOptions}
+        viewMode={viewMode}
         onEditItem={handleEditItem}
         onAddItemToSlot={handleAddItemToSlot}
         onEditSlot={handleEditSlot}

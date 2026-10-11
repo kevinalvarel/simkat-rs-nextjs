@@ -76,7 +76,7 @@ const WAKTU_MAKAN_OPTIONS = [
   { value: 'PAGI', label: 'PAGI' },
   { value: 'SIANG', label: 'SIANG' },
   { value: 'SORE', label: 'SORE' },
-  { value: 'SARING', label: 'SARING' },
+  { value: 'SARING', label: 'SARING (Belum terjadwal / data lama)' },
 ];
 
 const ItemSchema = z.object({
@@ -356,6 +356,17 @@ export default function SiklusItemDialog({
               )}
             </div>
           </div>
+
+          {/* Panduan waktu khusus Saring: bedakan Pagi/Siang/Sore per hidangan */}
+          {isSaringJenis && (
+            <p className='text-[11px] text-muted-foreground leading-snug bg-amber-500/[0.07] border border-dashed border-amber-500/40 rounded-lg p-2.5'>
+              Hidangan Saring kini terjadwal per waktu (mis. bubur sumsum manis
+              untuk Pagi & Sore, manis + asin untuk Siang): pilih waktu{' '}
+              <strong>PAGI / SIANG / SORE</strong> sesuai jam sajinya. Pilih{' '}
+              <strong>SARING (Belum terjadwal)</strong> hanya untuk data lama
+              yang belum dijadwalkan ulang.
+            </p>
+          )}
 
           {/* Kelas & Jenis Makanan */}
           <div className='grid grid-cols-2 gap-3'>

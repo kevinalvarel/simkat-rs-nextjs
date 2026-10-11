@@ -14,7 +14,11 @@ export default function SiklusStats({ items, activeSiklus }: SiklusStatsProps) {
   const pagiCount = items.filter((i) => i.waktu_makan === 'PAGI').length;
   const siangCount = items.filter((i) => i.waktu_makan === 'SIANG').length;
   const soreCount = items.filter((i) => i.waktu_makan === 'SORE').length;
-  const saringCount = items.filter((i) => i.waktu_makan === 'SARING').length;
+  const saringCount = items.filter(
+    (i) =>
+      (i.waktu_makan || '').trim().toUpperCase() === 'SARING' ||
+      (i.jenis_makanan || '').trim().toUpperCase() === 'SARING',
+  ).length;
 
   const hewaniCount = items.filter((i) => i.jenis_makanan === 'HEWANI').length;
   const nabatiCount = items.filter((i) => i.jenis_makanan === 'NABATI').length;
@@ -98,7 +102,7 @@ export default function SiklusStats({ items, activeSiklus }: SiklusStatsProps) {
           </div>
           <div className='min-w-0'>
             <p className='text-[11px] font-medium text-muted-foreground truncate'>
-              Saring (Siang)
+              Saring
             </p>
             <h3 className='text-lg font-bold tracking-tight text-foreground font-mono'>
               {saringCount} <span className='text-xs font-normal text-muted-foreground'>item</span>
