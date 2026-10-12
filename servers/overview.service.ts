@@ -26,6 +26,7 @@ import {
   resolveActiveCycleForDate,
   normalizeDishName,
 } from '@/lib/siklus-menu-utils';
+import { normalizeSaringKarboForWaktu } from '@/lib/saring-bss';
 
 import type {
   MonitoringCardData,
@@ -1014,7 +1015,13 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
       const pKelas = p.kelas || 'KELAS I';
 
       const bentukCodes = extractCodes(mapped.bentuk_makanan);
-      const karboCodes = extractCodes(mapped.karbohidrat);
+      // Aturan dapur Saring: BSS ASIN otomatis jadi BSS MANIS di PAGI/MALAM
+      // (display-level; nilai mapping di DB tidak diubah).
+      const karboCodes = normalizeSaringKarboForWaktu(
+        bentukCodes,
+        extractCodes(mapped.karbohidrat),
+        targetWaktuMakan,
+      );
       const hewaniCodes = extractCodes(mapped.kategori_diet);
       const nabatiCodes = extractCodes(mapped.nabati);
       const sayurCodes = extractCodes(mapped.sayur);
@@ -1295,6 +1302,13 @@ export async function getLiveMonitoringData(): Promise<MonitoringSummary> {
         }
 
         // Staple
+        // Aturan dapur Saring: BSS ASIN otomatis jadi BSS MANIS di PAGI/MALAM
+        // (display-level; nilai snapshot di DB tidak diubah).
+        karboCodes = normalizeSaringKarboForWaktu(
+          bentukCodes,
+          karboCodes,
+          targetWaktuMakan,
+        );
         const snapStapleContributors = primaryDietCodes(hewaniCodes, nabatiCodes, sayurCodes);
         if (karboCodes.length > 0) {
           for (const dish of resolveKarboDishes(karboCodes, bentukCodes, pKelas)) {

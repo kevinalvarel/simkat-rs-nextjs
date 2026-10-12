@@ -54,7 +54,7 @@ export default function MappingDietEditDialog({
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Opsi dengan partisi Saring ketat (lihat MappingDietTable untuk penjelasan).
+  // Opsi dengan pola gabungan mode Saring (grup Saring atas + Biasa bawah).
   const bentukOptions = useMemo(
     () =>
       options.filter(
@@ -107,6 +107,10 @@ export default function MappingDietEditDialog({
 
   const snackOptions = useMemo(
     () => options.filter((o) => o.namaKategori === 'SNACK'),
+    [options],
+  );
+  const saringSnackOptions = useMemo(
+    () => getMasterOptionsForKind(options, 'SNACK', true),
     [options],
   );
 
@@ -194,10 +198,18 @@ export default function MappingDietEditDialog({
 
   const isSaring = isBentukSaring(bentukMakanan);
   const karbohidratOptions = isSaring ? saringKarbohidratOptions : regulerKarbohidratOptions;
+  const karbohidratSecondary = isSaring ? regulerKarbohidratOptions : undefined;
   const hewaniOptions = isSaring ? saringHewaniOptions : regulerHewaniOptions;
+  const hewaniSecondary = isSaring ? regulerHewaniOptions : undefined;
   const nabatiOptions = isSaring ? saringNabatiOptions : regulerNabatiOptions;
+  const nabatiSecondary = isSaring ? regulerNabatiOptions : undefined;
   const sayurOptions = isSaring ? saringSayurOptions : regulerSayurOptions;
+  const sayurSecondary = isSaring ? regulerSayurOptions : undefined;
   const buahOptions = isSaring ? saringBuahOptions : regulerBuahOptions;
+  const buahSecondary = isSaring ? regulerBuahOptions : undefined;
+  // Snack reguler tetap semua (perilaku lama); mode Saring memakai pola gabungan.
+  const snackPrimaryOptions = isSaring ? saringSnackOptions : snackOptions;
+  const snackSecondary = isSaring ? snackOptions : undefined;
 
   function handleFieldChange(
     field: 'karbohidrat' | 'hewani' | 'nabati' | 'sayur' | 'buah' | 'snack',
@@ -375,9 +387,9 @@ export default function MappingDietEditDialog({
                 <div className='flex items-start gap-2.5 p-3 rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-500/10 text-amber-900 dark:text-amber-200 text-xs'>
                   <Sparkles className='w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5' />
                   <p>
-                    <strong>Mode Saring Aktif:</strong> Karbohidrat, Lauk Hewani,
-                    Nabati, Sayur, dan Buah hanya menampilkan diet berflag Saring.
-                    Snack tetap normal.
+                    <strong>Mode Saring Aktif:</strong> diet Saring tampil di
+                    grup atas; pilihan Biasa tersedia di bawah separator dan
+                    tetap bisa dipilih. Snack mengikuti pola yang sama.
                   </p>
                 </div>
               )}
@@ -424,6 +436,7 @@ export default function MappingDietEditDialog({
                         onChange={(v) => handleFieldChange('karbohidrat', v)}
                         placeholder={isSaring ? 'Pilih Karbohidrat Saring...' : 'Pilih Karbohidrat...'}
                         options={karbohidratOptions}
+                        secondaryOptions={karbohidratSecondary}
                         disabled={mode !== 'STANDARD'}
                         saringMode={isSaring}
                         error={errors.karbohidrat?.message}
@@ -442,6 +455,7 @@ export default function MappingDietEditDialog({
                         onChange={(v) => handleFieldChange('hewani', v)}
                         placeholder={isSaring ? 'Pilih Lauk Hewani Saring...' : 'Pilih Lauk Hewani...'}
                         options={hewaniOptions}
+                        secondaryOptions={hewaniSecondary}
                         disabled={mode !== 'STANDARD'}
                         saringMode={isSaring}
                         error={errors.hewani?.message}
@@ -460,6 +474,7 @@ export default function MappingDietEditDialog({
                         onChange={(v) => handleFieldChange('nabati', v)}
                         placeholder={isSaring ? 'Pilih Lauk Nabati Saring...' : 'Pilih Lauk Nabati...'}
                         options={nabatiOptions}
+                        secondaryOptions={nabatiSecondary}
                         disabled={mode !== 'STANDARD'}
                         saringMode={isSaring}
                         error={errors.nabati?.message}
@@ -478,6 +493,7 @@ export default function MappingDietEditDialog({
                         onChange={(v) => handleFieldChange('sayur', v)}
                         placeholder={isSaring ? 'Pilih Sayur Saring...' : 'Pilih Sayur...'}
                         options={sayurOptions}
+                        secondaryOptions={sayurSecondary}
                         disabled={mode !== 'STANDARD'}
                         saringMode={isSaring}
                         error={errors.sayur?.message}
@@ -496,6 +512,7 @@ export default function MappingDietEditDialog({
                         onChange={(v) => handleFieldChange('buah', v)}
                         placeholder={isSaring ? 'Pilih Buah Saring...' : 'Pilih Buah...'}
                         options={buahOptions}
+                        secondaryOptions={buahSecondary}
                         disabled={mode !== 'STANDARD'}
                         saringMode={isSaring}
                         error={errors.buah?.message}
@@ -513,7 +530,9 @@ export default function MappingDietEditDialog({
                         value={field.value || ''}
                         onChange={field.onChange}
                         placeholder='Pilih Snack...'
-                        options={snackOptions}
+                        options={snackPrimaryOptions}
+                        secondaryOptions={snackSecondary}
+                        saringMode={isSaring}
                         disabled={mode !== 'STANDARD'}
                         error={errors.snack?.message}
                       />

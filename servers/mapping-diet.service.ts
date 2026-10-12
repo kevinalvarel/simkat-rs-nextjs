@@ -40,8 +40,9 @@ function splitDietTokens(value: string | null): string[] {
 }
 
 /**
- * Validasi partisi Saring ketat (tanpa snack): mode Saring hanya menerima
- * kode berflag Saring; mode reguler menolak kode berflag Saring.
+ * Validasi partisi Saring (tanpa snack): mode reguler menolak kode berflag
+ * Saring. Arah Saring dilonggarkan — mode Saring boleh memilih kode biasa
+ * (dropdown menampilkan diet Saring di atas + diet biasa di bawah separator).
  * Kembalikan pesan error atau null bila valid / tidak ada data pembanding.
  */
 function validateSaringPartitionServer(
@@ -49,6 +50,7 @@ function validateSaringPartitionServer(
   saringCodes: Set<string>,
   isSaring: boolean,
 ): string | null {
+  if (isSaring) return null;
   if (saringCodes.size === 0) return null;
   for (const [label, value] of Object.entries(fields)) {
     for (const token of splitDietTokens(value)) {

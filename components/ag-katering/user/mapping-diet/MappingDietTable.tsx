@@ -19,6 +19,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -40,7 +41,7 @@ import MappingDietFloatingBar, {
   type ReadyDietRow,
 } from './MappingDietFloatingBar';
 import MappingDietConfirmDialog from './MappingDietConfirmDialog';
-import { hasFormFoodMapping, applyBentukSaringTransition, getTugasKateringCodes, isBentukTugasKatering, isLegacyKateringMapping, isBentukSaring, getMasterOptionsForKind, getSaringDietCodes, hewaniMappingOptions, validateSaringPartition } from '@/lib/mapping-diet-fields';
+import { hasFormFoodMapping, applyBentukSaringTransition, getTugasKateringCodes, isBentukTugasKatering, isLegacyKateringMapping, isBentukSaring, getMasterOptionsForKind, getSaringDietCodes, hewaniMappingOptions, saringGroupedOptions, validateSaringPartition } from '@/lib/mapping-diet-fields';
 
 interface MappingDietTableProps {
   items: UnmappedDietItem[];
@@ -89,6 +90,11 @@ function rowFromItem(item: UnmappedDietItem): RowFormState {
 interface CategoryCellProps {
   value: string;
   options: KategoriMenuOption[];
+  /**
+   * Opsi grup bawah saat mode Saring: diet biasa ditampilkan di bawah
+   * separator dan tetap bisa dipilih. Diabaikan saat bukan mode Saring.
+   */
+  secondaryOptions?: KategoriMenuOption[];
   onChange: (val: string) => void;
   isBold?: boolean;
   disabled?: boolean;
@@ -99,18 +105,43 @@ interface CategoryCellProps {
 function CategorySelectCell({
   value,
   options,
+  secondaryOptions,
   onChange,
   isBold = false,
   disabled = false,
   includeSpecial = false,
   saringMode = false,
 }: CategoryCellProps) {
+  // Mode Saring: grup atas = diet Saring, grup bawah (separator) = diet biasa.
+  const showGrouped = saringMode && secondaryOptions !== undefined;
+  const grouped = showGrouped
+    ? saringGroupedOptions(options, secondaryOptions ?? [])
+    : null;
+  const allCodes = [
+    ...options,
+    ...(grouped?.bottom ?? []),
+  ].map((opt) => opt.kodeItem.trim().toUpperCase());
   const isStale =
     Boolean(value) &&
     value !== 'NPO' &&
-    !options.some(
-      (opt) => opt.kodeItem.trim().toUpperCase() === value.trim().toUpperCase(),
-    );
+    !allCodes.includes(value.trim().toUpperCase());
+
+  const renderCellOption = (opt: KategoriMenuOption, keyPrefix: string) => (
+    <SelectItem
+      key={`${keyPrefix}-${opt.id}`}
+      value={opt.kodeItem}
+      className='text-xs cursor-pointer'
+    >
+      <span className='font-bold font-mono text-foreground mr-1.5'>
+        {opt.kodeItem}
+      </span>
+      {opt.labelItem !== opt.kodeItem && (
+        <span className='text-muted-foreground text-[11px] truncate'>
+          ({opt.labelItem})
+        </span>
+      )}
+    </SelectItem>
+  );
   return (
     <Select
       value={value || '__EMPTY__'}
@@ -156,29 +187,36 @@ function CategorySelectCell({
         <div className='px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider bg-muted/40 rounded-sm mb-1'>
           {saringMode ? 'Pilihan Saring' : 'Pilihan Standar'}
         </div>
-        {options.length === 0 && (
-          <div className='p-2 text-[11px] text-muted-foreground italic text-center'>
-            {saringMode
-              ? 'Tidak ada diet saring aktif — daftarkan di Konfigurasi Diet + centang Saring.'
-              : 'Tidak ada pilihan standar'}
-          </div>
-        )}
-        {options.filter((opt) => opt.kodeItem !== 'NPO').map((opt) => (
-          <SelectItem
-            key={opt.id}
-            value={opt.kodeItem}
-            className='text-xs cursor-pointer'
-          >
-            <span className='font-bold font-mono text-foreground mr-1.5'>
-              {opt.kodeItem}
-            </span>
-            {opt.labelItem !== opt.kodeItem && (
-              <span className='text-muted-foreground text-[11px] truncate'>
-                ({opt.labelItem})
-              </span>
+        {grouped ? (
+          <>
+            {grouped.top.length === 0 && (
+              <div className='p-2 text-[11px] text-muted-foreground italic text-center'>
+                Tidak ada diet saring aktif — daftarkan di Konfigurasi Diet + centang Saring.
+              </div>
             )}
-          </SelectItem>
-        ))}
+            {grouped.top.filter((opt) => opt.kodeItem !== 'NPO').map((opt) => renderCellOption(opt, 'saring'))}
+            {grouped.bottom.filter((opt) => opt.kodeItem !== 'NPO').length > 0 && (
+              <>
+                <SelectSeparator />
+                <div className='px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider bg-muted/40 rounded-sm mb-1 mt-1'>
+                  Pilihan Biasa
+                </div>
+                {grouped.bottom.filter((opt) => opt.kodeItem !== 'NPO').map((opt) => renderCellOption(opt, 'biasa'))}
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            {options.length === 0 && (
+              <div className='p-2 text-[11px] text-muted-foreground italic text-center'>
+                {saringMode
+                  ? 'Tidak ada diet saring aktif — daftarkan di Konfigurasi Diet + centang Saring.'
+                  : 'Tidak ada pilihan standar'}
+              </div>
+            )}
+            {options.filter((opt) => opt.kodeItem !== 'NPO').map((opt) => renderCellOption(opt, 'opt'))}
+          </>
+        )}
       </SelectContent>
     </Select>
   );
@@ -203,10 +241,11 @@ export default function MappingDietTable({
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [isSubmittingConfirm, setIsSubmittingConfirm] = useState(false);
 
-  // Group master options by category dengan partisi Saring ketat.
+  // Group master options by category dengan pola gabungan mode Saring.
   // Bentuk dari KARBO/BENTUK_MAKANAN. Hewani = union master HEWANI non-Saring +
   // tag HEWANI siklus (mode reguler) atau master HEWANI Saring (mode Saring).
-  // Karbo/nabati/sayur/buah difilter flag Saring per mode; snack selalu normal.
+  // Saat mode Saring, dropdown menampilkan grup Saring di atas + grup Biasa
+  // di bawah separator (opsi biasa tetap bisa dipilih); mode reguler tak berubah.
   const bentukOptions = useMemo(
     () =>
       options.filter(
@@ -263,13 +302,25 @@ export default function MappingDietTable({
     () => options.filter((o) => o.namaKategori === 'SNACK'),
     [options],
   );
+  const saringSnackOptions = useMemo(
+    () => getMasterOptionsForKind(options, 'SNACK', true),
+    [options],
+  );
 
-  function optionsForRow(
+  /**
+   * Opsi dropdown per baris dengan pola gabungan mode Saring: grup atas =
+   * diet Saring, grup bawah (separator) = diet biasa yang tetap bisa dipilih.
+   * Mode reguler tidak berubah (hanya opsi biasa, tanpa grup bawah).
+   * Snack reguler tetap menampilkan semua (perilaku lama); mode Saring
+   * memakai pola gabungan yang sama (dedup otomatis di render).
+   */
+  function optionsForRowGrouped(
     rowBentuk: string,
     reguler: KategoriMenuOption[],
     saring: KategoriMenuOption[],
-  ) {
-    return isBentukSaring(rowBentuk) ? saring : reguler;
+  ): { primary: KategoriMenuOption[]; secondary?: KategoriMenuOption[] } {
+    if (!isBentukSaring(rowBentuk)) return { primary: reguler };
+    return { primary: saring, secondary: reguler };
   }
 
   // Kode bentuk yang berflag tugas AG Katering → otomatis masuk Live Katering
@@ -586,6 +637,13 @@ export default function MappingDietTable({
 
               const isComplete = isNpoRow || isKateringRow || hasFormFoodMapping(row);
 
+              const karboOpts = optionsForRowGrouped(row.bentukMakanan, regulerKarbohidratOptions, saringKarbohidratOptions);
+              const hewaniOpts = optionsForRowGrouped(row.bentukMakanan, regulerHewaniOptions, saringHewaniOptions);
+              const nabatiOpts = optionsForRowGrouped(row.bentukMakanan, regulerNabatiOptions, saringNabatiOptions);
+              const sayurOpts = optionsForRowGrouped(row.bentukMakanan, regulerSayurOptions, saringSayurOptions);
+              const buahOpts = optionsForRowGrouped(row.bentukMakanan, regulerBuahOptions, saringBuahOptions);
+              const snackOpts = optionsForRowGrouped(row.bentukMakanan, snackOptions, saringSnackOptions);
+
               return (
                 <TableRow
                   key={item.diet_rs_raw}
@@ -652,7 +710,8 @@ export default function MappingDietTable({
                   <TableCell className='p-0 border-r border-slate-200 dark:border-slate-800 align-middle bg-[#ffe8ec]/60 dark:bg-[#381a22]/30 hover:bg-[#ffe8ec] dark:hover:bg-[#381a22]/50 transition-colors'>
                     <CategorySelectCell
                       value={row.karbohidrat}
-                      options={optionsForRow(row.bentukMakanan, regulerKarbohidratOptions, saringKarbohidratOptions)}
+                      options={karboOpts.primary}
+                      secondaryOptions={karboOpts.secondary}
                       disabled={isSubmittingConfirm || row.mode !== 'STANDARD'}
                       saringMode={isSaringRow}
                       onChange={(val) => handleCellChange(item.diet_rs_raw, 'karbohidrat', val)}
@@ -663,7 +722,8 @@ export default function MappingDietTable({
                   <TableCell className='p-0 border-r border-slate-200 dark:border-slate-800 align-middle bg-[#ffe8ec]/60 dark:bg-[#381a22]/30 hover:bg-[#ffe8ec] dark:hover:bg-[#381a22]/50 transition-colors'>
                     <CategorySelectCell
                       value={row.hewani}
-                      options={optionsForRow(row.bentukMakanan, regulerHewaniOptions, saringHewaniOptions)}
+                      options={hewaniOpts.primary}
+                      secondaryOptions={hewaniOpts.secondary}
                       disabled={isSubmittingConfirm || row.mode !== 'STANDARD'}
                       saringMode={isSaringRow}
                       onChange={(val) =>
@@ -677,7 +737,8 @@ export default function MappingDietTable({
                   <TableCell className='p-0 border-r border-slate-200 dark:border-slate-800 align-middle bg-[#ffe8ec]/60 dark:bg-[#381a22]/30 hover:bg-[#ffe8ec] dark:hover:bg-[#381a22]/50 transition-colors'>
                     <CategorySelectCell
                       value={row.nabati}
-                      options={optionsForRow(row.bentukMakanan, regulerNabatiOptions, saringNabatiOptions)}
+                      options={nabatiOpts.primary}
+                      secondaryOptions={nabatiOpts.secondary}
                       disabled={isSubmittingConfirm || row.mode !== 'STANDARD'}
                       saringMode={isSaringRow}
                       onChange={(val) =>
@@ -690,7 +751,8 @@ export default function MappingDietTable({
                   <TableCell className='p-0 border-r border-slate-200 dark:border-slate-800 align-middle bg-[#ffe8ec]/60 dark:bg-[#381a22]/30 hover:bg-[#ffe8ec] dark:hover:bg-[#381a22]/50 transition-colors'>
                     <CategorySelectCell
                       value={row.sayur}
-                      options={optionsForRow(row.bentukMakanan, regulerSayurOptions, saringSayurOptions)}
+                      options={sayurOpts.primary}
+                      secondaryOptions={sayurOpts.secondary}
                       disabled={isSubmittingConfirm || row.mode !== 'STANDARD'}
                       saringMode={isSaringRow}
                       onChange={(val) =>
@@ -703,7 +765,8 @@ export default function MappingDietTable({
                   <TableCell className='p-0 border-r border-slate-200 dark:border-slate-800 align-middle bg-[#ffe8ec]/60 dark:bg-[#381a22]/30 hover:bg-[#ffe8ec] dark:hover:bg-[#381a22]/50 transition-colors'>
                     <CategorySelectCell
                       value={row.buah}
-                      options={optionsForRow(row.bentukMakanan, regulerBuahOptions, saringBuahOptions)}
+                      options={buahOpts.primary}
+                      secondaryOptions={buahOpts.secondary}
                       disabled={isSubmittingConfirm || row.mode !== 'STANDARD'}
                       saringMode={isSaringRow}
                       onChange={(val) =>
@@ -716,8 +779,10 @@ export default function MappingDietTable({
                   <TableCell className='p-0 border-r border-slate-200 dark:border-slate-800 align-middle bg-[#ffe8ec]/60 dark:bg-[#381a22]/30 hover:bg-[#ffe8ec] dark:hover:bg-[#381a22]/50 transition-colors'>
                     <CategorySelectCell
                       value={row.snack}
-                      options={snackOptions}
+                      options={snackOpts.primary}
+                      secondaryOptions={snackOpts.secondary}
                       disabled={isSubmittingConfirm || row.mode !== 'STANDARD'}
+                      saringMode={isSaringRow}
                       onChange={(val) =>
                         handleCellChange(item.diet_rs_raw, 'snack', val)
                       }
@@ -787,6 +852,9 @@ export default function MappingDietTable({
           </TableBody>
         </Table>
       </div>
+
+      {/* Ruang cadangan di bawah tabel agar pill konfirmasi tidak menutupi baris terakhir / scrollbar */}
+      {dirtyCount > 0 && <div aria-hidden className='h-14 sm:h-12' />}
 
       {/* Floating Confirmation Bar */}
       <MappingDietFloatingBar

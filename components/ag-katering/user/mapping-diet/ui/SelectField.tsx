@@ -5,11 +5,13 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
 import { X } from 'lucide-react';
 import type { KategoriMenuOption } from '@/servers/mapping-diet.service';
+import { saringGroupedOptions } from '@/lib/mapping-diet-fields';
 
 export interface SelectFieldProps {
   label: string;
@@ -18,6 +20,11 @@ export interface SelectFieldProps {
   onChange: (v: string) => void;
   placeholder: string;
   options: KategoriMenuOption[];
+  /**
+   * Opsi grup bawah saat mode Saring: diet biasa ditampilkan di bawah
+   * separator dan tetap bisa dipilih. Diabaikan saat bukan mode Saring.
+   */
+  secondaryOptions?: KategoriMenuOption[];
   disabled?: boolean;
   error?: string;
   allowClear?: boolean;
@@ -49,6 +56,7 @@ export function SelectField({
   onChange,
   placeholder,
   options,
+  secondaryOptions,
   disabled,
   error,
   allowClear = true,
@@ -57,6 +65,21 @@ export function SelectField({
   emptyHint,
 }: SelectFieldProps) {
   const hasValue = Boolean(value && value !== CLEAR_SENTINEL);
+  // Mode Saring: grup atas = diet Saring, grup bawah (separator) = diet biasa.
+  const showGrouped = saringMode && secondaryOptions !== undefined;
+  const grouped = showGrouped
+    ? saringGroupedOptions(options, secondaryOptions ?? [])
+    : null;
+
+  const renderOption = (opt: KategoriMenuOption, keyPrefix: string) => (
+    <SelectItem key={`${keyPrefix}-${opt.id}`} value={opt.kodeItem}>
+      <span className='font-mono font-bold text-primary mr-1'>
+        {opt.kodeItem}
+      </span>
+      <span className='text-muted-foreground'>—</span>
+      <span className='ml-1'>{opt.labelItem}</span>
+    </SelectItem>
+  );
 
   return (
     <div className='space-y-1.5'>
@@ -114,7 +137,31 @@ export function SelectField({
               {saringMode ? 'Pilihan Saring' : 'Pilihan Standar Menu'}
             </div>
 
-            {options.length === 0 ? (
+            {grouped ? (
+              <>
+                {grouped.top.length === 0 ? (
+                  <div className='p-2 text-xs text-muted-foreground italic text-center'>
+                    {emptyHint ||
+                      'Tidak ada diet saring aktif di kategori ini — daftarkan di Konfigurasi Diet + centang Saring.'}
+                  </div>
+                ) : (
+                  grouped.top
+                    .filter((opt) => opt.kodeItem !== 'NPO')
+                    .map((opt) => renderOption(opt, 'saring'))
+                )}
+                {grouped.bottom.filter((opt) => opt.kodeItem !== 'NPO').length > 0 && (
+                  <>
+                    <SelectSeparator />
+                    <div className='px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider bg-muted/40 rounded-sm mb-1 mt-1'>
+                      Pilihan Biasa
+                    </div>
+                    {grouped.bottom
+                      .filter((opt) => opt.kodeItem !== 'NPO')
+                      .map((opt) => renderOption(opt, 'biasa'))}
+                  </>
+                )}
+              </>
+            ) : options.length === 0 ? (
               <div className='p-2 text-xs text-muted-foreground italic text-center'>
                 {emptyHint ||
                   (saringMode

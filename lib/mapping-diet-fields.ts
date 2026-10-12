@@ -174,6 +174,26 @@ export function getMasterOptionsForKind(
   );
 }
 
+/**
+ * Opsi dropdown gabungan mode Saring: diet Saring di grup atas, diet biasa
+ * di grup bawah (di bawah separator). Grup bawah di-dedup terhadap grup
+ * atas (case-insensitive) agar satu kode tidak muncul dua kali.
+ */
+export function saringGroupedOptions(
+  saringOptions: KategoriMenuOption[],
+  regulerOptions: KategoriMenuOption[],
+): { top: KategoriMenuOption[]; bottom: KategoriMenuOption[] } {
+  const topCodes = new Set(
+    (saringOptions || []).map((o) => normalizeKode(o.kodeItem)).filter(Boolean),
+  );
+  return {
+    top: [...(saringOptions || [])],
+    bottom: (regulerOptions || []).filter(
+      (o) => !topCodes.has(normalizeKode(o.kodeItem)),
+    ),
+  };
+}
+
 // ─── Opsi mapping diet dari data siklus menu ────────────────────────────────
 
 /**
@@ -309,12 +329,18 @@ export type SaringPartitionValues = {
  * Validasi client-side partisi Saring per field (tanpa snack). Kembalikan
  * daftar pesan error; kosong berarti valid. Dipakai sebelum submit agar
  * kesalahan langsung terlihat tanpa menunggu server.
+ *
+ * Arah Saring dilonggarkan: mode Saring boleh memilih kode biasa (dropdown
+ * menampilkan diet Saring di atas + diet biasa di bawah separator), sehingga
+ * selalu valid. Arah reguler tetap ketat: kode berflag Saring wajib memakai
+ * Bentuk SARING.
  */
 export function validateSaringPartition(
   values: SaringPartitionValues,
   saringCodes: Set<string>,
   isSaring: boolean,
 ): string[] {
+  if (isSaring) return [];
   const errors: string[] = [];
   const entries: Array<[string, string | null | undefined]> = [
     ['Karbohidrat', values.karbohidrat],

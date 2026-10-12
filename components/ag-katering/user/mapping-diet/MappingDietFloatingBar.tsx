@@ -37,18 +37,18 @@ export default function MappingDietFloatingBar({
 
   const count = readyRows.length;
   return (
-    <div className='fixed inset-x-3 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-50 mx-auto w-auto max-w-lg rounded-xl border bg-card p-2.5 shadow-xl animate-in slide-in-from-bottom-6 duration-300 sm:inset-x-6'>
-      <div className='flex flex-wrap items-center justify-between gap-2'>
-        <span className='text-xs font-semibold text-foreground'>
+    <div className='fixed left-1/2 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-50 w-max max-w-[calc(100vw-1.5rem)] -translate-x-1/2 rounded-full border bg-card/95 py-1.5 pl-3.5 pr-1.5 shadow-lg backdrop-blur animate-in slide-in-from-bottom-6 duration-300'>
+      <div className='flex items-center gap-2 sm:gap-3'>
+        <span className='whitespace-nowrap text-[11px] font-semibold text-foreground sm:text-xs overflow-hidden text-ellipsis'>
           {count} siap disimpan{dirtyCount > count ? ` / ${dirtyCount - count} belum valid` : ''}
         </span>
-        <div className='flex items-center gap-2'>
-          <Button variant='outline' size='sm' onClick={onReset} disabled={isSubmitting} aria-label='Batalkan semua draft di tab ini'>
-            <RotateCcw className='w-4 h-4' />
+        <div className='flex items-center gap-1.5'>
+          <Button variant='outline' size='sm' onClick={onReset} disabled={isSubmitting} aria-label='Batalkan semua draft di tab ini' className='h-7 rounded-full px-2 text-[11px]'>
+            <RotateCcw className='w-3.5 h-3.5' />
             <span className='hidden sm:inline'>Batalkan</span>
           </Button>
-          <Button type='button' size='sm' onClick={onConfirm} disabled={isSubmitting || count === 0} className='h-8 text-xs font-semibold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md shadow-primary/20'>
-            <CheckCircle2 className='w-4 h-4' />
+          <Button type='button' size='sm' onClick={onConfirm} disabled={isSubmitting || count === 0} className='h-7 rounded-full text-[11px] font-semibold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md shadow-primary/20'>
+            <CheckCircle2 className='w-3.5 h-3.5' />
             Konfirmasi ({count})
           </Button>
         </div>
